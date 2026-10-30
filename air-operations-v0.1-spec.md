@@ -202,6 +202,7 @@ Maintain `WorldTruth` and `PlayerKnowledge` as separate states. Only a deliberat
 - Ground-unit/contact markers gradually fade with observation age down to a **25% opacity floor**, remaining selectable.
 - The original reported point remains the observation anchor and displays its age and source.
 - Stationary/unknown movement: growing circle around the last reported position.
+- Regions stop growing at a configured radius and fade out with age, so old reports don't cover the map. The marker itself stays at the opacity floor, and selecting it shows its region again.
 - Direction of movement known: sector/cone originating at the reported position, oriented toward the reported heading, extending with plausible speed × elapsed time and widening as direction becomes stale.
 - Known road movement may become a road corridor in a later version; v0.1 uses simple geometry.
 - The cone represents a **possible region**, not a statistically calibrated probability contour. It never follows the hidden true unit trajectory.
@@ -222,7 +223,7 @@ Player orders:
 - `SupportArea(center, radius)`
 - `ReturnToBase`
 
-Orders update missions; movement consumes simulated time and fuel. Aircraft can be retasked in flight, and aircraft launching from base incur a defined takeoff delay. Reconnaissance observes within a simplified footprint using air LOS and air concealment. Aircraft observations update the player's map automatically, but only new or materially changed contacts generate prominent radio messages. Ground formations receive aircraft observations only when the player transmits them.
+Orders update missions; movement consumes simulated time and fuel. Aircraft can be retasked in flight, and aircraft launching from base incur a defined takeoff delay. Reconnaissance observes within a simplified footprint using air LOS and air concealment. Aircraft observations update the player's map automatically. Only a confirmed hostile that isn't already tracked from the air nearby generates a radio message, because the map already shows every sighting. Ground formations receive aircraft observations only when the player transmits them.
 
 ### 8.1 CAS engagement
 

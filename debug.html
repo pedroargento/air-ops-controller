@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Debug: omniscient view</title>
+    <style>
+      body { margin: 0; display: flex; gap: 12px; font: 13px monospace; background: #111; color: #ddd; }
+      #controls { padding: 8px; width: 330px; }
+      #controls label, #controls button { display: block; margin-bottom: 8px; }
+      #warning { color: #ff6b6b; font-weight: bold; }
+      #result, #units { white-space: pre; }
+      input[type='range'] { width: 100%; }
+    </style>
+  </head>
+  <body>
+    <canvas id="map" width="800" height="800"></canvas>
+    <div id="controls">
+      <p id="warning">DEBUG: shows hidden ground truth</p>
+      <label>Seed <input id="seed" type="number" value="1" /></label>
+      <label>Air
+        <select id="policy">
+          <option value="none">No air</option>
+          <option value="reactive">Reactive CAS</option>
+          <option value="immediate">Immediate CAS</option>
+          <option value="informed">Recon informed</option>
+          <option value="informedNoForward">Recon informed, no forwarding</option>
+        </select>
+      </label>
+      <button id="run">Run battle</button>
+      <button id="play">Play / pause</button>
+      <label>Speed
+        <select id="speed">
+          <option value="1">1×</option>
+          <option value="4">4×</option>
+          <option value="8">8×</option>
+          <option value="15" selected>15×</option>
+          <option value="30">30×</option>
+          <option value="60">60×</option>
+        </select>
+      </label>
+      <label>Time <span id="time"></span><input id="scrub" type="range" min="0" max="0" value="0" /></label>
+      <div id="result"></div>
+      <div id="units"></div>
+    </div>
+    <script type="module" src="/src/debug/main.ts"></script>
+  </body>
+</html>

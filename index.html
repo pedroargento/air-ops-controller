@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Air Operations Controller</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr) 420px;
+        background: #14181a;
+        color: #dfe4e0;
+        font: 13px/1.4 system-ui, sans-serif;
+      }
+      button {
+        background: #2a3236; color: inherit; border: 1px solid #47525a;
+        border-radius: 3px; padding: 3px 8px; font: inherit; cursor: pointer;
+      }
+      button:hover { background: #38434a; }
+      button.active { background: #2f6f4f; border-color: #55b083; }
+      h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 6px; color: #9fb0a8; }
+      h3 { font-size: 12px; margin: 8px 0 4px; }
+      p { margin: 2px 0; }
+      #controls {
+        grid-column: 1 / 3; display: flex; gap: 6px; align-items: center;
+        padding: 6px 10px; background: #1b2124; border-bottom: 1px solid #333c41;
+      }
+      #clock { font: 600 18px monospace; margin: 0 10px; }
+      #status { font-weight: 600; color: #ffd24a; }
+      #objective { margin-left: auto; color: #9fb0a8; }
+      #map-holder { position: relative; overflow: hidden; }
+      #map-holder.picking canvas { cursor: crosshair; }
+      #map { display: block; }
+      #tooltip {
+        display: none; position: absolute; pointer-events: none; white-space: pre;
+        background: rgba(0, 0, 0, 0.85); padding: 5px 8px; border-radius: 3px; font: 12px monospace;
+      }
+      #sidebar { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); min-height: 0; border-left: 1px solid #333c41; }
+      #sidebar > section { padding: 8px 10px; border-bottom: 1px solid #333c41; }
+      .aircraft-row { display: block; width: 100%; text-align: left; margin-bottom: 3px; font-size: 12px; }
+      .buttons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+      .hint { color: #ffd24a; }
+      .preview { margin: 6px 0; padding: 6px; background: #20282b; font-style: italic; }
+      .recipient { display: block; }
+      .history { margin: 6px 0 0; padding-left: 16px; font-size: 12px; }
+      #radio { display: flex; flex-direction: column; min-height: 0; }
+      #radio-log { overflow-y: auto; flex: 1; min-height: 0; }
+      .log-row { padding: 4px 0; border-bottom: 1px solid #2a3236; font-size: 12px; }
+      .log-row .time { font-family: monospace; color: #9fb0a8; }
+      .log-row .kind { font-size: 10px; color: #9fb0a8; }
+      .log-row.tic { background: rgba(255, 210, 74, 0.12); }
+      .log-row.support_request { background: rgba(255, 107, 90, 0.12); }
+      .coord { padding: 0 4px; font: 11px monospace; color: #8fd0ff; }
+    </style>
+  </head>
+  <body>
+    <header id="controls"></header>
+    <main id="map-holder">
+      <canvas id="map"></canvas>
+      <div id="tooltip"></div>
+    </main>
+    <aside id="sidebar">
+      <section id="aircraft"></section>
+      <section id="requests"></section>
+      <section id="selection"></section>
+      <section id="radio">
+        <h2>Radio</h2>
+        <div id="radio-log"></div>
+      </section>
+    </aside>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
