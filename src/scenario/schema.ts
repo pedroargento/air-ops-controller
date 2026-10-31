@@ -161,7 +161,20 @@ const display = z.object({
   summaryStaleSeconds: z.number().positive(),
 });
 
-const aircraftType = z.object({
+const aircraftModel = z.object({
+  role: z.enum(['recon', 'cas']),
+  displayName: z.string(),
+  rotary: z.boolean(),
+  terrainClearanceMeters: z.number().positive(),
+  defaultAltitudeMeters: z.number().positive(),
+  sensorFalloffMeters: z.number().positive(),
+  strikeMissPerMeterAltitude: z.number().nonnegative(),
+  passIntervalSeconds: z.number().int().positive(),
+  casualtyFractionPerPass: unit,
+  suppressionPerPass: unit,
+  moralePerPass: unit,
+  hitChanceFactor: z.number().nonnegative(),
+  hitSurvivalChance: unit,
   speedMps: z.number().positive(),
   fuelSeconds: z.number().positive(),
   ammunition: z.number().int().min(0),
@@ -182,27 +195,20 @@ const air = z.object({
   airbase: vec2,
   operatingAltitudeMeters: z.number().positive(),
   sensorReferenceHeightMeters: z.number().positive(),
-  terrainClearanceMeters: z.number().positive(),
   terrainLookaheadSeconds: z.number().positive(),
-  sensorFalloffMeters: z.number().positive(),
   sensorQualityMin: unit,
   sensorQualityMax: z.number().min(1),
-  strikeMissPerMeterAltitude: z.number().nonnegative(),
   groundFireSigmaMeters: z.number().positive(),
   groundFireWeaponSeenChance: unit,
   groundFireReportSeconds: z.number().int().positive(),
-  types: z.object({ recon: aircraftType, cas: aircraftType }),
-  aircraft: z.array(z.object({ id: z.string(), aircraftType: z.enum(['recon', 'cas']) })),
+  models: z.record(z.string(), aircraftModel),
+  aircraft: z.array(z.object({ id: z.string(), model: z.string() })),
   groundNoticeRangeMeters: z.number().positive(),
   groundNoticePerScan: unit,
   sightingDedupeMeters: z.number().positive(),
   cueRadiusMeters: z.number().positive(),
   cueMaxAgeSeconds: z.number().positive(),
   cueDetectionBoost: z.number().min(1),
-  passIntervalSeconds: z.number().int().positive(),
-  casualtyFractionPerPass: unit,
-  suppressionPerPass: unit,
-  moralePerPass: unit,
   blastRadiusMeters: z.number().positive(),
   supportAckDistanceMeters: z.number().positive(),
   supportGraceSeconds: z.number().int().min(0),
@@ -267,7 +273,7 @@ export type ScenarioFile = z.infer<typeof scenarioFileSchema>;
 export type CombatConfig = ScenarioFile['combat'];
 export type CaptureConfig = ScenarioFile['capture'];
 export type AirConfig = ScenarioFile['air'];
-export type AircraftTypeConfig = AirConfig['types']['cas'];
+export type AircraftModelConfig = z.infer<typeof aircraftModel>;
 export type PerceptionConfig = ScenarioFile['perception'];
 export type RadioConfig = ScenarioFile['radio'];
 export type DisplayConfig = ScenarioFile['display'];

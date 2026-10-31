@@ -42,7 +42,7 @@ export type RadioMessage =
         assessment: StrikeAssessment | null;
       }>)
   | (MessageMeta &
-      Readonly<{ kind: 'GROUND_FIRE'; source: PositionEstimate; weapon: WeaponType | null; hit: boolean }>);
+      Readonly<{ kind: 'GROUND_FIRE'; source: PositionEstimate; weapon: WeaponType | null; hit: boolean; damaged: boolean }>);
 
 // The crew's estimate, never a true count. It exists only when they saw an effect.
 export type StrikeAssessment = Readonly<{ estimatedCasualties: number; destroyed: boolean }>;

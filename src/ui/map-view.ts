@@ -508,6 +508,35 @@ export class MapView {
     return order.kind === 'MoveTo' || order.kind === 'Orbit' ? order.point : order.center;
   }
 
+  /** A body with a rotor bar, so a helicopter reads differently from any swept-wing shape. */
+  private drawHelicopter(aircraft: AircraftTelemetryEntry, at: Vec2, color: string, selected: boolean): void {
+    const { ctx } = this;
+    ctx.save();
+    ctx.translate(at.x, at.y);
+    ctx.rotate(aircraft.headingRad);
+    ctx.fillStyle = color;
+    ctx.strokeStyle = selected ? '#ffffff' : '#000000';
+    ctx.lineWidth = selected ? 2.5 : 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, 6, 0, Math.PI * 2);
+    ctx.moveTo(-5, 0);
+    ctx.lineTo(-15, 0);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-11, -9);
+    ctx.lineTo(11, 9);
+    ctx.moveTo(-11, 9);
+    ctx.lineTo(11, -9);
+    ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '12px monospace';
+    ctx.fillText(aircraft.aircraftId, at.x + 14, at.y + 4);
+  }
+
   private drawAircraft(aircraft: AircraftTelemetryEntry, selected: boolean): void {
     const { ctx } = this;
     const at = this.aircraftPixel(aircraft);
@@ -536,6 +565,10 @@ export class MapView {
       ctx.setLineDash([]);
     }
 
+    if (aircraft.rotary) {
+      this.drawHelicopter(aircraft, at, color, selected);
+      return;
+    }
     const size = 11;
     const span = aircraft.aircraftType === 'cas' ? size : size * 0.65;
     ctx.save();

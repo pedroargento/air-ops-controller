@@ -16,6 +16,8 @@ export type CasPhase = 'searching' | 'identifying' | 'target-acquired' | 'out-of
 export type AircraftTelemetryEntry = Readonly<{
   aircraftId: AircraftId;
   aircraftType: AircraftType;
+  model: string;
+  rotary: boolean;
   position: Vec2;
   altitudeMeters: number;
   targetAltitudeMeters: number;

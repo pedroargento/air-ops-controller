@@ -469,7 +469,7 @@ export class App {
     const editing = altitudeField !== null && document.activeElement === altitudeField;
     const altitude = editing ? altitudeField.value : String(aircraft.targetAltitudeMeters);
     return (
-      `<h2>${aircraft.aircraftId}</h2><p>${aircraft.status} · ${aircraft.order?.kind ?? 'no mission'}` +
+      `<h2>${aircraft.aircraftId} · ${escapeHtml(aircraft.model)}</h2><p>${aircraft.status} · ${aircraft.order?.kind ?? 'no mission'}` +
       `${aircraft.casPhase === null ? '' : ` · ${aircraft.casPhase}`}</p>` +
       `<p>Fuel ${Math.round(aircraft.fuelFraction * 100)}% · ordnance ${aircraft.ammunition} · altitude ${Math.round(aircraft.altitudeMeters)} m${aircraft.damaged ? ' · damaged, returning for repair' : ''}</p>` +
       `<label>Radius (m) <input id="order-radius" type="number" value="${radius}" min="100" step="100" /></label> ` +

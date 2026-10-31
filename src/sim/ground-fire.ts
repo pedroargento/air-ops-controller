@@ -8,7 +8,7 @@ import type { Aircraft, GroundUnit, WorldTruth } from '../domain/truth/world';
 import type { PlayerKnowledge } from '../knowledge/player-knowledge';
 import { nextBool, nextGaussian, type RngState } from '../rng/streams';
 import type { AirConfig, CombatConfig } from '../scenario/schema';
-import { isAirborne } from './air';
+import { isAirborne, modelOf } from './air';
 import type { RadioState } from './radio';
 
 const AIRCRAFT_SIDE: Side = 'friendly';
@@ -50,6 +50,7 @@ function reportFire(
   unit: GroundUnit,
   weapon: WeaponType,
   hit: boolean,
+  damaged: boolean,
   player: PlayerKnowledge,
   radio: RadioState,
   air: AirConfig,
@@ -77,6 +78,7 @@ function reportFire(
     source: { center, sigmaMeters: air.groundFireSigmaMeters, headingRad: null, speedMps: null, observedAt: tick },
     weapon: seen,
     hit,
+    damaged,
   });
 }
 
@@ -119,15 +121,20 @@ export function resolveGroundFire(
     if (aircraft === null) continue;
     const fire = bestWeapon(unit, aircraft, config, terrain);
     if (fire === null) continue;
+    const model = modelOf(aircraft, air);
     const chance =
       airHitChance(fire, slantTo(unit, aircraft, terrain), heightAbove(unit, aircraft, terrain)) *
+      model.hitChanceFactor *
       (1 - unit.suppression * config.suppressionFirePenalty);
-    const hit = nextBool(rng, `airfire/${unit.id}/${aircraft.id}`, chance);
+    const label = `airfire/${unit.id}/${aircraft.id}`;
+    const hit = nextBool(rng, label, Math.min(1, chance));
+    // Armor and rugged airframes shrug off some hits; the rest end the mission.
+    const damaged = hit && !nextBool(rng, label, model.hitSurvivalChance);
     fireWeapon(unit, fire);
     unit.lastFiredAtTick = tick;
     unit.firedWeapons = [fire.weapon];
     unit.nextAirFireTick = tick + fire.definition.airCycleSeconds;
-    reportFire(aircraft, unit, fire.weapon, hit, player, radio, air, rng, tick);
-    if (hit) damageAircraft(aircraft);
+    reportFire(aircraft, unit, fire.weapon, hit, damaged, player, radio, air, rng, tick);
+    if (damaged) damageAircraft(aircraft);
   }
 }

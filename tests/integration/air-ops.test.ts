@@ -61,23 +61,24 @@ describe('aircraft operations', () => {
     expect(aircraft(state, CAS).status).toBe('onStation');
   });
 
-  it('transit takes about four to six minutes for both types', () => {
+  it('transit time follows each model\'s real speed', () => {
     const state = createInitialState(scenario, 1);
     const eta = (id: AircraftId): number => {
       step(state, [order(state, id, { kind: 'MoveTo', point: outpost })], scenario);
       return aircraftTelemetry(state.truth, air).find((a) => a.aircraftId === id)?.etaSeconds ?? 0;
     };
-    for (const id of [CAS, RECON]) {
-      expect(eta(id)).toBeGreaterThanOrEqual(4 * 60);
-      expect(eta(id)).toBeLessThanOrEqual(6.5 * 60);
-    }
+    expect(eta('CAS-2' as AircraftId)).toBeLessThan(3.5 * 60);
+    expect(eta(CAS)).toBeGreaterThan(5 * 60);
+    expect(eta(CAS)).toBeLessThan(7 * 60);
+    expect(eta(RECON)).toBeGreaterThan(9 * 60);
   });
 
   it('returns automatically before fuel runs out, then rearms after turnaround', () => {
     const state = createInitialState(scenario, 1);
     isolate(state, ['F-A']);
-    run(state, 1, [order(state, CAS, support(outpost))]);
-    const a = aircraft(state, CAS);
+    const JET = 'CAS-2' as AircraftId;
+    run(state, 1, [order(state, JET, support(outpost))]);
+    const a = aircraft(state, JET);
     a.ammunition = 0;
     let landedWithFuel = -1;
     for (let tick = 0; tick < 4000 && a.status !== 'turnaround'; tick += 1) {
@@ -86,10 +87,10 @@ describe('aircraft operations', () => {
     }
     expect(a.status).toBe('turnaround');
     expect(landedWithFuel).toBeGreaterThan(0);
-    run(state, air.types.cas.turnaroundSeconds + 1);
+    run(state, air.models['F-100D']!.turnaroundSeconds + 1);
     expect(a.status).toBe('ready');
-    expect(a.ammunition).toBe(air.types.cas.ammunition);
-    expect(a.fuelSeconds).toBe(air.types.cas.fuelSeconds);
+    expect(a.ammunition).toBe(air.models['F-100D']!.ammunition);
+    expect(a.fuelSeconds).toBe(air.models['F-100D']!.fuelSeconds);
   });
 
   it('flies continuously: no jumps, and turns no faster than its turn rate', () => {
@@ -97,7 +98,7 @@ describe('aircraft operations', () => {
     isolate(state, ['F-A']);
     run(state, 1, [order(state, CAS, support(outpost))]);
     const a = aircraft(state, CAS);
-    const type = air.types.cas;
+    const type = air.models['A-1E']!;
     let reachedStation = false;
     let previous = a.position;
     let previousHeading = a.headingRad;
@@ -130,8 +131,8 @@ describe('aircraft operations', () => {
       step(state, [], scenario);
       gaps.push(distance(a.position, outpost));
     }
-    expect(Math.max(...gaps)).toBeLessThan(air.types.cas.orbitRadiusMeters * 1.3);
-    expect(Math.min(...gaps)).toBeGreaterThan(air.types.cas.orbitRadiusMeters * 0.7);
+    expect(Math.max(...gaps)).toBeLessThan(air.models['A-1E']!.orbitRadiusMeters * 1.3);
+    expect(Math.min(...gaps)).toBeGreaterThan(air.models['A-1E']!.orbitRadiusMeters * 0.7);
   });
 
   it('reports what the CAS crew is doing', () => {
@@ -262,17 +263,17 @@ describe('CAS engagement', () => {
   it('spends nothing when the area holds no target, however long it orbits', () => {
     const { state, plane, enemy } = casRun({ x: 2525, y: 1000 }, { x: 4500, y: 4500 });
     run(state, 1000);
-    expect(plane.ammunition).toBe(air.types.cas.ammunition);
+    expect(plane.ammunition).toBe(air.models['A-1E']!.ammunition);
     expect(enemy.personnel).toBe(enemy.initialPersonnel);
   });
 
   it('attacks a real target in discrete passes through shared combat state', () => {
     const { state, plane, enemy } = casRun({ x: 2525, y: 1700 }, { x: 2525, y: 1700 });
     run(state, 1000);
-    expect(plane.ammunition).toBeLessThan(air.types.cas.ammunition);
+    expect(plane.ammunition).toBeLessThan(air.models['A-1E']!.ammunition);
     expect(enemy.personnel).toBeLessThan(enemy.initialPersonnel);
     const strikes = state.player.log.filter((m) => m.kind === 'STRIKE_RESULT');
-    expect(strikes).toHaveLength(air.types.cas.ammunition - plane.ammunition);
+    expect(strikes).toHaveLength(air.models['A-1E']!.ammunition - plane.ammunition);
   });
 
   it('never tells the player true casualties', () => {
@@ -289,7 +290,7 @@ describe('CAS engagement', () => {
     run(state, 1, [order(state, CAS, support(friendly.position))]);
     run(state, 1000);
     expect(friendly.personnel).toBe(friendly.initialPersonnel);
-    expect(aircraft(state, CAS).ammunition).toBe(air.types.cas.ammunition);
+    expect(aircraft(state, CAS).ammunition).toBe(air.models['A-1E']!.ammunition);
   });
 
   it('leaves a strike mark for the map at the reported target', () => {
@@ -305,7 +306,7 @@ describe('CAS engagement', () => {
     const blind = { ...scenario, file: { ...scenario.file, perception: { ...scenario.file.perception, identifyPerScan: 0 } } };
     for (let i = 0; i < 1000; i += 1) step(state, [], blind);
     expect(original).toBeGreaterThan(0);
-    expect(plane.ammunition).toBe(air.types.cas.ammunition);
+    expect(plane.ammunition).toBe(air.models['A-1E']!.ammunition);
     expect(enemy.personnel).toBe(enemy.initialPersonnel);
   });
 
@@ -485,7 +486,7 @@ describe('altitude and ground fire', () => {
     expect(aircraft(state, CAS).altitudeMeters).toBe(0);
     run(state, 60);
     run(state, 10, [order(state, RECON, { kind: 'MoveTo', point: outpost })]);
-    run(state, 150);
+    run(state, 250);
     expect(aircraft(state, CAS).altitudeMeters).toBe(air.operatingAltitudeMeters);
     expect(aircraft(state, RECON).altitudeMeters).toBe(air.operatingAltitudeMeters);
     expect(aircraftTelemetry(state.truth, air)[0]?.altitudeMeters).toBe(air.operatingAltitudeMeters);
@@ -497,7 +498,7 @@ describe('altitude and ground fire', () => {
     expect(plane.damaged).toBe(true);
     expect(plane.status).toBe('returning');
     expect(plane.order).toBeNull();
-    expect(state.truth.aircraft).toHaveLength(3);
+    expect(state.truth.aircraft).toHaveLength(4);
   });
 
   it('tells the player: telemetry at once, and a report with an estimated source', () => {
@@ -522,8 +523,8 @@ describe('altitude and ground fire', () => {
     for (let i = 0; i < 2000 && plane.status === 'returning'; i += 1) step(state, [], sure);
     expect(plane.status).toBe('turnaround');
     expect(plane.ammunition).toBe(ammunition);
-    expect(plane.timerSeconds).toBe(air.types.cas.repairSeconds);
-    for (let i = 0; i < air.types.cas.repairSeconds; i += 1) step(state, [], sure);
+    expect(plane.timerSeconds).toBe(air.models['A-1E']!.repairSeconds);
+    for (let i = 0; i < air.models['A-1E']!.repairSeconds; i += 1) step(state, [], sure);
     expect(plane.status).toBe('ready');
     expect(plane.damaged).toBe(false);
   });
@@ -636,6 +637,7 @@ describe('reacting to known air threats', () => {
       source: { center, sigmaMeters: 150, headingRad: null, speedMps: null, observedAt: 90 },
       weapon: null,
       hit: true,
+      damaged: true,
     });
   };
 
@@ -680,19 +682,19 @@ describe('altitude control', () => {
     const state = airborne();
     const plane = aircraft(state, CAS);
     run(state, 1, [setAltitude(state, CAS, 1000)]);
-    expect(plane.altitudeMeters).toBe(air.operatingAltitudeMeters + air.types.cas.climbRateMps);
+    expect(plane.altitudeMeters).toBe(air.operatingAltitudeMeters + air.models['A-1E']!.climbRateMps);
     run(state, 60);
     expect(plane.altitudeMeters).toBe(1000);
     run(state, 1, [setAltitude(state, CAS, 200)]);
-    expect(plane.altitudeMeters).toBe(1000 - air.types.cas.climbRateMps);
+    expect(plane.altitudeMeters).toBe(1000 - air.models['A-1E']!.climbRateMps);
   });
 
   it('stays inside the type\'s limits', () => {
     const state = airborne();
     run(state, 1, [setAltitude(state, CAS, 99999)]);
-    expect(aircraft(state, CAS).targetAltitudeMeters).toBe(air.types.cas.maxAltitudeMeters);
+    expect(aircraft(state, CAS).targetAltitudeMeters).toBe(air.models['A-1E']!.maxAltitudeMeters);
     run(state, 1, [setAltitude(state, CAS, 0)]);
-    expect(aircraft(state, CAS).targetAltitudeMeters).toBe(air.types.cas.minAltitudeMeters);
+    expect(aircraft(state, CAS).targetAltitudeMeters).toBe(air.models['A-1E']!.minAltitudeMeters);
   });
 
   it('survives a change of mission and is flown to after takeoff', () => {
@@ -715,7 +717,7 @@ describe('altitude control', () => {
         setAltitude(state, RECON, meters),
         order(state, RECON, { kind: 'ReconArea', center: unit(state, 'E-W').position, radius: 500 }),
       ];
-      run(state, 500, startup);
+      run(state, 900, startup);
       total += Object.keys(state.player.contacts).length === 0 ? 0 : 1;
     }
     return total;
@@ -754,6 +756,7 @@ describe('altitude control', () => {
       source: { center: outpost, sigmaMeters: 150, headingRad: null, speedMps: null, observedAt: 0 },
       weapon: null,
       hit: false,
+      damaged: false,
     });
     const view = project(state.player, aircraftTelemetry(state.truth, air), 0, scenario.file.display);
     const orders = reconInformed(outpost, true, undefined, false, 1200)(view).filter((c) => c.kind === 'setAltitude');
@@ -828,7 +831,7 @@ describe('terrain and aircraft', () => {
           ...world.file.combat,
           weapons: { ...world.file.combat.weapons, MANPADS: { ...world.file.combat.weapons.MANPADS, airHitChance: 1 } },
         },
-        air: { ...world.file.air, groundNoticePerScan: 1, types: { ...world.file.air.types, cas: { ...world.file.air.types.cas, minAltitudeMeters: 50 } } },
+        air: { ...world.file.air, groundNoticePerScan: 1 },
       },
     };
     const state = createInitialState(lethal, 1);
@@ -877,7 +880,147 @@ describe('terrain and aircraft', () => {
     const state = createInitialState(scenario, 1);
     const view = project(state.player, aircraftTelemetry(state.truth, air), 0, scenario.file.display);
     const orders = reconInformed(outpost, true, undefined, false, null, 100)(view).filter((c) => c.kind === 'setAltitude');
-    expect(orders).toHaveLength(2);
+    expect(orders).toHaveLength(3);
     expect(orders[0]).toMatchObject({ meters: 100 });
+  });
+});
+
+describe('aircraft models', () => {
+  const JET = 'CAS-2' as AircraftId;
+  const models = air.models;
+  const need = (name: string) => {
+    const model = models[name];
+    if (model === undefined) throw new Error(`No model ${name}`);
+    return model;
+  };
+
+  it('has real aircraft with distinct strengths', () => {
+    const sky = need('A-1E');
+    const sabre = need('F-100D');
+    expect(sky.speedMps).toBeLessThan(sabre.speedMps);
+    expect(sky.ammunition).toBeGreaterThan(sabre.ammunition);
+    expect(sky.hitSurvivalChance).toBeGreaterThan(sabre.hitSurvivalChance);
+    expect(sky.strikeMissPerMeterAltitude).toBeLessThan(sabre.strikeMissPerMeterAltitude);
+    expect(sabre.casualtyFractionPerPass).toBeGreaterThan(sky.casualtyFractionPerPass);
+    expect(sabre.hitChanceFactor).toBeLessThan(sky.hitChanceFactor);
+  });
+
+  it('a high-altitude recon type loses less to height than a low-level scout', () => {
+    expect(need('RF-101C').sensorFalloffMeters).toBeGreaterThan(need('O-1E').sensorFalloffMeters);
+  });
+
+  it('tells the player which model each aircraft is', () => {
+    const state = createInitialState(scenario, 1);
+    const names = aircraftTelemetry(state.truth, air).map((a) => a.model);
+    expect(names).toEqual(['A-1E Skyraider', 'F-100D Super Sabre', 'UH-1B Huey gunship', 'O-1E Bird Dog']);
+  });
+
+  it('a spent aircraft with fuel left stays on station until ordered home', () => {
+    const state = createInitialState(scenario, 1);
+    isolate(state, ['F-A']);
+    run(state, 500, [order(state, CAS, support(outpost))]);
+    aircraft(state, CAS).ammunition = 0;
+    run(state, 1000);
+    expect(aircraft(state, CAS).status).toBe('onStation');
+  });
+
+  it('the automated players recall a spent aircraft', () => {
+    const state = createInitialState(scenario, 1);
+    const plane = aircraft(state, CAS);
+    plane.status = 'onStation';
+    plane.ammunition = 0;
+    const view = project(state.player, aircraftTelemetry(state.truth, air), 0, scenario.file.display);
+    expect(reconInformed(outpost, true)(view)).toContainEqual({
+      kind: 'aircraftOrder',
+      tick: 0,
+      aircraftId: CAS,
+      order: { kind: 'ReturnToBase' },
+    });
+  });
+
+  function hitsOn(model: string, seeds: number): Readonly<{ hits: number; damaged: number }> {
+    const certain = {
+      ...scenario,
+      file: {
+        ...scenario.file,
+        air: { ...air, models: { ...air.models, [model]: { ...need(model), hitChanceFactor: 1e6 } } },
+      },
+    };
+    let hits = 0;
+    let damaged = 0;
+    for (let seed = 0; seed < seeds; seed += 1) {
+      const state = createInitialState(certain, seed);
+      isolate(state, ['E-AD']);
+      const id = model === 'A-1E' ? CAS : JET;
+      step(state, [order(state, id, support(unit(state, 'E-AD').position))], certain);
+      for (let i = 0; i < 700 && !aircraft(state, id).damaged; i += 1) step(state, [], certain);
+      for (const message of state.player.log) {
+        if (message.kind !== 'GROUND_FIRE' || !message.hit) continue;
+        hits += 1;
+        if (message.damaged) damaged += 1;
+      }
+    }
+    return { hits, damaged };
+  }
+
+  it('a rugged airframe survives some hits that would end another\'s mission', () => {
+    const sky = hitsOn('A-1E', 10);
+    const sabre = hitsOn('F-100D', 10);
+    expect(sky.hits).toBeGreaterThan(sky.damaged);
+    expect(sky.damaged / sky.hits).toBeLessThan(sabre.damaged / sabre.hits);
+  });
+});
+
+describe('helicopters', () => {
+  const GUNSHIP = 'GUNSHIP-1' as AircraftId;
+
+  it('holds position on station instead of orbiting', () => {
+    const state = createInitialState(scenario, 1);
+    isolate(state, ['F-A']);
+    run(state, 800, [order(state, GUNSHIP, support(outpost))]);
+    const helicopter = aircraft(state, GUNSHIP);
+    expect(helicopter.status).toBe('onStation');
+    const held = helicopter.position;
+    run(state, 60);
+    expect(helicopter.position).toEqual(held);
+    expect(distance(held, outpost)).toBeLessThanOrEqual(120);
+  });
+
+  it('burns fuel while hovering', () => {
+    const state = createInitialState(scenario, 1);
+    isolate(state, ['F-A']);
+    run(state, 800, [order(state, GUNSHIP, support(outpost))]);
+    const before = aircraft(state, GUNSHIP).fuelSeconds;
+    run(state, 60);
+    expect(aircraft(state, GUNSHIP).fuelSeconds).toBe(before - 60);
+  });
+
+  it('flies closer to the ground than a jet can', () => {
+    const state = createInitialState(scenario, 1);
+    const commands: PlayerCommand[] = [
+      { kind: 'setAltitude', tick: 0, aircraftId: GUNSHIP, meters: 30 },
+      { kind: 'setAltitude', tick: 0, aircraftId: CAS, meters: 30 },
+      order(state, GUNSHIP, { kind: 'MoveTo', point: outpost }),
+      order(state, CAS, { kind: 'MoveTo', point: outpost }),
+    ];
+    step(state, commands, scenario);
+    for (let i = 0; i < 900; i += 1) step(state, [], scenario);
+    const clearance = (id: AircraftId): number =>
+      aircraft(state, id).altitudeMeters - elevationAt(scenario.terrain, aircraft(state, id).position);
+    expect(clearance(GUNSHIP)).toBeLessThan(clearance(CAS));
+    expect(clearance(GUNSHIP)).toBeGreaterThan(0);
+  });
+
+  it('attacks through the normal CAS rules', () => {
+    const state = createInitialState(scenario, 1);
+    isolate(state, ['E-W']);
+    run(state, 1100, [order(state, GUNSHIP, support(unit(state, 'E-W').position))]);
+    expect(aircraft(state, GUNSHIP).ammunition).toBeLessThan(air.models['UH-1B']!.ammunition);
+  });
+
+  it('tells the UI it is a helicopter, for its map symbol', () => {
+    const state = createInitialState(scenario, 1);
+    const entry = aircraftTelemetry(state.truth, air).find((a) => a.aircraftId === GUNSHIP);
+    expect(entry?.rotary).toBe(true);
   });
 });

@@ -91,7 +91,7 @@ export function runBattle(
     unusedOrdnance: truth.aircraft.reduce((sum, a) => sum + a.ammunition, 0),
     firstRequestTick: state.player.log.find((m) => m.kind === 'SUPPORT_REQUEST')?.receivedAt ?? null,
     firstStrikeTick: strikes[0]?.receivedAt ?? null,
-    aircraftHits: fired.filter((m) => m.hit).length,
+    aircraftHits: fired.filter((m) => m.damaged).length,
     groundFireReports: fired.length,
     tempo: tempo.finish(state),
   };

@@ -69,6 +69,7 @@ export type Track = {
 export type Aircraft = {
   id: AircraftId;
   aircraftType: AircraftType;
+  model: string;
   position: Vec2;
   altitudeMeters: number;
   targetAltitudeMeters: number;

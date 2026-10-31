@@ -66,7 +66,7 @@ async function main(): Promise<void> {
     console.log('Load the scenario');
     await page.goto(`http://localhost:${PORT}/?seed=1&speed=40`);
     await page.waitForSelector('#clock');
-    check((await page.locator('.aircraft-row').count()) === 3, 'three aircraft are listed');
+    check((await page.locator('.aircraft-row').count()) === 4, 'four aircraft are listed');
     await page.waitForSelector('.log-row.command_update');
     check(true, 'CECON message is in the log');
     await shot(page, '1-start');

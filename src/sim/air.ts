@@ -10,7 +10,7 @@ import { recordStrike, updateContact, updateFriendly, type PlayerKnowledge, type
 import { observeTarget, type Observer } from '../perception/observe';
 import { nextBinomial, nextBool, nextFloat, type RngState } from '../rng/streams';
 import type { Scenario } from '../scenario/load';
-import type { AircraftTypeConfig, AirConfig, CombatConfig, DisplayConfig, PerceptionConfig } from '../scenario/schema';
+import type { AircraftModelConfig, AirConfig, CombatConfig, DisplayConfig, PerceptionConfig } from '../scenario/schema';
 import { applyEffects } from './combat';
 import type { RadioState } from './radio';
 
@@ -18,13 +18,15 @@ export function createAircraft(scenario: Scenario): Aircraft[] {
   const { air } = scenario.file;
   return air.aircraft
     .map((entry): Aircraft => {
-      const type = air.types[entry.aircraftType];
+      const type = air.models[entry.model];
+      if (type === undefined) throw new Error(`Unknown aircraft model ${entry.model}`);
       return {
         id: entry.id as AircraftId,
-        aircraftType: entry.aircraftType,
+        aircraftType: type.role,
+        model: entry.model,
         position: air.airbase,
         altitudeMeters: 0,
-        targetAltitudeMeters: air.operatingAltitudeMeters,
+        targetAltitudeMeters: type.defaultAltitudeMeters,
         headingRad: PI / 2,
         status: 'ready',
         damaged: false,
@@ -40,8 +42,10 @@ export function createAircraft(scenario: Scenario): Aircraft[] {
     .sort((a, b) => (a.id < b.id ? -1 : 1));
 }
 
-function typeOf(aircraft: Aircraft, air: AirConfig): AircraftTypeConfig {
-  return air.types[aircraft.aircraftType];
+function typeOf(aircraft: Aircraft, air: AirConfig): AircraftModelConfig {
+  const model = air.models[aircraft.model];
+  if (model === undefined) throw new Error(`Unknown aircraft model ${aircraft.model}`);
+  return model;
 }
 
 function destinationOf(order: AircraftOrder | null): Vec2 | null {
@@ -59,7 +63,7 @@ function destinationOf(order: AircraftOrder | null): Vec2 | null {
 }
 
 // Never tighter than the aircraft can actually fly.
-function orbitRadius(order: AircraftOrder | null, type: AircraftTypeConfig): number {
+function orbitRadius(order: AircraftOrder | null, type: AircraftModelConfig): number {
   const tightest = (type.speedMps / type.turnRateRadPerSecond) * 1.2;
   switch (order?.kind) {
     case 'Orbit':
@@ -91,11 +95,11 @@ export function applyOrder(aircraft: Aircraft, order: AircraftOrder, air: AirCon
   return true;
 }
 
-function secondsToBase(aircraft: Aircraft, type: AircraftTypeConfig, air: AirConfig): number {
+function secondsToBase(aircraft: Aircraft, type: AircraftModelConfig, air: AirConfig): number {
   return distance(aircraft.position, air.airbase) / type.speedMps;
 }
 
-function burnFuel(aircraft: Aircraft, type: AircraftTypeConfig, air: AirConfig): void {
+function burnFuel(aircraft: Aircraft, type: AircraftModelConfig, air: AirConfig): void {
   aircraft.fuelSeconds = Math.max(0, aircraft.fuelSeconds - 1);
   if (aircraft.fuelSeconds <= secondsToBase(aircraft, type, air) + type.bingoMarginSeconds) {
     aircraft.status = 'returning';
@@ -112,7 +116,7 @@ function angleBetween(from: number, to: number): number {
 }
 
 /** Turns toward `desired` at the type's turn rate, then flies one second along the new heading. */
-function steer(aircraft: Aircraft, desired: number, type: AircraftTypeConfig): void {
+function steer(aircraft: Aircraft, desired: number, type: AircraftModelConfig): void {
   const limit = type.turnRateRadPerSecond;
   aircraft.headingRad += Math.max(-limit, Math.min(limit, angleBetween(aircraft.headingRad, desired)));
   aircraft.position = {
@@ -149,7 +153,7 @@ function clearanceFloor(aircraft: Aircraft, air: AirConfig, terrain: TerrainGrid
     x: aircraft.position.x + cos(aircraft.headingRad) * reach,
     y: aircraft.position.y + sin(aircraft.headingRad) * reach,
   };
-  return Math.max(elevationAt(terrain, aircraft.position), elevationAt(terrain, ahead)) + air.terrainClearanceMeters;
+  return Math.max(elevationAt(terrain, aircraft.position), elevationAt(terrain, ahead)) + typeOf(aircraft, air).terrainClearanceMeters;
 }
 
 /** Altitude is its own order, so it survives a change of mission. */
@@ -161,7 +165,7 @@ export function setTargetAltitude(aircraft: Aircraft, meters: number, air: AirCo
 /** Sensors work best close to the ground, measured from the ground beneath the aircraft. */
 function altitudeQuality(aircraft: Aircraft, air: AirConfig, terrain: TerrainGrid): number {
   const height = aircraft.altitudeMeters - elevationAt(terrain, aircraft.position);
-  const quality = 1 - (height - air.sensorReferenceHeightMeters) / air.sensorFalloffMeters;
+  const quality = 1 - (height - air.sensorReferenceHeightMeters) / typeOf(aircraft, air).sensorFalloffMeters;
   return Math.max(air.sensorQualityMin, Math.min(air.sensorQualityMax, quality));
 }
 
@@ -195,7 +199,8 @@ function flyAircraft(aircraft: Aircraft, air: AirConfig): void {
     case 'onStation': {
       const center = destinationOf(aircraft.order);
       if (center === null) return;
-      steer(aircraft, orbitHeading(aircraft, center, orbitRadius(aircraft.order, type)), type);
+      // A helicopter holds its position; anything else has to keep flying.
+      if (!type.rotary) steer(aircraft, orbitHeading(aircraft, center, orbitRadius(aircraft.order, type)), type);
       burnFuel(aircraft, type, air);
       return;
     }
@@ -218,6 +223,10 @@ function flyAircraft(aircraft: Aircraft, air: AirConfig): void {
       }
       return;
   }
+}
+
+export function modelOf(aircraft: Aircraft, air: AirConfig): AircraftModelConfig {
+  return typeOf(aircraft, air);
 }
 
 export function isAirborne(aircraft: Aircraft): boolean {
@@ -380,21 +389,22 @@ function strikePass(
   tick: number,
 ): void {
   aircraft.ammunition -= 1;
-  aircraft.nextPassTick = tick + air.passIntervalSeconds;
+  const model = typeOf(aircraft, air);
+  aircraft.nextPassTick = tick + model.passIntervalSeconds;
   const height = Math.max(0, aircraft.altitudeMeters - elevationAt(terrain, target.position));
-  const miss = hypot(distance(contact.position.center, target.position), height * air.strikeMissPerMeterAltitude);
+  const miss = hypot(distance(contact.position.center, target.position), height * model.strikeMissPerMeterAltitude);
   const accuracy = exp(-(miss * miss) / (2 * air.blastRadiusMeters * air.blastRadiusMeters));
   const cover = cellAt(terrain, target.position).airCover;
   const label = `air/${aircraft.id}/${target.id}`;
-  const casualties = nextBinomial(rng, label, target.personnel, air.casualtyFractionPerPass * (1 - cover) * accuracy);
+  const casualties = nextBinomial(rng, label, target.personnel, model.casualtyFractionPerPass * (1 - cover) * accuracy);
   applyEffects(
     truth,
     [
       {
         targetId: target.id,
         casualties,
-        suppression: air.suppressionPerPass * accuracy,
-        morale: air.moralePerPass * accuracy,
+        suppression: model.suppressionPerPass * accuracy,
+        morale: model.moralePerPass * accuracy,
       },
     ],
     combat,
@@ -502,6 +512,8 @@ export function aircraftTelemetry(truth: WorldTruth, air: AirConfig): AircraftTe
     return {
       aircraftId: aircraft.id,
       aircraftType: aircraft.aircraftType,
+      model: typeOf(aircraft, air).displayName,
+      rotary: typeOf(aircraft, air).rotary,
       position: aircraft.position,
       altitudeMeters: aircraft.altitudeMeters,
       targetAltitudeMeters: aircraft.targetAltitudeMeters,

@@ -24,6 +24,18 @@ export const noAir: Policy = () => [];
 const cas = (view: PlayerView): readonly AircraftTelemetryEntry[] =>
   view.aircraft.filter((aircraft) => aircraft.aircraftType === 'cas');
 
+/** Going home is the player's call, so a spent aircraft is sent back to rearm. */
+function recallEmpty(view: PlayerView): readonly PlayerCommand[] {
+  return cas(view)
+    .filter((aircraft) => aircraft.ammunition <= 0 && aircraft.status !== 'returning' && aircraft.status !== 'turnaround')
+    .map((aircraft) => ({
+      kind: 'aircraftOrder',
+      tick: view.tick,
+      aircraftId: aircraft.aircraftId,
+      order: { kind: 'ReturnToBase' },
+    }));
+}
+
 const order = (view: PlayerView, aircraftId: AircraftId, center: Vec2, radius: number): PlayerCommand => ({
   kind: 'aircraftOrder',
   tick: view.tick,
@@ -37,7 +49,7 @@ const engaged = (aircraft: AircraftTelemetryEntry): boolean =>
 /** Answers each support request with whatever CAS is ready, in the requester's reported position. */
 export function reactiveCas(): Policy {
   return (view) => {
-    const commands: PlayerCommand[] = [];
+    const commands: PlayerCommand[] = [...recallEmpty(view)];
     const taken = new Set<string>();
     for (const request of view.supportRequests) {
       if (request.acknowledged) continue;
@@ -60,10 +72,13 @@ export function immediateCas(): Policy {
     const newest = [...view.contacts]
       .filter((marker) => marker.contact.identification === 'hostile')
       .sort((a, b) => a.ageSeconds - b.ageSeconds || (a.key < b.key ? -1 : 1))[0];
-    if (newest === undefined) return [];
-    return cas(view)
-      .filter((aircraft) => aircraft.status === 'ready')
-      .map((aircraft) => order(view, aircraft.aircraftId, newest.contact.position.center, SUPPORT_RADIUS_METERS));
+    if (newest === undefined) return recallEmpty(view);
+    return [
+      ...recallEmpty(view),
+      ...cas(view)
+        .filter((aircraft) => aircraft.status === 'ready')
+        .map((aircraft) => order(view, aircraft.aircraftId, newest.contact.position.center, SUPPORT_RADIUS_METERS)),
+    ];
   };
 }
 
@@ -129,7 +144,7 @@ export function reconInformed(
 ): Policy {
   const forwarded = new Set<string>();
   return (view) => {
-    const commands: PlayerCommand[] = [];
+    const commands: PlayerCommand[] = [...recallEmpty(view)];
     if (casTransitMeters !== null) {
       // A pop-up attack: stay down on the way in, then climb to work the target.
       for (const aircraft of cas(view)) {

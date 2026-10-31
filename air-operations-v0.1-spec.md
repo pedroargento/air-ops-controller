@@ -1,7 +1,7 @@
 # Air Operations Controller — v0.1 Specification
 
 **Status:** Draft for implementation  
-**Version:** 0.1, revision 8 (design rules frozen for v0.1; numeric values are provisional until calibrated)  
+**Version:** 0.1, revision 10 (design rules frozen for v0.1; numeric values are provisional until calibrated)  
 **Platform:** Desktop browser, single player  
 **Stack:** TypeScript (strict mode), Canvas 2D, HTML/CSS, Vite, Vitest  
 **Visual target:** Functional grid, symbols, lines, labels; no illustrative assets required
@@ -32,7 +32,7 @@ The ground war is not a scripted sequence of requests. Its outcomes arise from t
 
 - One fixed scenario on one rectangular terrain map; 100 × 100 cells at 50 m per cell (5 × 5 km).
 - Three to five friendly and three to seven enemy ground formations; platoon-sized formations are the primary unit, with smaller patrols represented identically where appropriate.
-- One off-map airbase, one reconnaissance aircraft, and two close-air-support (CAS) aircraft.
+- One off-map airbase, one reconnaissance aircraft, two close-air-support (CAS) aircraft and one helicopter gunship, drawn from real Vietnam-era models.
 - Ground AI: move toward objective, hold, and choose among observe, probe, harass, assault and disengage behaviors.
 - Statistical combat; casualties, ammunition consumption, suppression and morale as separate tracks.
 - Equipment: small arms, machine guns and anti-aircraft weapons, with combat capabilities derived from each unit's inventory.
@@ -48,7 +48,7 @@ The ground war is not a scripted sequence of requests. Its outcomes arise from t
 
 ### Explicitly deferred
 
-Helicopter rescue/medevac and troop transport; flare missions and illumination; crew assignment and fatigue; pilot autonomy within altitude bands, tactical flight patterns and aggressiveness; multiple aircraft variants differing in armor, maneuverability and how much altitude costs them; multiple airbases and maintenance; weather and day/night mechanics; aircraft destruction and crew loss; mortars, anti-armor weapons and vehicles; realistic radio procedures, voice audio and interference; multi-echelon ground hierarchy; a persistent campaign; civilian simulation and rules of engagement; destructible terrain; advanced probabilistic tracking; complex enemy air operations; mistaken aircraft identification and friendly-fire damage; player-facing radio channels and channel contention; higher-command AI and dynamic CECON changes to ground objectives; report editing, player-authored enemy assessments and area-of-interest markers. These remain possible future features, not implicit v0.1 requirements.
+ flare missions and illumination; crew assignment and fatigue; pilot autonomy within altitude bands, tactical flight patterns and aggressiveness; helicopter landing, medevac, resupply and troop lift; fixed-wing gunships; forward air controllers marking targets; multiple airbases and maintenance; weather and day/night mechanics; aircraft destruction and crew loss; mortars, anti-armor weapons and vehicles; realistic radio procedures, voice audio and interference; multi-echelon ground hierarchy; a persistent campaign; civilian simulation and rules of engagement; destructible terrain; advanced probabilistic tracking; complex enemy air operations; mistaken aircraft identification and friendly-fire damage; player-facing radio channels and channel contention; higher-command AI and dynamic CECON changes to ground objectives; report editing, player-authored enemy assessments and area-of-interest markers. These remain possible future features, not implicit v0.1 requirements.
 
 ## 3. Spatial model and time
 
@@ -274,7 +274,7 @@ TICs can change air-tasking priorities, but deciding whether to divert an aircra
 
 Aircraft have ID, type, true and player-visible position, altitude, base, speed, fuel, ammunition, mission, damage state and sensor capability. Aircraft do not have independently simulated individual crew members yet. The airbase sits outside the map bounds, so aircraft positions can be off-map during transit.
 
-Initial types: `ReconAircraft`, `CASAircraft`.
+Every aircraft is a real model, defined by data, and its role (recon or CAS) decides which orders it takes. Performance follows published figures where they matter to the game; see §8.5.
 
 Player orders:
 
@@ -330,6 +330,25 @@ Terrain blocks aircraft line of sight and engagements in both directions.
 - **Weapons:** A weapon's range and ceiling are measured from the weapon's own position, so a team on a hill reaches higher.
 - **Tactics this should allow:** A low aircraft behind a ridge can't be seen or shot at, and can't see or strike either. CAS can approach masked and rise to attack, which is the reason to fly low.
 - **Terrain scale:** The map needs relief of a few hundred meters for this to matter. Its current 70 m is too little.
+
+### 8.5 Aircraft models
+
+Speeds, endurance and ordnance come from published figures, which often disagree, so these are rounded choices. Game effects such as armor and strike accuracy are judgment calls based on each aircraft's reputation.
+
+| Model | Role | Real figures used | Game character |
+|---|---|---|---|
+| O-1E Bird Dog | Recon | About 110 mph cruise, 4.7 hours' endurance, no weapons | Slow and long-lasting. Excellent eyes low down, poor from height, unarmored |
+| RF-101C Voodoo | Recon | About 550 mph cruise, cameras | Fast, wide turns, sensors that hold up at height. Defined but not in the first scenario |
+| A-1E Skyraider | CAS | About 200 mph cruise, 7,000 lb load, 15 hardpoints | Slow, accurate, carries many passes, rugged, stays for hours |
+| F-100D Super Sabre | CAS | About 565 mph cruise, up to 6,000 lb load | Arrives fast, hits hard, fewer passes, less accurate, wide turns, short endurance |
+| UH-1B Huey gunship | CAS, helicopter | About 126 mph cruise, M60s and rockets | Hovers, flies low, frequent light attacks that mainly suppress, vulnerable |
+| AH-1G Cobra | CAS, helicopter | About 170 mph cruise, minigun and rockets | Faster and better armed than the Huey. Defined but not in the first scenario |
+| OH-6A Cayuse | Recon, helicopter | About 125 kt cruise | Superb eyes very low down, poor from height. Defined but not in the first scenario |
+
+- **Compressions:** Turnaround and repair times are far shorter than reality, so aircraft can fly more than once in 75 minutes. Altitude is capped at 3,000 m, well below real ceilings, because nothing tactical happens higher.
+- **Speed and armor:** A model's hit chance is scaled for how hard it is to track, and rugged airframes have a chance to survive a hit and keep flying.
+- **Helicopters:** They hold position on station instead of orbiting, keep a much smaller terrain clearance, and start lower. They use the same orders and CAS rules as everything else. Landing is not modeled, so a helicopter only touches down at base.
+- **Going home:** A long-endurance aircraft can outlast its ordnance. It stays on station until ordered back, so a spent aircraft is the player's problem.
 
 ## 9. Player interface
 
@@ -499,9 +518,9 @@ A fictionalized Vietnam-era map, inspired by the operational problems at Plei Me
 |---|---|
 | Map | 5 × 5 km, 50 m cells (100 × 100 grid) |
 | Duration | 75 simulated minutes |
-| Aircraft transit | About 4–6 minutes, depending on type |
-| CAS on-station endurance | About 10–15 minutes per sortie |
-| Turnaround | About 10 minutes, configurable per aircraft type |
+| Aircraft transit | About 2–9 minutes, from each model's real speed |
+| On-station endurance | From each model's fuel; slow types usually run out of ordnance first |
+| Turnaround | About 10 minutes, configurable per model, and compressed from real times |
 | Ground speed | Depends on formation, terrain and posture |
 
 **No-air requirement:** The authored scenario must be tuned so there is no viable ground-only route to the primary win condition within its defined constraints. A headless test that finds 0 wins over many seeds is supporting empirical evidence, **not mathematical proof of a 0% probability**. Examine whether ammunition, reinforcement and time constraints can guarantee that outcome, rather than adding an artificial conditional that checks whether aircraft were used.
@@ -605,6 +624,8 @@ Warning counts from the first hostile contact the player holds within 1.5 km of 
 | **M7.5: Altitude** | Player altitude control, its costs, the altitude profile | Does altitude give the player a real answer to hidden air defense? |
 | **M7.55: Situational awareness** | Marker sizes, contact statuses, archive, consolidation, battle summary, debrief | Can the player tell who is winning? |
 | **M7.6: Terrain and aircraft** | Altitude datum, air line of sight, masked engagements, taller terrain, path profile | Does terrain give CAS a reason to fly low? |
+| **M7.7: Aircraft models** | Real Vietnam-era aircraft with their own performance, armor and altitude costs | Do different aircraft make different decisions? |
+| **M7.8: Helicopters** | Hovering gunships and scouts, with landing and ground-interaction roles deferred | Do helicopters use terrain differently from jets? |
 | **M8: Squads** | Skipped for now: subordinate elements, grouped markers, covering fire and maneuver | Does squad detail matter from the player's seat? |
 | **M9: Calibration** | Reproducible policy testing, tuning, usability refinements, documentation of known simplifications and tuning values | Are the success-rate and information-value targets satisfied? |
 

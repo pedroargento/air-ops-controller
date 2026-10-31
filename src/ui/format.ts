@@ -89,7 +89,7 @@ export function aircraftMission(aircraft: AircraftTelemetryEntry): string {
 export function aircraftSummary(aircraft: AircraftTelemetryEntry): string {
   const status = aircraft.damaged ? `DAMAGED ${aircraft.status}` : aircraft.status;
   return (
-    `${aircraft.aircraftId}: ${status}, ${aircraftMission(aircraft)}, ${Math.round(aircraft.altitudeMeters)} m, ` +
+    `${aircraft.aircraftId} (${aircraft.model}): ${status}, ${aircraftMission(aircraft)}, ${Math.round(aircraft.altitudeMeters)} m, ` +
     `fuel ${Math.round(aircraft.fuelFraction * 100)}%, ordnance ${aircraft.ammunition}`
   );
 }
@@ -213,7 +213,7 @@ export function radioLine(message: RadioMessage, cellSize: number): RadioLine {
       };
     case 'GROUND_FIRE':
       return {
-        text: `${message.hit ? 'Hit by ground fire, returning to base' : 'Taking ground fire'}${message.weapon === null ? '' : ` (${WEAPON_NAMES[message.weapon]})`}, source near ${grid(message.source.center)}.`,
+        text: `${message.damaged ? 'Hit by ground fire, returning to base' : message.hit ? 'Hit by ground fire, still flying' : 'Taking ground fire'}${message.weapon === null ? '' : ` (${WEAPON_NAMES[message.weapon]})`}, source near ${grid(message.source.center)}.`,
         coordinates: [message.source.center],
       };
     case 'STRIKE_RESULT':

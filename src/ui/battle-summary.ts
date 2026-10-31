@@ -180,7 +180,7 @@ export function summarizeBattle(view: PlayerView, config: SummaryConfig): Battle
       .reduce((sum, unit) => sum + unit.personnel, 0),
     threatened: { low: threatened.low, high: threatened.high },
     strikes: view.log.filter((message) => message.kind === 'STRIKE_RESULT').length,
-    aircraftHits: view.log.filter((message) => message.kind === 'GROUND_FIRE' && message.hit).length,
+    aircraftHits: view.log.filter((message) => message.kind === 'GROUND_FIRE' && message.damaged).length,
     damagedNow: view.aircraft.filter((aircraft) => aircraft.damaged).length,
     archived: view.archivedContacts,
   };

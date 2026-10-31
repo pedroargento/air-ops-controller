@@ -43,7 +43,8 @@ const app = new App({
   recipients: [...new Set(linkedToAirOps)].sort(),
   objective: `Hold the outpost for ${Math.round(scenario.file.durationSeconds / 60)} minutes`,
   ackDistanceMeters: scenario.file.air.supportAckDistanceMeters,
-  sensorRadius: (aircraft) => scenario.file.air.types[aircraft.aircraftType].sensorRadiusMeters,
+  sensorRadius: (aircraft) =>
+    Object.values(scenario.file.air.models).find((model) => model.displayName === aircraft.model)?.sensorRadiusMeters ?? 0,
   threatRadius: (weapons, altitudeMeters) =>
     Math.max(
       0,
@@ -58,7 +59,7 @@ const app = new App({
         ),
     ),
   weaponCeiling: (weapon) => scenario.file.combat.weapons[weapon].maxAltitudeMeters,
-  maxAltitudeMeters: Math.max(...Object.values(scenario.file.air.types).map((type) => type.maxAltitudeMeters)),
+  maxAltitudeMeters: Math.max(...Object.values(scenario.file.air.models).map((type) => type.maxAltitudeMeters)),
   defaultAltitudeMeters: scenario.file.air.operatingAltitudeMeters,
   // The player's own order of battle and the HQ estimate: nothing here reveals enemy truth.
   summary: {

@@ -1,6 +1,6 @@
 # Air Operations Controller v0.1 — Implementation Plan
 
-Implements `air-operations-v0.1-spec.md` (revision 8). The spec decides what the game does; this plan decides build order, structure and exit gates. Section references (§) point to the spec.
+Implements `air-operations-v0.1-spec.md` (revision 10). The spec decides what the game does; this plan decides build order, structure and exit gates. Section references (§) point to the spec.
 
 ## Status
 
@@ -15,26 +15,26 @@ Implements `air-operations-v0.1-spec.md` (revision 8). The spec decides what the
 - **M7.5:** Implemented, and all automated exit checks are met. The human playtest is still owed, and it decides M8.
 - **M7.55:** Complete. It also fixed garrisons rarely getting SITREPs out in heavy fighting, because contact reports always went first.
 - **M7.6:** Complete as engine work. Whether masking pays is now a scenario question, to test on a map built for it.
+- **M7.7:** Complete.
+- **M7.8:** Complete. Scout and gunship teamwork (pink teams) would suit a later scenario.
 - **M8:** Skipped for now. Squad-level detail didn't earn its cost from the air controller's seat. Aircraft variants come first.
 - **M9:** Not started.
 
 Replay works across JavaScript engines, which goes beyond invariant 8. Simulation code uses `src/domain/public/det-math.ts` because built-in `Math.log` and similar functions differ between engines and V8 versions; lint bans them there.
 
-| Policy, after M7.6 (1,000 seeds) | Win | Captured | Below strength | Aircraft hits per run | Target |
+| Policy, after M7.8 (1,000 seeds) | Win | Captured | Below strength | Aircraft hits per run | Target |
 |---|---|---|---|---|---|
 | No air | 0.8% | 86.8% | 12.4% | 0.00 | 0 wins |
-| Reactive CAS | 13.2% | 38.7% | 48.1% | 0.49 | 15–50% |
-| Immediate CAS (diagnostic) | 1.7% | 74.9% | 23.4% | 0.25 | None |
-| Recon informed | 32.0% | 23.5% | 44.5% | 0.55 | 55–85% |
-| Recon informed, no forwarding | 16.9% | 39.5% | 43.6% | 0.55 | None |
-| Recon informed, threat-blind | 46.8% | 15.4% | 37.8% | 0.57 | None |
-| Threat-blind, recon climbs after fire | 44.8% | 15.4% | 39.8% | 0.39 | None |
-| Threat-blind, recon climbs, CAS pop-up | 42.1% | 16.3% | 41.6% | 0.43 | None |
+| Reactive CAS | 27.0% | 21.1% | 51.9% | 0.29 | 15–50% |
+| Immediate CAS (diagnostic) | 33.0% | 21.4% | 45.6% | 0.21 | None |
+| Recon informed | 72.6% | 6.6% | 20.8% | 0.56 | 55–85% |
+| Recon informed, no forwarding | 58.3% | 10.9% | 30.8% | 0.56 | None |
+| Recon informed, threat-blind | 82.1% | 1.9% | 16.0% | 0.55 | None |
+| Threat-blind, recon climbs after fire | 85.9% | 1.4% | 12.7% | 0.41 | None |
+| Threat-blind, recon climbs, CAS pop-up | 84.7% | 2.4% | 12.9% | 0.53 | None |
 
-- Informed beats reactive by 18.8 points (95% interval 15.3–22.3); the target is at least 20.
-- Forwarding adds 15.1 points (95% interval 11.9–18.3); the target is about 10.
-- At least one aircraft is hit in 46% of informed runs, and 32% when recon climbs.
-- Recon climbing to 1,500 m cuts hits by about 30%, for about 2 points of wins. In a 200-seed sweep CAS climbing lost wins at every height tested, because strikes depend on altitude more than a hit costs.
+- Informed beats reactive by 45.6 points (95% interval 41.8–49.4); the target is at least 20.
+- Forwarding adds 14.3 points (95% interval 11.0–17.6); the target is about 10.
 
 M7 removed an aircraft aura that had inflated every earlier result. Each sighting used to restart a 30-second take-cover reaction, so assault formations spent 46% of their steady time held by any nearby aircraft, even one with no ordnance. Formations now take cover once and can't again for 5 minutes. Most of air's earlier value came from that aura: with it gone, reactive fell to 3%. CAS passes were then roughly doubled in strength. So win rates before M7 aren't comparable with these.
 
@@ -42,10 +42,12 @@ Forwarding probably helps now because the aura no longer dominates, so warned pa
 
 Open items for M9, most important first:
 
-- **Air is now too weak:** reactive and informed both sit below their bands. CAS strength and the `successMinDefenders` value of 50 are the obvious levers. The informed advantage also needs another 3 points.
-- **Threat awareness doesn't pay.** Threat-blind beats threat-aware by about 10 points, with the same hits per run. Going after the team still takes passes from the assault, and avoidance doesn't reduce hits. Hits may be concentrated in the first encounter, before anything is known. The hidden team needs a better answer before a human player's reaction will feel rewarded.
-- **No-air still wins rarely** (0.3%). These are real wins: the garrison beats the waves in detail, so `successMinDefenders` can't remove them. M5's exit stays unmet.
-- **Fire is too continuous:** 76% of minutes without air against a 30–50% target, and 4 bouts against at least 5. The first decisive assault is at minute 43.25, against about 45.
+- **Hunting air defense doesn't pay.** The `informed` policy wins 47.0%, against 65.2% for threat-blind, because it spends passes on the team. Answering fire by climbing recon does pay (70.6%, with 0.40 hits against 0.54), so altitude is the better reaction for now.
+- **Reactive and informed are both inside their bands** with the gunship added. The best policy reaches 85.9%, so a good human may find the scenario too easy.
+- **Immediate CAS (33.0%) beats reactive (27.0%).** Simply launching at the first report shouldn't beat answering requests, so this diagnostic needs watching.
+- **Forwarding is above its 10-point design target,** which may mean it is now too strong.
+- **No-air still wins rarely** (0.8%). These are real wins: the garrison beats the waves in detail, so `successMinDefenders` can't remove them. M5's exit stays unmet.
+- **Fire is too continuous:** 74% of minutes without air against a 30–50% target, and 4 bouts against at least 5. The first decisive assault is at minute 43.25, against about 45.
 - `probe` is about 3% of behavior time, almost all of it scouts.
 - **Scenario win conditions need a rethink.** "Below strength" is hidden from the player, and it counts a recovering unit as zero defenders. Over 400 seeds, counting all but broken units would take reactive from 10.5% to 24.3% and informed from 34.0% to 50.7%, with no-air barely moving (0.5% to 0.8%). An alternative is a report card on the outpost's status when a relief force arrives. This is scenario work, not engine work.
 
@@ -297,6 +299,14 @@ Implements §8.4. Happens after the M7.5 playtest, because it changes balance ag
 **Exit:** §12 terrain tests pass, the masked policy reduces hits without losing wins, and CAS flying low is a real option.
 
 **Result:** The engine work is done, and the masking part of this exit moved to scenario design. Terrain blocks fire and sensors as designed. The pop-up policy (100 m in transit, 650 m on station) wins 42.1% with 0.43 hits, against 46.8% and 0.57 for threat-blind, and recon climbing alone does better on both (44.8%, 0.39). Flying low all the time took hits to about 2.3 per run in a 300-seed test, because small arms and machine guns reach CAS over assault formations. The scenario's hills are around the outpost, with the air defense team on the same slope as its targets, so there's little to hide behind. Whether masking pays is probably a scenario-placement question, which M9 or a new scenario should test.
+
+### M7.7: Aircraft models
+
+Implements §8.5. Aircraft are defined per real model, in data, with role separate from model. The first scenario flies an O-1E, an A-1E and an F-100D, and RF-101C is defined for later scenarios. Spent long-endurance aircraft need recalling, so the automated players now do that.
+
+### M7.8: Helicopters
+
+Implements the helicopter rules in §8.5. The first scenario adds a UH-1B gunship, and AH-1G and OH-6A are defined for later. Landing, medevac, resupply and troop lift are deferred.
 
 ### M8: Squads (skipped for now)
 
