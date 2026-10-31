@@ -215,6 +215,32 @@ const air = z.object({
   supportEtaSlipSeconds: z.number().int().positive(),
 });
 
+const weather = z.object({
+  baseCeilingMeters: z.number().positive(),
+  minSystems: z.number().int().min(0),
+  maxSystems: z.number().int().min(0),
+  minRadiusMeters: z.number().positive(),
+  maxRadiusMeters: z.number().positive(),
+  minCeilingMeters: z.number().positive(),
+  maxCeilingMeters: z.number().positive(),
+  minRain: unit,
+  maxRain: unit,
+  minWindMps: z.number().nonnegative(),
+  maxWindMps: z.number().nonnegative(),
+  minSystemSeconds: z.number().positive(),
+  maxSystemSeconds: z.number().positive(),
+  rampSeconds: z.number().positive(),
+  clearVisibilityMeters: z.number().positive(),
+  heavyRainVisibilityMeters: z.number().positive(),
+  cloudFadeMeters: z.number().positive(),
+  rainMissMeters: z.number().nonnegative(),
+  forecastIntervalSeconds: z.number().int().positive(),
+  forecastWindErrorMps: z.number().nonnegative(),
+  forecastPositionErrorMeters: z.number().nonnegative(),
+  forecastCeilingErrorMeters: z.number().nonnegative(),
+  forecastTimingErrorSeconds: z.number().nonnegative(),
+});
+
 const capture = z.object({
   area,
   enemyMinEffective: z.number().nonnegative(),
@@ -263,6 +289,7 @@ export const scenarioFileSchema = z.object({
   radio,
   display,
   air,
+  weather,
   capture,
   links: z.array(z.tuple([z.string(), z.string()])),
   ceconMessages: z.array(z.object({ atSeconds: z.number().int().min(0), text: z.string() })).default([]),
@@ -271,6 +298,7 @@ export const scenarioFileSchema = z.object({
 
 export type ScenarioFile = z.infer<typeof scenarioFileSchema>;
 export type CombatConfig = ScenarioFile['combat'];
+export type WeatherConfig = ScenarioFile['weather'];
 export type CaptureConfig = ScenarioFile['capture'];
 export type AirConfig = ScenarioFile['air'];
 export type AircraftModelConfig = z.infer<typeof aircraftModel>;

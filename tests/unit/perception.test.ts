@@ -216,3 +216,36 @@ describe('observed weapons', () => {
     expect(after?.observedWeapons.length).toBeGreaterThan(0);
   });
 });
+
+describe('weather and sight', () => {
+  /** Ground rain over the whole map, at one strength. */
+  function raining(rain: number) {
+    return (setup: ReturnType<typeof pair>): void => {
+      const { weather } = setup.truth;
+      const system = { originAtTickZero: { x: 2525, y: 2600 }, velocity: { x: 0, y: 0 }, radiusMeters: 1e7, ceilingMeters: 1000, rain, fromTick: -1e6, untilTick: 1e6 };
+      setup.truth.weather = { ...weather, rampSeconds: 1, systems: rain > 0 ? [system] : [] };
+    };
+  }
+
+  function detectionsIn(rain: number, separationMeters: number): number {
+    let seen = 0;
+    for (let seed = 0; seed < 200; seed += 1) {
+      const setup = pair(separationMeters, seed);
+      raining(rain)(setup);
+      updatePerception(setup.truth, setup.knowledge, open.terrain, setup.rng, perception, 5);
+      if (Object.keys(setup.knowledge[setup.observer.id]?.contacts ?? {}).length > 0) seen += 1;
+    }
+    return seen;
+  }
+
+  it('detects less as rain gets stronger, not just when it rains', () => {
+    const [dry, light, heavy] = [detectionsIn(0, 250), detectionsIn(0.25, 250), detectionsIn(0.8, 250)];
+    expect(light).toBeLessThan(dry);
+    expect(heavy).toBeLessThan(light);
+  });
+
+  it('puts distant targets out of sight in heavy rain', () => {
+    expect(detectionsIn(0, 400)).toBeGreaterThan(0);
+    expect(detectionsIn(1, 400)).toBe(0);
+  });
+});

@@ -6,6 +6,7 @@ import { createRng, type RngState } from '../rng/streams';
 import type { Scenario } from '../scenario/load';
 import { createAircraft } from './air';
 import { createRadioState, type RadioState } from './radio';
+import { generateWeather } from './weather';
 
 export type SimState = {
   tick: number;
@@ -17,6 +18,8 @@ export type SimState = {
 };
 
 export function createInitialState(scenario: Scenario, seed: number): SimState {
+  const { terrain, file } = scenario;
+  const rng = createRng(seed);
   const units: GroundUnit[] = scenario.file.units
     .map((unit): GroundUnit => {
       const doctrine = scenario.doctrines[unit.doctrine];
@@ -66,6 +69,7 @@ export function createInitialState(scenario: Scenario, seed: number): SimState {
       aircraft: createAircraft(scenario),
       tracks: {},
       nextContactNumber: 0,
+      weather: generateWeather(file.weather, terrain.width * terrain.cellSize, file.durationSeconds, rng),
       captureProgressSeconds: 0,
       outcome: 'running',
       endedAtTick: null,
@@ -73,6 +77,6 @@ export function createInitialState(scenario: Scenario, seed: number): SimState {
     unitKnowledge: {},
     radio: createRadioState(units),
     player: emptyPlayerKnowledge(),
-    rng: createRng(seed),
+    rng,
   };
 }

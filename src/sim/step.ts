@@ -4,6 +4,7 @@ import { airWeapons, supportWeaponCount, totalAmmunition } from '../domain/publi
 import { distance, moveToward, type Vec2 } from '../domain/public/geometry';
 import { emptyKnowledge, type UnitSelf } from '../domain/public/ground';
 import { cellAt, type TerrainGrid } from '../domain/public/terrain';
+import { CECON, type MessageId } from '../domain/public/radio';
 import type { GroundUnit } from '../domain/truth/world';
 import { reviewContacts } from '../knowledge/player-knowledge';
 import { updatePerception } from '../perception/observe';
@@ -12,6 +13,7 @@ import type { Scenario } from '../scenario/load';
 import type { PerceptionConfig } from '../scenario/schema';
 import { advanceAircraft, resolveCas, sensorCoverage, updateAircraftNotice, updateAircraftPerception } from './air';
 import { resolveGroundFire } from './ground-fire';
+import { issueForecast } from './weather';
 import { resolveCombat } from './combat';
 import { updateOutcome } from './outcome';
 import { advanceOutbound, applyCommand, reviewPromises } from './player-commands';
@@ -158,6 +160,23 @@ function driftNavigation(unit: GroundUnit, moved: number, config: PerceptionConf
   };
 }
 
+/** Forecasts reach the player as CECON updates, so a plan can be overtaken by a new one. */
+function publishForecast(state: SimState, scenario: Scenario): void {
+  const { truth, player, radio, rng, tick } = state;
+  player.forecast = issueForecast(truth.weather, scenario.file.weather, rng, tick);
+  player.forecastIssuedAt = tick;
+  radio.nextMessageNumber += 1;
+  player.log.push({
+    id: `M-${radio.nextMessageNumber}` as MessageId,
+    kind: 'COMMAND_UPDATE',
+    senderId: CECON,
+    observedAt: tick,
+    sentAt: tick,
+    receivedAt: tick,
+    text: 'Weather forecast updated.',
+  });
+}
+
 // Fixed phase order (§10.3). Units are kept sorted by ID, so iteration is stable.
 export function step(state: SimState, commands: readonly PlayerCommand[], scenario: Scenario): SimState {
   const { truth, rng } = state;
@@ -166,6 +185,8 @@ export function step(state: SimState, commands: readonly PlayerCommand[], scenar
   const tactical = state.tick % TACTICAL_INTERVAL_TICKS === 0;
 
   for (const command of commands) applyCommand(state, command, scenario);
+
+  if (state.tick % file.weather.forecastIntervalSeconds === 0) publishForecast(state, scenario);
 
   if (tactical) {
     updatePerception(truth, state.unitKnowledge, terrain, rng, file.perception, state.tick);

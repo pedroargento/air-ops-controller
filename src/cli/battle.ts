@@ -54,7 +54,7 @@ export function runBattle(
   while (truth.outcome === 'running') {
     const decide = state.tick % POLICY_INTERVAL_TICKS === 0;
     const commands = decide
-      ? policy(project(state.player, aircraftTelemetry(truth, air), state.tick, display))
+      ? policy(project(state.player, aircraftTelemetry(truth, air, state.tick), state.tick, display))
       : [];
     const readyBefore = truth.aircraft.filter((a) => a.status === 'ready').length;
     step(state, commands, scenario);

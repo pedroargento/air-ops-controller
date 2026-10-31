@@ -24,6 +24,9 @@ export type AircraftTelemetryEntry = Readonly<{
   headingRad: number;
   status: AircraftStatus;
   damaged: boolean;
+  aboveCloud: boolean;
+  /** What the crew reports from where they are, so it's their own observation, not the plan. */
+  visibilityMeters: number;
   casPhase: CasPhase | null;
   order: AircraftOrder | null;
   fuelFraction: number;

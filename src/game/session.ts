@@ -73,7 +73,7 @@ export class GameSession {
 
   view(): PlayerView {
     const { air, display } = this.scenario.file;
-    return project(this.state.player, aircraftTelemetry(this.state.truth, air), this.state.tick, display);
+    return project(this.state.player, aircraftTelemetry(this.state.truth, air, this.state.tick), this.state.tick, display);
   }
 
   commandLog(): CommandLog {

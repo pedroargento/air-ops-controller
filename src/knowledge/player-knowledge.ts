@@ -2,6 +2,7 @@ import type { WeaponType } from '../domain/public/equipment';
 import type { ContactEstimate, PositionEstimate } from '../domain/public/estimates';
 import { distance, type Vec2 } from '../domain/public/geometry';
 import type { ObjectiveStatus, RadioMessage, StrikeAssessment } from '../domain/public/radio';
+import type { Weather } from '../domain/public/weather';
 
 export type PositionSource = 'self-report' | 'aircraft';
 
@@ -87,6 +88,8 @@ export type PlayerKnowledge = {
   statusReports: Record<string, UnitStatusReport>;
   estimatedLosses: number;
   confirmedDestroyed: number;
+  forecast: Weather | null;
+  forecastIssuedAt: number | null;
 };
 
 export function emptyPlayerKnowledge(): PlayerKnowledge {
@@ -103,6 +106,8 @@ export function emptyPlayerKnowledge(): PlayerKnowledge {
     statusReports: {},
     estimatedLosses: 0,
     confirmedDestroyed: 0,
+    forecast: null,
+    forecastIssuedAt: null,
   };
 }
 

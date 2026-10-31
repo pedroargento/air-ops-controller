@@ -3,6 +3,7 @@ import type { WeaponType } from '../domain/public/equipment';
 import type { ContactEstimate, PositionEstimate } from '../domain/public/estimates';
 import { distance, type Vec2 } from '../domain/public/geometry';
 import type { RadioMessage } from '../domain/public/radio';
+import type { Weather } from '../domain/public/weather';
 import {
   couldBeSameContact,
   type ContactStatus,
@@ -79,6 +80,8 @@ export type PlayerView = Readonly<{
   archivedContacts: number;
   estimatedLosses: number;
   confirmedDestroyed: number;
+  forecast: Weather | null;
+  forecastIssuedAt: number | null;
 }>;
 
 const sortedEntries = <T>(record: Readonly<Record<string, T>>): readonly (readonly [string, T])[] =>
@@ -238,5 +241,7 @@ export function project(
     archivedContacts: Object.keys(player.contacts).length - held.length,
     estimatedLosses: player.estimatedLosses,
     confirmedDestroyed: player.confirmedDestroyed,
+    forecast: player.forecast,
+    forecastIssuedAt: player.forecastIssuedAt,
   };
 }

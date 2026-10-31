@@ -214,6 +214,17 @@ async function main(): Promise<void> {
     await shot(page, '3d-summary');
     await page.locator('[data-action="tab"][data-id="radio"]').click();
 
+    console.log('Read the weather forecast');
+    await page.locator('[data-action="layer"][data-id="weather"]').click();
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#forecast')?.hidden === false);
+    await page.locator('#forecast-lead').fill('1800');
+    await page.waitForFunction(() => document.querySelector('#forecast-label')?.textContent?.startsWith('+30 min'));
+    check(true, 'the forecast slider looks ahead in time');
+    await page.locator('[data-action="layer"][data-id="threats"]').click();
+    await shot(page, '3e-weather');
+    await page.locator('[data-action="layer"][data-id="threats"]').click();
+    await page.locator('[data-action="layer"][data-id="weather"]').click();
+
     console.log('Change speed, then play to the end');
     await page.locator('[data-action="speed"][data-id="8"]').click();
     await page.waitForSelector('[data-action="speed"][data-id="8"].active');

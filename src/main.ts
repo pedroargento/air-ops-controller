@@ -61,6 +61,11 @@ const app = new App({
   weaponCeiling: (weapon) => scenario.file.combat.weapons[weapon].maxAltitudeMeters,
   maxAltitudeMeters: Math.max(...Object.values(scenario.file.air.models).map((type) => type.maxAltitudeMeters)),
   defaultAltitudeMeters: scenario.file.air.operatingAltitudeMeters,
+  durationSeconds: scenario.file.durationSeconds,
+  forecastError: {
+    windMps: scenario.file.weather.forecastWindErrorMps,
+    positionMeters: scenario.file.weather.forecastPositionErrorMeters,
+  },
   // The player's own order of battle and the HQ estimate: nothing here reveals enemy truth.
   summary: {
     objective: scenario.file.capture.area.center,

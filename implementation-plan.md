@@ -1,6 +1,6 @@
 # Air Operations Controller v0.1 — Implementation Plan
 
-Implements `air-operations-v0.1-spec.md` (revision 10). The spec decides what the game does; this plan decides build order, structure and exit gates. Section references (§) point to the spec.
+Implements `air-operations-v0.1-spec.md` (revision 11). The spec decides what the game does; this plan decides build order, structure and exit gates. Section references (§) point to the spec.
 
 ## Status
 
@@ -17,24 +17,28 @@ Implements `air-operations-v0.1-spec.md` (revision 10). The spec decides what th
 - **M7.6:** Complete as engine work. Whether masking pays is now a scenario question, to test on a map built for it.
 - **M7.7:** Complete.
 - **M7.8:** Complete. Scout and gunship teamwork (pink teams) would suit a later scenario.
+- **M7.9:** Complete.
 - **M8:** Skipped for now. Squad-level detail didn't earn its cost from the air controller's seat. Aircraft variants come first.
 - **M9:** Not started.
 
 Replay works across JavaScript engines, which goes beyond invariant 8. Simulation code uses `src/domain/public/det-math.ts` because built-in `Math.log` and similar functions differ between engines and V8 versions; lint bans them there.
 
-| Policy, after M7.8 (1,000 seeds) | Win | Captured | Below strength | Aircraft hits per run | Target |
+| Policy, after M7.9 (1,000 seeds) | Win | Captured | Below strength | Aircraft hits per run | Target |
 |---|---|---|---|---|---|
-| No air | 0.8% | 86.8% | 12.4% | 0.00 | 0 wins |
-| Reactive CAS | 27.0% | 21.1% | 51.9% | 0.29 | 15–50% |
-| Immediate CAS (diagnostic) | 33.0% | 21.4% | 45.6% | 0.21 | None |
-| Recon informed | 72.6% | 6.6% | 20.8% | 0.56 | 55–85% |
-| Recon informed, no forwarding | 58.3% | 10.9% | 30.8% | 0.56 | None |
-| Recon informed, threat-blind | 82.1% | 1.9% | 16.0% | 0.55 | None |
-| Threat-blind, recon climbs after fire | 85.9% | 1.4% | 12.7% | 0.41 | None |
-| Threat-blind, recon climbs, CAS pop-up | 84.7% | 2.4% | 12.9% | 0.53 | None |
+| No air | 0.3% | 86.9% | 12.8% | 0.00 | 0 wins |
+| Reactive CAS | 17.4% | 32.1% | 50.5% | 0.33 | 15–50% |
+| Immediate CAS (diagnostic) | 28.7% | 25.2% | 46.1% | 0.24 | None |
+| Recon informed | 61.0% | 13.0% | 26.0% | 0.59 | 55–85% |
+| Recon informed, no forwarding | 45.7% | 17.4% | 36.9% | 0.59 | None |
+| Recon informed, threat-blind | 74.0% | 4.8% | 21.2% | 0.57 | None |
+| Threat-blind, recon climbs after fire | 71.4% | 5.3% | 23.3% | 0.41 | None |
+| Threat-blind, recon climbs, CAS pop-up | 70.7% | 7.0% | 22.3% | 0.52 | None |
+| Threat-blind, flies to suit the forecast | 75.6% | 4.9% | 19.5% | 0.58 | None |
 
-- Informed beats reactive by 45.6 points (95% interval 41.8–49.4); the target is at least 20.
-- Forwarding adds 14.3 points (95% interval 11.0–17.6); the target is about 10.
+- Informed beats reactive by 43.6 points (95% interval 39.9–47.3); the target is at least 20.
+- Forwarding adds 15.3 points (95% interval 11.9–18.7); the target is about 10.
+
+Graded visibility cost every air policy 1–10 points of wins against the rain-and-cloud rules it replaced, with no-air unchanged at 0.3%, so weather now matters to the result.
 
 M7 removed an aircraft aura that had inflated every earlier result. Each sighting used to restart a 30-second take-cover reaction, so assault formations spent 46% of their steady time held by any nearby aircraft, even one with no ordnance. Formations now take cover once and can't again for 5 minutes. Most of air's earlier value came from that aura: with it gone, reactive fell to 3%. CAS passes were then roughly doubled in strength. So win rates before M7 aren't comparable with these.
 
@@ -42,13 +46,14 @@ Forwarding probably helps now because the aura no longer dominates, so warned pa
 
 Open items for M9, most important first:
 
-- **Hunting air defense doesn't pay.** The `informed` policy wins 47.0%, against 65.2% for threat-blind, because it spends passes on the team. Answering fire by climbing recon does pay (70.6%, with 0.40 hits against 0.54), so altitude is the better reaction for now.
-- **Reactive and informed are both inside their bands** with the gunship added. The best policy reaches 85.9%, so a good human may find the scenario too easy.
-- **Immediate CAS (33.0%) beats reactive (27.0%).** Simply launching at the first report shouldn't beat answering requests, so this diagnostic needs watching.
+- **Hunting air defense doesn't pay.** The `informed` policy wins 61.0%, against 74.0% for threat-blind, because it spends passes on the team. Answering fire by climbing recon cuts hits (0.41 per run against 0.57) with no significant change in wins (71.4%), so altitude is the better reaction for now.
+- **Reactive and informed are both inside their bands,** but reactive (17.4%) is now near the bottom of its band. The best policies reach the mid 70s, so a good human may still find the scenario too easy.
+- **Forecasts don't clearly pay yet.** Flying to suit the forecast wins 75.6% against 74.0% for ignoring it, which is within noise, even though weather now costs real wins. Altitude may be too blunt a response, and the policy doesn't yet route or time missions around storms.
+- **Immediate CAS (28.7%) beats reactive (17.4%).** Simply launching at the first report shouldn't beat answering requests, so this diagnostic needs watching.
 - **Forwarding is above its 10-point design target,** which may mean it is now too strong.
-- **No-air still wins rarely** (0.8%). These are real wins: the garrison beats the waves in detail, so `successMinDefenders` can't remove them. M5's exit stays unmet.
-- **Fire is too continuous:** 74% of minutes without air against a 30–50% target, and 4 bouts against at least 5. The first decisive assault is at minute 43.25, against about 45.
-- `probe` is about 3% of behavior time, almost all of it scouts.
+- **No-air still wins rarely** (0.3%). These are real wins: the garrison beats the waves in detail, so `successMinDefenders` can't remove them. M5's exit stays unmet.
+- **Fire is too continuous:** 73% of minutes without air against a 30–50% target, and 4 bouts against at least 5. The first decisive assault is at minute 43.4, against about 45.
+- `probe` is about 2% of behavior time, almost all of it scouts.
 - **Scenario win conditions need a rethink.** "Below strength" is hidden from the player, and it counts a recovering unit as zero defenders. Over 400 seeds, counting all but broken units would take reactive from 10.5% to 24.3% and informed from 34.0% to 50.7%, with no-air barely moving (0.5% to 0.8%). An alternative is a report card on the outpost's status when a relief force arrives. This is scenario work, not engine work.
 
 Earlier findings that still apply:
@@ -308,6 +313,10 @@ Implements §8.5. Aircraft are defined per real model, in data, with role separa
 
 Implements the helicopter rules in §8.5. The first scenario adds a UH-1B gunship, and AH-1G and OH-6A are defined for later. Landing, medevac, resupply and troop lift are deferred.
 
+### M7.9: Weather
+
+Implements §8.6 and the map layers in §9. The weather layer is a forecaster's chart, with storm tracks and a likely path, so a storm's approach can be planned for. Recon coverage age and terrain masking overlays were proposed and are still to do. Weather acts through one visibility figure in meters, set by rain strength and closeness to the cloud base, across ground observers, aircraft sensors, noticing, ground fire at aircraft and strikes. Valley fog is deferred, and so are weather effects on troop movement, flight safety and pilot behavior. One automated policy adjusts altitude to the forecast, and none routes or times missions around storms.
+
 ### M8: Squads (skipped for now)
 
 Only if the M7.5 playtest shows that the extra detail is worth it. Subordinate elements with `parentId`, grouped map markers that keep spatial differences and hide unidentified capabilities, and commander-level covering fire and maneuver. Needs its own design pass first, including the deferred hierarchy in §2, radio responsibilities and batch run time, because detection cost grows with the square of the unit count.
@@ -322,6 +331,30 @@ Only if the M7.5 playtest shows that the extra detail is worth it. Subordinate e
 - Document known simplifications and final tuning values.
 
 **Exit:** All §12 balance and tempo targets are met or deliberately revised, and §14 is satisfied.
+
+### Next major step: theater operations
+
+The planned direction after v0.1, not yet specified. A larger map covering a slice of a fictional, Afghanistan-like country in the Vietnam era, with several bases holding different aircraft. Today's aircraft models stay, with no drones or satellites. Sites zoom into today's 5 km grid. Play is continuous over days, without a win condition, and ops requests appear at random: SF reconnaissance, medevac, QRF, air support, troops in contact and search and rescue.
+
+- **Vertical slice first:** Two sites, two bases, and only troops in contact and recon incidents, with mission-level autonomy. It tests whether juggling fights beats running one.
+- **Then:** A theater layer owning time, bases and aircraft, sites created on demand, an incident generator, saving, and periodic reports instead of win conditions.
+- **Longer spans:** Crews with duty limits and rotation, and weather generated as it goes rather than fixed at the start.
+- **Night and flares:** Darkness feeds the visibility figure, and flare aircraft light an area for a few minutes at a time. Flares show the fight to both sides, and they have to be dropped under the cloud, so low cloud brings the flare aircraft into reach of ground fire.
+- **Autonomy:** Orders become a mission with limits, such as an altitude floor, weather minimums and abort rules, and the crew flies it.
+- **Detective work:** Requests are weighed against resources. Reports can overstate a situation, and how far a unit can be trusted is learned over time.
+- **Calibration:** Requests served, response times and losses replace win rates. M9's fine tuning of the outpost should wait for this.
+
+The features below become incident types in this structure.
+
+### Roadmap after v0.1
+
+Each feature needs its own spec section first, and the spec's deferred list still applies to v0.1. They're in build order, because the later ones depend on the earlier ones:
+
+1. **Supply drop:** An aircraft drops ammunition to a ground unit, which ammunition tracking already supports. It needs no landing, so it comes first. The drop should be able to scatter or land near the enemy, with weather making that worse.
+2. **Landing zones:** Helicopters land, stay on the ground under fire, and take off again. Everything below this point needs it, and it needs rules for choosing a landing zone and for a hot one.
+3. **Medevac:** Lifting casualties out of a unit. Casualties are permanent today, so this needs a rule for what removing wounded gives the unit, such as morale.
+4. **Troop transport and QRF:** Moving a quick reaction force by air to reinforce a position, or to block an attack. It needs a held reserve and a way to add a unit to the battle.
+5. **Downed pilot and search and rescue:** Aircraft can be shot down, which reverses the current rule that a hit never destroys one. The crew survives on the ground, the enemy moves in, and the player has to protect a rescue aircraft with escorts.
 
 ## 5. Testing
 

@@ -93,7 +93,7 @@ export class AltitudeProfile {
     else this.config.onSetAltitude(drag.id, drag.meters);
   }
 
-  render(view: PlayerView, selectedId: string | null): void {
+  render(view: PlayerView, selectedId: string | null, ceilingMeters: number | null): void {
     const { ctx, canvas } = this;
     const width = canvas.clientWidth;
     if (canvas.width !== width) canvas.width = width;
@@ -104,6 +104,7 @@ export class AltitudeProfile {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     this.drawScale();
     this.drawCeilings(view);
+    if (ceilingMeters !== null) this.drawCloudBase(ceilingMeters);
     this.aircraft.forEach((aircraft, index) => {
       this.drawColumn(aircraft, this.columnX(index), aircraft.aircraftId === this.selectedId);
     });
@@ -164,6 +165,21 @@ export class AltitudeProfile {
       ctx.fillText(ceilingLabel(weapon), canvas.width - 3, y - 2);
     }
     ctx.textAlign = 'left';
+  }
+
+  /** The forecast cloud base: above it, nothing on the ground can be seen. */
+  private drawCloudBase(meters: number): void {
+    const { ctx, canvas } = this;
+    const y = this.yFor(meters);
+    ctx.strokeStyle = '#dfe6ee';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(PROFILE_GUTTER_PIXELS, y);
+    ctx.lineTo(canvas.width, y);
+    ctx.stroke();
+    ctx.fillStyle = '#dfe6ee';
+    ctx.font = 'bold 10px monospace';
+    ctx.fillText('CLOUD', PROFILE_GUTTER_PIXELS + 3, y - 2);
   }
 
   private drawColumn(aircraft: AircraftTelemetryEntry, x: number, selected: boolean): void {

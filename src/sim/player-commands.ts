@@ -139,7 +139,7 @@ export function applyCommand(state: SimState, command: PlayerCommand, scenario: 
       }
       return;
     case 'acknowledge':
-      acknowledge(state, scenario, aircraftTelemetry(state.truth, scenario.file.air), command.unitId, command.casAircraftId);
+      acknowledge(state, scenario, aircraftTelemetry(state.truth, scenario.file.air, state.tick), command.unitId, command.casAircraftId);
       return;
   }
 }
@@ -184,7 +184,7 @@ export function advanceOutbound(state: SimState): void {
 
 /** Keeps `CAS inbound` honest: a changed assignment sends a correction, which takes time to arrive. */
 export function reviewPromises(state: SimState, scenario: Scenario): void {
-  const telemetry = aircraftTelemetry(state.truth, scenario.file.air);
+  const telemetry = aircraftTelemetry(state.truth, scenario.file.air, state.tick);
   const { promises } = state.radio;
   for (const unitId of Object.keys(promises).sort()) {
     const promise = promises[unitId];

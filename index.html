@@ -58,12 +58,22 @@
       #side-tabs { margin: 0 0 6px; }
       #side-tabs .active { outline: 1px solid #9fb0a8; }
       #path-profile { position: absolute; left: 12px; right: 12px; bottom: 48px; width: calc(100% - 24px); height: 70px; pointer-events: none; }
+      #map-layers { position: absolute; left: 12px; top: 10px; margin: 0; }
+      #map-layers .active { outline: 1px solid #fff; }
+      #forecast {
+        position: absolute; left: 172px; top: 10px; display: flex; align-items: center; gap: 6px;
+        background: rgba(0, 0, 0, 0.7); padding: 3px 8px; border-radius: 3px; font: 12px monospace; color: #fff;
+      }
+      #forecast[hidden] { display: none; }
+      #forecast { flex-wrap: wrap; max-width: calc(100% - 240px); }
+      #forecast-key { flex-basis: 100%; font-size: 11px; color: #cfd8d3; }
+      #forecast-lead { width: 180px; }
       #sidebar { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); min-height: 0; border-left: 1px solid #333c41; }
       #sidebar > section { padding: 8px 10px; border-bottom: 1px solid #333c41; }
       #altitude-profile { display: block; width: 100%; height: 130px; cursor: ns-resize; }
       #aircraft { max-height: 112px; overflow-y: auto; margin-top: 4px; }
       .aircraft-row {
-        display: grid; grid-template-columns: 62px 72px minmax(0, 1fr) 48px 34px 38px; gap: 4px;
+        display: grid; grid-template-columns: 72px 72px minmax(0, 1fr) 54px 34px 40px; gap: 4px;
         width: 100%; text-align: left; font-size: 11px; padding: 2px 4px; margin-bottom: 2px;
       }
       .aircraft-row > * { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -88,6 +98,17 @@
       <canvas id="map"></canvas>
       <div id="tooltip"></div>
       <div id="cursor-grid"></div>
+      <div id="map-layers" class="buttons"></div>
+      <div id="forecast" hidden>
+        <input id="forecast-lead" type="range" min="0" max="4500" step="300" value="0" />
+        <span id="forecast-label"></span>
+        <button data-action="forecast-eta">Aircraft ETA</button>
+        <button data-action="forecast-now">Now</button>
+        <span id="forecast-key">
+          <b style="color: #ff4a3d">■</b> base under <span id="forecast-altitude"></span>
+          <b style="color: #ffd24a">■</b> +250 <b style="color: #6fb7ff">■</b> +500 · ⟋ rain, denser = heavier · dashed = likely path, +15 = minutes from now
+        </span>
+      </div>
       <canvas id="path-profile" height="70" hidden></canvas>
       <div id="legend">Size = strength · hollow = unknown · ×3 merged · MG · <b>AAA MP</b> anti-air · plain = weapons unseen</div>
     </main>

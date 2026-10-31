@@ -2,6 +2,7 @@
 import type { AircraftId, AircraftOrder, AircraftStatus, AircraftType } from '../public/air';
 import type { Equipment, WeaponType } from '../public/equipment';
 import type { ContactActivity, ContactEstimate } from '../public/estimates';
+import type { Weather } from '../public/weather';
 import type { Vec2 } from '../public/geometry';
 import type {
   Area,
@@ -92,6 +93,7 @@ export type WorldTruth = {
   aircraft: Aircraft[];
   tracks: Record<string, Record<string, Track>>;
   nextContactNumber: number;
+  weather: Weather;
   captureProgressSeconds: number;
   outcome: Outcome;
   endedAtTick: number | null;

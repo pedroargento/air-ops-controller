@@ -1308,5 +1308,30 @@
         "hitSurvivalChance": 0.4
       }
     }
+  },
+  "weather": {
+    "baseCeilingMeters": 1600,
+    "minSystems": 1,
+    "maxSystems": 3,
+    "minRadiusMeters": 1500,
+    "maxRadiusMeters": 2600,
+    "minCeilingMeters": 420,
+    "maxCeilingMeters": 640,
+    "minRain": 0.4,
+    "maxRain": 0.9,
+    "minWindMps": 1,
+    "maxWindMps": 2.5,
+    "minSystemSeconds": 2000,
+    "maxSystemSeconds": 3600,
+    "rampSeconds": 420,
+    "clearVisibilityMeters": 8000,
+    "heavyRainVisibilityMeters": 300,
+    "cloudFadeMeters": 200,
+    "rainMissMeters": 80,
+    "forecastIntervalSeconds": 1200,
+    "forecastWindErrorMps": 0.35,
+    "forecastPositionErrorMeters": 120,
+    "forecastCeilingErrorMeters": 80,
+    "forecastTimingErrorSeconds": 240
   }
 }

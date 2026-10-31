@@ -4,7 +4,8 @@ import type { ContactEstimate } from '../domain/public/estimates';
 import { distance, type Vec2 } from '../domain/public/geometry';
 import { emptyKnowledge, type UnitKnowledge } from '../domain/public/ground';
 import type { MessageId, RadioMessage, StrikeAssessment } from '../domain/public/radio';
-import { cellAt, elevationAt, hasAirLos, type TerrainGrid } from '../domain/public/terrain';
+import { cellAt, elevationAt, type TerrainGrid } from '../domain/public/terrain';
+import { airSightClear, airVisibilityMeters, rangeInVisibility, weatherAt, type Weather } from '../domain/public/weather';
 import type { Aircraft, GroundUnit, WorldTruth } from '../domain/truth/world';
 import { recordStrike, updateContact, updateFriendly, type PlayerKnowledge, type SensorCoverage } from '../knowledge/player-knowledge';
 import { observeTarget, type Observer } from '../perception/observe';
@@ -255,7 +256,9 @@ function aircraftObserver(
   aircraft: Aircraft,
   air: AirConfig,
   terrain: TerrainGrid,
+  weather: Weather,
   boost: (t: GroundUnit) => number,
+  tick: number,
 ): Observer {
   const type = typeOf(aircraft, air);
   return {
@@ -263,7 +266,13 @@ function aircraftObserver(
     side: 'friendly',
     position: aircraft.position,
     medium: 'air',
-    altitudeMeters: aircraft.altitudeMeters,
+    sees: (target) => airSightClear(terrain, weather, target.position, aircraft.position, aircraft.altitudeMeters, tick),
+    rangeTo: (target) =>
+      rangeInVisibility(
+        type.sensorRadiusMeters,
+        airVisibilityMeters(weather, target.position, aircraft.position, aircraft.altitudeMeters, tick),
+        weather.clearVisibilityMeters,
+      ),
     quality: type.observerQuality * altitudeQuality(aircraft, air, terrain),
     rangeMeters: type.sensorRadiusMeters,
     suppression: 0,
@@ -304,7 +313,7 @@ export function updateAircraftPerception(
 ): void {
   for (const aircraft of truth.aircraft) {
     if (!isAirborne(aircraft)) continue;
-    const observer = aircraftObserver(aircraft, air, terrain, cuedBoost(aircraft, player, air, tick));
+    const observer = aircraftObserver(aircraft, air, terrain, truth.weather, cuedBoost(aircraft, player, air, tick), tick);
     for (const target of truth.units) {
       if (target.personnel <= 0) continue;
       const estimate = observeTarget(truth, observer, target, terrain, rng, perception, tick);
@@ -392,7 +401,9 @@ function strikePass(
   const model = typeOf(aircraft, air);
   aircraft.nextPassTick = tick + model.passIntervalSeconds;
   const height = Math.max(0, aircraft.altitudeMeters - elevationAt(terrain, target.position));
-  const miss = hypot(distance(contact.position.center, target.position), height * model.strikeMissPerMeterAltitude);
+  const local = weatherAt(truth.weather, target.position, tick);
+  const blur = hypot(height * model.strikeMissPerMeterAltitude, local.rain * truth.weather.rainMissMeters);
+  const miss = hypot(distance(contact.position.center, target.position), blur);
   const accuracy = exp(-(miss * miss) / (2 * air.blastRadiusMeters * air.blastRadiusMeters));
   const cover = cellAt(terrain, target.position).airCover;
   const label = `air/${aircraft.id}/${target.id}`;
@@ -450,7 +461,7 @@ export function resolveCas(
     if (contact === null) continue;
     const target = unitForContact(truth, aircraft, contact);
     if (target === null || target.personnel <= 0 || target.side === 'friendly') continue;
-    if (!hasAirLos(terrain, target.position, aircraft.position, aircraft.altitudeMeters)) continue;
+    if (!airSightClear(terrain, truth.weather, target.position, aircraft.position, aircraft.altitudeMeters, tick)) continue;
     strikePass(aircraft, contact, target, truth, player, radio, terrain, air, combat, display, rng, tick);
   }
 }
@@ -469,7 +480,7 @@ export function updateAircraftNotice(
     for (const aircraft of truth.aircraft) {
       if (!isAirborne(aircraft)) continue;
       if (distance(unit.position, aircraft.position) > air.groundNoticeRangeMeters) continue;
-      if (!hasAirLos(terrain, unit.position, aircraft.position, aircraft.altitudeMeters)) continue;
+      if (!airSightClear(terrain, truth.weather, unit.position, aircraft.position, aircraft.altitudeMeters, tick)) continue;
       if (nextBool(rng, `notice/${unit.id}/${aircraft.id}`, air.groundNoticePerScan)) {
         const belief = (knowledge[unit.id] ??= emptyKnowledge());
         // A formation goes to ground when aircraft appear, then gets on with its attack:
@@ -503,7 +514,7 @@ function casPhase(aircraft: Aircraft): CasPhase | null {
   return inArea.some((contact) => contact.identification === 'unidentified') ? 'identifying' : 'searching';
 }
 
-export function aircraftTelemetry(truth: WorldTruth, air: AirConfig): AircraftTelemetry {
+export function aircraftTelemetry(truth: WorldTruth, air: AirConfig, tick = 0): AircraftTelemetry {
   return truth.aircraft.map((aircraft) => {
     const type = typeOf(aircraft, air);
     const destination = destinationOf(aircraft.order);
@@ -520,6 +531,8 @@ export function aircraftTelemetry(truth: WorldTruth, air: AirConfig): AircraftTe
       headingRad: aircraft.headingRad,
       status: aircraft.status,
       damaged: aircraft.damaged,
+      aboveCloud: isAirborne(aircraft) && aircraft.altitudeMeters > weatherAt(truth.weather, aircraft.position, tick).ceilingMeters,
+      visibilityMeters: airVisibilityMeters(truth.weather, aircraft.position, aircraft.position, aircraft.altitudeMeters, tick),
       casPhase: casPhase(aircraft),
       order: aircraft.order,
       fuelFraction: aircraft.fuelSeconds / type.fuelSeconds,

@@ -2,6 +2,7 @@ import type { AircraftId, AircraftTelemetryEntry } from '../domain/public/air';
 import type { PlayerCommand } from '../domain/public/commands';
 import { isAntiAir } from '../domain/public/equipment';
 import { strengthMidpoint } from '../domain/public/estimates';
+import { rainVisibilityMeters, weatherAt } from '../domain/public/weather';
 import { distance, type Vec2 } from '../domain/public/geometry';
 import type { ContactMarker, PlayerView } from '../knowledge/player-view';
 
@@ -16,6 +17,10 @@ const DEFAULT_LAUNCH_RANGE_METERS = 1300;
 const SECOND_CAS_CONTACTS = 3;
 const THREAT_MEMORY_SECONDS = 900;
 const CAS_STATION_METERS = 650;
+const CLOUD_MARGIN_METERS = 80;
+const MIN_UNDER_CLOUD_METERS = 100;
+/** Stays well inside the visibility, since a target isn't directly below. */
+const RAIN_SIGHT_SHARE = 0.7;
 const THREAT_STANDOFF_METERS = 900;
 const STRUCK_RADIUS_METERS = 300;
 
@@ -133,6 +138,22 @@ function forwardNew(view: PlayerView, contacts: readonly ContactMarker[], forwar
   return commands;
 }
 
+/** Reads the forecast at each aircraft's destination: out of sight of the ground it can do nothing. */
+function underCloud(view: PlayerView): readonly PlayerCommand[] {
+  const { forecast } = view;
+  if (forecast === null) return [];
+  return view.aircraft.flatMap((aircraft) => {
+    const order = aircraft.order;
+    const point = order !== null && 'center' in order ? order.center : aircraft.position;
+    const arrival = view.tick + (aircraft.etaSeconds ?? 0);
+    const { ceilingMeters, rain } = weatherAt(forecast, point, arrival);
+    const seeing = rainVisibilityMeters(forecast, rain) * RAIN_SIGHT_SHARE;
+    const wanted = Math.max(MIN_UNDER_CLOUD_METERS, Math.min(CAS_STATION_METERS, ceilingMeters - CLOUD_MARGIN_METERS, seeing));
+    if (Math.abs(aircraft.targetAltitudeMeters - wanted) < CLOUD_MARGIN_METERS) return [];
+    return [{ kind: 'setAltitude', tick: view.tick, aircraftId: aircraft.aircraftId, meters: wanted } as const];
+  });
+}
+
 /** Scouts first, sends CAS to confirmed air contacts, and optionally shares them with ground units. */
 export function reconInformed(
   objective: Vec2,
@@ -141,10 +162,12 @@ export function reconInformed(
   threatAware: boolean = true,
   climbAfterFireMeters: number | null = null,
   casTransitMeters: number | null = null,
+  stayUnderCloud: boolean = false,
 ): Policy {
   const forwarded = new Set<string>();
   return (view) => {
     const commands: PlayerCommand[] = [...recallEmpty(view)];
+    if (stayUnderCloud) commands.push(...underCloud(view));
     if (casTransitMeters !== null) {
       // A pop-up attack: stay down on the way in, then climb to work the target.
       for (const aircraft of cas(view)) {

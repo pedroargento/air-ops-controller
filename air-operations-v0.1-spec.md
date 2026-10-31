@@ -1,7 +1,7 @@
 # Air Operations Controller — v0.1 Specification
 
 **Status:** Draft for implementation  
-**Version:** 0.1, revision 10 (design rules frozen for v0.1; numeric values are provisional until calibrated)  
+**Version:** 0.1, revision 11 (design rules frozen for v0.1; numeric values are provisional until calibrated)  
 **Platform:** Desktop browser, single player  
 **Stack:** TypeScript (strict mode), Canvas 2D, HTML/CSS, Vite, Vitest  
 **Visual target:** Functional grid, symbols, lines, labels; no illustrative assets required
@@ -37,6 +37,7 @@ The ground war is not a scripted sequence of requests. Its outcomes arise from t
 - Statistical combat; casualties, ammunition consumption, suppression and morale as separate tracks.
 - Equipment: small arms, machine guns and anti-aircraft weapons, with combat capabilities derived from each unit's inventory.
 - Player-controlled aircraft altitude, trading safety from ground fire against sensor and strike effectiveness.
+- Weather: moving storm systems with cloud ceilings and rain, and an imperfect forecast.
 - Ground fire against aircraft, with risk tied to altitude; a hit damages the aircraft and forces it back to base.
 - Ground/air cover and concealment on terrain cells; simplified line of sight (LOS) using elevation and terrain blocking.
 - Imperfect ground observations: estimated contact position, approximate strength, type, activity and heading.
@@ -48,7 +49,7 @@ The ground war is not a scripted sequence of requests. Its outcomes arise from t
 
 ### Explicitly deferred
 
- flare missions and illumination; crew assignment and fatigue; pilot autonomy within altitude bands, tactical flight patterns and aggressiveness; helicopter landing, medevac, resupply and troop lift; fixed-wing gunships; forward air controllers marking targets; multiple airbases and maintenance; weather and day/night mechanics; aircraft destruction and crew loss; mortars, anti-armor weapons and vehicles; realistic radio procedures, voice audio and interference; multi-echelon ground hierarchy; a persistent campaign; civilian simulation and rules of engagement; destructible terrain; advanced probabilistic tracking; complex enemy air operations; mistaken aircraft identification and friendly-fire damage; player-facing radio channels and channel contention; higher-command AI and dynamic CECON changes to ground objectives; report editing, player-authored enemy assessments and area-of-interest markers. These remain possible future features, not implicit v0.1 requirements.
+ flare missions and illumination; crew assignment and fatigue; pilot autonomy within altitude bands, tactical flight patterns and aggressiveness; helicopter landing, medevac, resupply and troop lift; fixed-wing gunships; forward air controllers marking targets; multiple airbases and maintenance; wind effects, valley fog, weather effects on troop movement, flight safety and pilot behavior, and day/night mechanics; aircraft destruction and crew loss; mortars, anti-armor weapons and vehicles; realistic radio procedures, voice audio and interference; multi-echelon ground hierarchy; a persistent campaign; civilian simulation and rules of engagement; destructible terrain; advanced probabilistic tracking; complex enemy air operations; mistaken aircraft identification and friendly-fire damage; player-facing radio channels and channel contention; higher-command AI and dynamic CECON changes to ground objectives; report editing, player-authored enemy assessments and area-of-interest markers. These remain possible future features, not implicit v0.1 requirements.
 
 ## 3. Spatial model and time
 
@@ -350,6 +351,15 @@ Speeds, endurance and ordnance come from published figures, which often disagree
 - **Helicopters:** They hold position on station instead of orbiting, keep a much smaller terrain clearance, and start lower. They use the same orders and CAS rules as everything else. Landing is not modeled, so a helicopter only touches down at base.
 - **Going home:** A long-endurance aircraft can outlast its ordnance. It stays on station until ordered back, so a spent aircraft is the player's problem.
 
+### 8.6 Weather
+
+- **One plan per mission:** The whole mission's weather is generated once at the start, from the seed. It is a few storm systems, each with a path, size, cloud ceiling, rain strength and lifetime. They grow and fade over time. One wind moves them all, so the sky has a pattern a player can read, and weather at any point and time comes from that plan rather than being simulated tick by tick.
+- **Visibility:** Weather acts through one figure, how far sight carries in meters, and it applies to ground observers, aircraft sensors, noticing, ground fire at aircraft and strikes. A sight line longer than the visibility fails. Shorter ones still suffer: an observer's reach falls smoothly as visibility drops, and spotting, position accuracy and identification all get worse with it.
+- **Rain:** Strength matters, not just its presence. Visibility falls by the same share with each step of rain, from about 8 km in dry air to about 2 km in moderate rain and a few hundred meters in the heaviest. So an aircraft may have to come down to see or strike through heavy rain. Rain also adds to strike miss distance.
+- **Cloud:** Visibility starts to fall about 200 m under the cloud base and is zero at it. An aircraft above the local ceiling and the ground can't see each other. Getting below the cloud can mean flying into reach of ground fire.
+- **Forecast:** Forecasts reach the player as CECON updates at a configured interval. Each is a noisy copy of the plan, with small errors in position, ceiling and timing, and a wind error that grows with lead time. So near forecasts are good, far ones are rough, and a new one can change the picture.
+- **Truth boundary:** The real weather is hidden. The player sees forecasts, and telemetry says when an aircraft is above cloud. A forecast covers weather only, and never shows future enemy positions.
+
 ## 9. Player interface
 
 Desktop-browser layout:
@@ -366,6 +376,7 @@ Interaction requirements:
 - Marker size follows reported strength, and a hollow marker means unknown strength or not found. A `×3` badge shows consolidated reports.
 - A Summary tab beside the radio gives a report-based picture: known enemy strength as a range, HQ's starting estimate, reported losses, what is unlocated, strength by sector, air threats, friendly status, the force ratio at the outpost and air activity. Its high end counts every report as a separate unit and its low end counts possible duplicates once, so good reconnaissance shows up as a narrower range. Everything comes from the `PlayerView`.
 - When a run ends, the Summary tab adds a debrief comparing estimates with what really happened. This is the only time the player sees truth.
+- Map layers can be switched on and off. **Weather** is drawn as a forecaster's chart: bands of cloud base, with red where the base is under the selected aircraft's altitude, and rain marks. Each storm has a track from now to where it dies out, with time marks, and a dashed likely path that widens with forecast error, so the player can see where it's coming from and when it arrives. A slider looks ahead up to the end of the mission and a button jumps to the selected aircraft's ETA. Far-ahead forecasts are drawn fainter, and the altitude profile shows the forecast cloud base. **Threats** shows the rings of every observed anti-aircraft contact at once.
 - The map shows height through hillshading and contour lines every 20 m.
 - Hovering the map shows the grid reference and elevation under the cursor, and nothing off the map.
 - Selecting an aircraft shows a terrain profile along its path to its destination, with its altitude and any ridges in the way.
@@ -556,6 +567,10 @@ Successful air strategies must be materially more effective than indiscriminate 
 - Aircraft at base have altitude 0, climb and descend at their type's rate, and stay within their type's limits.
 - Higher aircraft detect less and strike less accurately, and an altitude order survives a change of mission.
 - The altitude profile shows ceilings only for observed weapons.
+- Weather comes from one plan fixed at the start, moves as a pattern, and replays exactly.
+- Cloud blocks sensing, noticing, ground fire and strikes for aircraft above it, and visibility falls smoothly approaching the base.
+- Stronger rain always means shorter visibility, for ground observers and aircraft alike.
+- Forecast error grows with lead time, and the view holds forecasts, never the true weather.
 - Consolidation changes the map, never the stored reports, and needs a fresh, confident aircraft sighting.
 - A clear look that finds nothing closes a report, and a new sighting reopens it.
 - Battle summary figures come only from the `PlayerView`, and the debrief is unavailable until a run ends.
@@ -626,6 +641,7 @@ Warning counts from the first hostile contact the player holds within 1.5 km of 
 | **M7.6: Terrain and aircraft** | Altitude datum, air line of sight, masked engagements, taller terrain, path profile | Does terrain give CAS a reason to fly low? |
 | **M7.7: Aircraft models** | Real Vietnam-era aircraft with their own performance, armor and altitude costs | Do different aircraft make different decisions? |
 | **M7.8: Helicopters** | Hovering gunships and scouts, with landing and ground-interaction roles deferred | Do helicopters use terrain differently from jets? |
+| **M7.9: Weather** | Storm systems, cloud and rain effects, imperfect forecasts, map layers and a forecast slider | Does weather change when and how aircraft are sent? |
 | **M8: Squads** | Skipped for now: subordinate elements, grouped markers, covering fire and maneuver | Does squad detail matter from the player's seat? |
 | **M9: Calibration** | Reproducible policy testing, tuning, usability refinements, documentation of known simplifications and tuning values | Are the success-rate and information-value targets satisfied? |
 

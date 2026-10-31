@@ -3,7 +3,8 @@ import { hypot } from '../domain/public/det-math';
 import { distance } from '../domain/public/geometry';
 import type { Side } from '../domain/public/ground';
 import type { MessageId } from '../domain/public/radio';
-import { elevationAt, hasAirLos, type TerrainGrid } from '../domain/public/terrain';
+import { elevationAt, type TerrainGrid } from '../domain/public/terrain';
+import { airSightClear } from '../domain/public/weather';
 import type { Aircraft, GroundUnit, WorldTruth } from '../domain/truth/world';
 import type { PlayerKnowledge } from '../knowledge/player-knowledge';
 import { nextBool, nextGaussian, type RngState } from '../rng/streams';
@@ -22,11 +23,11 @@ function slantTo(unit: GroundUnit, aircraft: Aircraft, terrain: TerrainGrid): nu
   return hypot(distance(unit.position, aircraft.position), heightAbove(unit, aircraft, terrain));
 }
 
-function nearestAircraft(unit: GroundUnit, truth: WorldTruth, terrain: TerrainGrid): Aircraft | null {
+function nearestAircraft(unit: GroundUnit, truth: WorldTruth, terrain: TerrainGrid, tick: number): Aircraft | null {
   let best: Aircraft | null = null;
   for (const aircraft of truth.aircraft) {
     if (!isAirborne(aircraft) || aircraft.damaged) continue;
-    if (!hasAirLos(terrain, unit.position, aircraft.position, aircraft.altitudeMeters)) continue;
+    if (!airSightClear(terrain, truth.weather, unit.position, aircraft.position, aircraft.altitudeMeters, tick)) continue;
     if (best === null || slantTo(unit, aircraft, terrain) < slantTo(unit, best, terrain)) best = aircraft;
   }
   return best;
@@ -117,7 +118,7 @@ export function resolveGroundFire(
   for (const unit of truth.units) {
     if (!unit.firesAtAircraft || unit.side === AIRCRAFT_SIDE || unit.personnel <= 0) continue;
     if (tick < unit.nextAirFireTick) continue;
-    const aircraft = nearestAircraft(unit, truth, terrain);
+    const aircraft = nearestAircraft(unit, truth, terrain, tick);
     if (aircraft === null) continue;
     const fire = bestWeapon(unit, aircraft, config, terrain);
     if (fire === null) continue;

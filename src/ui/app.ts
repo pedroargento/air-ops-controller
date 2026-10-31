@@ -4,6 +4,7 @@ import type { Debrief } from '../domain/public/debrief';
 import type { WeaponType } from '../domain/public/equipment';
 import type { Vec2 } from '../domain/public/geometry';
 import { elevationAt, type TerrainGrid } from '../domain/public/terrain';
+import { weatherAt } from '../domain/public/weather';
 import type { ContactMarker, FriendlyMarkerView, PlayerView } from '../knowledge/player-view';
 import {
   aircraftMission,
@@ -25,8 +26,9 @@ import {
 import { AltitudeProfile } from './altitude-profile';
 import { PathProfile } from './path-profile';
 import { summarizeBattle, type BattleSummary, type SummaryConfig } from './battle-summary';
-import { MapView, type Selection } from './map-view';
+import { MapView, type Selection, type WeatherLayer } from './map-view';
 import { morphHtml } from './morph';
+import { stormMovement, type ForecastError } from './weather-chart';
 
 type AreaOrderKind = 'MoveTo' | 'Orbit' | 'ReconArea' | 'SupportArea';
 
@@ -42,6 +44,8 @@ export type UiConfig = Readonly<{
   maxAltitudeMeters: number;
   defaultAltitudeMeters: number;
   summary: SummaryConfig;
+  durationSeconds: number;
+  forecastError: ForecastError;
   speeds: readonly number[];
   onAction: (action: PlayerAction) => void;
   onSpeed: (speed: number) => void;
@@ -74,6 +78,13 @@ function element<T extends HTMLElement>(id: string): T {
   return found as T;
 }
 
+const FORECAST_STEP_SECONDS = 300;
+const FORECAST_CONFIDENCE_SECONDS = 1800;
+
+function visibilityText(meters: number): string {
+  return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters / 50) * 50} m`;
+}
+
 function aircraftDestination(aircraft: AircraftTelemetryEntry): Vec2 | null {
   const { order } = aircraft;
   if (order === null || order.kind === 'ReturnToBase') return null;
@@ -104,6 +115,8 @@ export class App {
   private lastAircraftId: string | null = null;
   private readonly split = new Set<string>();
   private sideTab: 'radio' | 'summary' = 'radio';
+  private readonly layers = new Set<'weather' | 'threats'>();
+  private forecastLeadSeconds = 0;
   private readonly profile: AltitudeProfile;
   private readonly pathProfile: PathProfile;
   private pendingOrder: Readonly<{ aircraftId: AircraftId; kind: AreaOrderKind }> | null = null;
@@ -128,7 +141,10 @@ export class App {
     // Watches the holder, not the window: the header's height isn't known until it first renders.
     new ResizeObserver(() => this.fitCanvas()).observe(element('map-holder'));
     this.bindMap(canvas);
-    for (const panel of ['controls', 'aircraft', 'selection', 'requests', 'radio-log', 'side-tabs']) {
+    element('forecast-lead').addEventListener('input', (event) => {
+      this.forecastLeadSeconds = Number((event.target as HTMLInputElement).value);
+    });
+    for (const panel of ['controls', 'aircraft', 'selection', 'requests', 'radio-log', 'side-tabs', 'map-layers', 'forecast']) {
       element(panel).addEventListener('click', (event) => this.onPanelClick(event));
       element(panel).addEventListener('change', (event) => this.onPanelChange(event));
     }
@@ -217,6 +233,61 @@ export class App {
     this.pendingOrder = null;
   }
 
+  private toggleLayer(layer: 'weather' | 'threats'): void {
+    if (!this.layers.delete(layer)) this.layers.add(layer);
+    if (layer === 'weather') this.setForecastLead(0);
+  }
+
+  private setForecastLead(seconds: number): void {
+    this.forecastLeadSeconds = seconds;
+    element<HTMLInputElement>('forecast-lead').value = String(seconds);
+  }
+
+  /** Rounded to the slider's steps, because a forecast isn't that exact. */
+  private etaOfSelected(): number {
+    const view = this.view;
+    const aircraft = view === null ? null : this.threatAircraft(view);
+    return Math.round((aircraft?.etaSeconds ?? 0) / FORECAST_STEP_SECONDS) * FORECAST_STEP_SECONDS;
+  }
+
+  private weatherLayer(view: PlayerView): WeatherLayer | null {
+    if (!this.layers.has('weather') || view.forecast === null) return null;
+    const confidence = 1 / (1 + this.forecastLeadSeconds / FORECAST_CONFIDENCE_SECONDS);
+    return {
+      forecast: view.forecast,
+      tick: view.tick + this.forecastLeadSeconds,
+      now: view.tick,
+      issuedAt: view.forecastIssuedAt ?? view.tick,
+      altitudeMeters: this.threatAltitude(view),
+      error: this.config.forecastError,
+      confidence,
+    };
+  }
+
+  /** Cloud base where it matters: over the selected aircraft, or else the outpost. */
+  private forecastCeiling(view: PlayerView): number | null {
+    if (!this.layers.has('weather') || view.forecast === null) return null;
+    const point = this.threatAircraft(view)?.position ?? this.config.summary.objective;
+    return weatherAt(view.forecast, point, view.tick + this.forecastLeadSeconds).ceilingMeters;
+  }
+
+  private renderLayers(view: PlayerView): void {
+    const button = (id: 'weather' | 'threats', label: string): string =>
+      `<button data-action="layer" data-id="${id}"${this.layers.has(id) ? ' class="active"' : ''}>${label}</button>`;
+    morphHtml(element('map-layers'), button('weather', 'Weather') + button('threats', 'Threats'));
+    const shown = this.layers.has('weather');
+    element('forecast').hidden = !shown;
+    if (!shown) return;
+    const remaining = Math.max(0, this.config.durationSeconds - view.tick);
+    if (this.forecastLeadSeconds > remaining) this.setForecastLead(remaining);
+    element<HTMLInputElement>('forecast-lead').max = String(remaining);
+    const issued = view.forecastIssuedAt === null ? 'no forecast yet' : `issued ${clock(view.forecastIssuedAt)}`;
+    const at = this.forecastLeadSeconds === 0 ? 'Now' : `+${Math.round(this.forecastLeadSeconds / 60)} min, ${clock(view.tick + this.forecastLeadSeconds)}`;
+    const movement = view.forecast === null ? null : (stormMovement(view.forecast) ?? 'no storms forecast');
+    element('forecast-label').textContent = [at, issued, movement].filter((part) => part !== null).join(' · ');
+    element('forecast-altitude').textContent = `${Math.round(this.threatAltitude(view))} m`;
+  }
+
   /** The threat ring is for the aircraft the player is thinking about: the last one selected. */
   /** For the browser check: where an aircraft's column is on the profile. */
   profileColumn(id: string): number | null {
@@ -253,6 +324,15 @@ export class App {
     switch (action) {
       case 'pause':
         this.config.onTogglePause();
+        return;
+      case 'layer':
+        this.toggleLayer(id === 'weather' ? 'weather' : 'threats');
+        return;
+      case 'forecast-now':
+        this.setForecastLead(0);
+        return;
+      case 'forecast-eta':
+        this.setForecastLead(this.etaOfSelected());
         return;
       case 'tab':
         this.sideTab = id === 'summary' ? 'summary' : 'radio';
@@ -375,13 +455,17 @@ export class App {
 
   update(view: PlayerView, run: RunState): void {
     this.view = view;
-    this.map.render(view, this.selection, this.threatAltitude(view));
+    this.map.render(view, this.selection, this.threatAltitude(view), {
+      weather: this.weatherLayer(view),
+      threats: this.layers.has('threats'),
+    });
     this.renderControls(view, run);
     this.renderAircraft(view);
     this.renderRequests(view);
     this.renderSelection(view);
     this.renderLog(view);
     this.renderSideTab(view, run);
+    this.renderLayers(view);
     element('map-holder').classList.toggle('picking', this.pendingOrder !== null);
   }
 
@@ -410,12 +494,12 @@ export class App {
         `<button class="aircraft-row${selected ? ' active' : ''}" data-action="select-aircraft" data-id="${a.aircraftId}" title="${escapeHtml(aircraftSummary(a))}">` +
         `<b>${a.aircraftId}</b><b>${a.damaged ? 'DAMAGED' : a.status}</b>` +
         `<span class="mission">${aircraftMission(a)}${eta}</span>` +
-        `<span>${Math.round(a.altitudeMeters)} m</span><span>${Math.round(a.fuelFraction * 100)}%</span><span>ord ${a.ammunition}</span></button>`
+        `<span>${Math.round(a.altitudeMeters)} m${a.aboveCloud ? ' ☁' : ''}</span><span>${Math.round(a.fuelFraction * 100)}%</span><span>ord ${a.ammunition}</span></button>`
       );
     });
     morphHtml(element('aircraft'), rows.join(''));
     const selected = this.selection?.kind === 'aircraft' ? this.selection.id : null;
-    this.profile.render(view, selected);
+    this.profile.render(view, selected, this.forecastCeiling(view));
     const aircraft = view.aircraft.find((a) => a.aircraftId === selected) ?? null;
     this.pathProfile.render(aircraft, aircraft === null ? null : aircraftDestination(aircraft));
   }
@@ -471,7 +555,7 @@ export class App {
     return (
       `<h2>${aircraft.aircraftId} · ${escapeHtml(aircraft.model)}</h2><p>${aircraft.status} · ${aircraft.order?.kind ?? 'no mission'}` +
       `${aircraft.casPhase === null ? '' : ` · ${aircraft.casPhase}`}</p>` +
-      `<p>Fuel ${Math.round(aircraft.fuelFraction * 100)}% · ordnance ${aircraft.ammunition} · altitude ${Math.round(aircraft.altitudeMeters)} m${aircraft.damaged ? ' · damaged, returning for repair' : ''}</p>` +
+      `<p>Fuel ${Math.round(aircraft.fuelFraction * 100)}% · ordnance ${aircraft.ammunition} · altitude ${Math.round(aircraft.altitudeMeters)} m · visibility ${visibilityText(aircraft.visibilityMeters)}${aircraft.damaged ? ' · damaged, returning for repair' : ''}${aircraft.aboveCloud ? ' · above cloud, cannot see the ground' : ''}</p>` +
       `<label>Radius (m) <input id="order-radius" type="number" value="${radius}" min="100" step="100" /></label> ` +
       `<label>Altitude (m) <input id="order-altitude" type="number" value="${altitude}" min="100" step="100" /></label>` +
       `<div class="buttons">${buttons}<button data-action="rtb">Return to base</button></div>${hint}`

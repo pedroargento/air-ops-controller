@@ -10,7 +10,8 @@ import {
 import type { WeaponType } from '../domain/public/equipment';
 import { distance, type Vec2 } from '../domain/public/geometry';
 import { emptyKnowledge, type ContactId, type Side, type UnitKnowledge } from '../domain/public/ground';
-import { cellAt, hasAirLos, hasGroundLos, type TerrainGrid } from '../domain/public/terrain';
+import { cellAt, hasGroundLos, type TerrainGrid } from '../domain/public/terrain';
+import { groundVisibilityMeters, rangeInVisibility, type Weather } from '../domain/public/weather';
 import type { GroundUnit, Track, WorldTruth } from '../domain/truth/world';
 import { nextBinomial, nextBool, nextFloat, nextGaussian, type RngState } from '../rng/streams';
 import type { PerceptionConfig } from '../scenario/schema';
@@ -23,7 +24,9 @@ export type Observer = Readonly<{
   side: Side;
   position: Vec2;
   medium: 'ground' | 'air';
-  altitudeMeters: number;
+  sees: (target: GroundUnit) => boolean;
+  /** How far this observer could see this target in clear air, cut down by the weather. */
+  rangeTo: (target: GroundUnit) => number;
   quality: number;
   rangeMeters: number;
   suppression: number;
@@ -41,9 +44,7 @@ function activityOf(target: GroundUnit, tick: number): ContactActivity {
 }
 
 function hasLineOfSight(observer: Observer, target: GroundUnit, terrain: TerrainGrid): boolean {
-  return observer.medium === 'air'
-    ? hasAirLos(terrain, target.position, observer.position, observer.altitudeMeters)
-    : hasGroundLos(terrain, observer.position, target.position);
+  return observer.medium === 'air' ? observer.sees(target) : hasGroundLos(terrain, observer.position, target.position);
 }
 
 function detectionChance(
@@ -237,16 +238,20 @@ function confirmTrack(track: Track, target: GroundUnit, identification: Identifi
 /** One observer's scan of one target. Returns the updated estimate if it was detected. */
 export function observeTarget(
   truth: WorldTruth,
-  observer: Observer,
+  unhindered: Observer,
   target: GroundUnit,
   terrain: TerrainGrid,
   rng: RngState,
   config: PerceptionConfig,
   tick: number,
 ): ContactEstimate | null {
+  const range = distance(unhindered.position, target.position);
+  if (range > unhindered.rangeMeters) return null;
+  const rangeMeters = unhindered.rangeTo(target);
+  if (range > rangeMeters) return null;
+  // Poor visibility shortens the reach and spoils the look: spotting, position and identity.
+  const observer = { ...unhindered, rangeMeters, quality: (unhindered.quality * rangeMeters) / unhindered.rangeMeters };
   const tracks = (truth.tracks[observer.id] ??= {});
-  const range = distance(observer.position, target.position);
-  if (range > observer.rangeMeters) return null;
   if (!hasLineOfSight(observer, target, terrain)) return null;
 
   const track = tracks[target.id] ?? null;
@@ -279,14 +284,20 @@ export function observeTarget(
   return current.estimate;
 }
 
-function groundObserver(unit: GroundUnit): Observer {
+function groundObserver(unit: GroundUnit, weather: Weather, tick: number): Observer {
   return {
     id: unit.id,
     side: unit.side,
     position: unit.position,
     medium: 'ground',
-    altitudeMeters: 0,
+    sees: () => true,
     quality: unit.doctrine.observerQuality,
+    rangeTo: (target) =>
+      rangeInVisibility(
+        unit.doctrine.detectRangeMeters,
+        groundVisibilityMeters(weather, unit.position, target.position, tick),
+        weather.clearVisibilityMeters,
+      ),
     rangeMeters: unit.doctrine.detectRangeMeters,
     suppression: unit.suppression,
     detectionBoost: () => 1,
@@ -304,7 +315,7 @@ export function updatePerception(
   for (const unit of truth.units) {
     const belief = (knowledge[unit.id] ??= emptyKnowledge());
     if (unit.personnel <= 0) continue;
-    const observer = groundObserver(unit);
+    const observer = groundObserver(unit, truth.weather, tick);
     for (const target of truth.units) {
       if (target.side === unit.side || target.personnel <= 0) continue;
       const estimate = observeTarget(truth, observer, target, terrain, rng, config, tick);

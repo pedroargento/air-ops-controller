@@ -2,8 +2,21 @@ import type { AircraftTelemetry, AircraftTelemetryEntry } from '../domain/public
 import type { Vec2 } from '../domain/public/geometry';
 import { isAntiAir, type WeaponType } from '../domain/public/equipment';
 import { cellAtIndex, elevationAt, type TerrainGrid } from '../domain/public/terrain';
+import { rainVisibilityMeters, systemCenterAt, weatherAt, type Weather } from '../domain/public/weather';
 import { distanceText, markerSize, scaleBarMeters, weaponTag } from './format';
 import { contourEdges, hillshade, shadedColor } from './terrain-shading';
+import {
+  ceilingField,
+  chartLevels,
+  contourSegments,
+  levelFor,
+  rainClass,
+  stormTracks,
+  type CeilingField,
+  type ChartLevel,
+  type ForecastError,
+  type StormTrack,
+} from './weather-chart';
 import type {
   ContactMarker,
   FriendlyMarkerView,
@@ -20,6 +33,19 @@ export type Selection =
   | null;
 
 export type MapHit = Exclude<Selection, null>;
+
+export type WeatherLayer = Readonly<{
+  forecast: Weather;
+  /** The moment being looked at; `now` is where the tracks start. */
+  tick: number;
+  now: number;
+  issuedAt: number;
+  altitudeMeters: number;
+  error: ForecastError;
+  confidence: number;
+}>;
+
+export type MapLayers = Readonly<{ weather: WeatherLayer | null; threats: boolean }>;
 
 const TERRAIN_COLORS: Readonly<Record<string, string>> = {
   open: '#7d8a60',
@@ -38,6 +64,7 @@ const STRIKE_LINE_SECONDS = 4;
 const STRIKE_FADE_SECONDS = 20;
 const SCALE_BAR_MAX_PIXELS = 140;
 const OVERLAY_MARGIN = 16;
+const WEATHER_CELL_METERS = 100;
 const TERRAIN_PIXELS_PER_CELL = 4;
 const CONTOUR_COLOR = 'rgba(45,30,10,0.28)';
 const ANTI_AIR_COLOR = '#ff3df0';
@@ -45,6 +72,7 @@ const ANTI_AIR_COLOR = '#ff3df0';
 export class MapView {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly terrainImage: HTMLCanvasElement;
+  private readonly weatherImage = document.createElement('canvas');
   private readonly worldSize: number;
   private center: Vec2;
   private zoom = 1;
@@ -185,7 +213,7 @@ export class MapView {
     return hits.sort((a, b) => a.gap - b.gap).map(({ hit }) => hit);
   }
 
-  render(view: PlayerView, selection: Selection, threatAltitudeMeters: number): void {
+  render(view: PlayerView, selection: Selection, threatAltitudeMeters: number, layers: MapLayers): void {
     const { ctx, canvas } = this;
     ctx.fillStyle = '#10140f';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -194,9 +222,13 @@ export class MapView {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(this.terrainImage, origin.x, origin.y, size, size);
     this.drawGrid(origin, size);
+    if (layers.weather !== null) this.drawWeather(layers.weather);
 
     const shown = (fade: number, selected: boolean): number => (selected ? Math.max(fade, 0.6) : fade);
     const contacts = this.shownContacts(view);
+    if (layers.threats) {
+      for (const marker of contacts) this.drawThreatRing(marker, threatAltitudeMeters);
+    }
     for (const marker of contacts) {
       const selected = selection?.kind === 'contact' && selection.key === marker.key;
       this.drawRegion(marker.region, shown(marker.regionOpacity, selected), '#ff6b5a');
@@ -230,6 +262,150 @@ export class MapView {
     for (const fire of view.groundFire) this.drawGroundFire(fire);
     this.drawScaleBar();
     this.drawNorthArrow();
+  }
+
+  /** A forecaster's chart: bands of cloud base at one moment, and where each storm is headed. */
+  private drawWeather(layer: WeatherLayer): void {
+    const { ctx } = this;
+    const { forecast, tick, altitudeMeters } = layer;
+    const levels = chartLevels(altitudeMeters, forecast.baseCeilingMeters);
+    const field = ceilingField(forecast, tick, this.worldSize, WEATHER_CELL_METERS);
+    const origin = this.toScreen({ x: 0, y: 0 });
+    const size = this.worldSize * this.pixelsPerMeter;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(origin.x, origin.y, size, size);
+    ctx.clip();
+    this.drawCloudBands(field, levels, layer.confidence);
+    for (const level of levels) this.drawContour(field, level);
+    this.drawRain(forecast, tick);
+    for (const track of stormTracks(forecast, layer.now, layer.issuedAt, altitudeMeters, layer.error)) this.drawTrack(track);
+    this.drawCloudBaseLabels(forecast, tick);
+    ctx.restore();
+  }
+
+  /** Painted small and scaled up, so the bands blend instead of showing the sampling grid. */
+  private drawCloudBands(field: CeilingField, levels: readonly ChartLevel[], confidence: number): void {
+    const { ctx, weatherImage } = this;
+    const { columns, rows, stepMeters, ceilings } = field;
+    weatherImage.width = columns;
+    weatherImage.height = rows;
+    const image = new ImageData(columns, rows);
+    for (let index = 0; index < ceilings.length; index += 1) {
+      const level = levelFor(ceilings[index] ?? Infinity, levels);
+      if (level === null) continue;
+      image.data.set([...level.rgb, Math.round(level.alpha * confidence * 255)], index * 4);
+    }
+    weatherImage.getContext('2d')?.putImageData(image, 0, 0);
+    const at = this.toScreen({ x: -stepMeters / 2, y: -stepMeters / 2 });
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(weatherImage, at.x, at.y, columns * stepMeters * this.pixelsPerMeter, rows * stepMeters * this.pixelsPerMeter);
+    ctx.imageSmoothingEnabled = false;
+  }
+
+  private drawContour(field: CeilingField, level: ChartLevel): void {
+    const { ctx } = this;
+    ctx.strokeStyle = level.color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (const [a, b] of contourSegments(field, level.ceilingMeters)) {
+      const [from, to] = [this.toScreen(a), this.toScreen(b)];
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
+    }
+    ctx.stroke();
+  }
+
+  private drawRain(forecast: Weather, tick: number): void {
+    const { ctx } = this;
+    ctx.strokeStyle = 'rgba(205,232,255,0.9)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let row = 0; row * WEATHER_CELL_METERS < this.worldSize; row += 1) {
+      for (let column = 0; column * WEATHER_CELL_METERS < this.worldSize; column += 1) {
+        const point = { x: (column + 0.5) * WEATHER_CELL_METERS, y: (row + 0.5) * WEATHER_CELL_METERS };
+        const rain = rainClass(weatherAt(forecast, point, tick).rain);
+        if (rain === null || column % rain.everyCells !== 0 || row % rain.everyCells !== 0) continue;
+        const at = this.toScreen(point);
+        ctx.moveTo(at.x + rain.lengthPixels / 2, at.y - rain.lengthPixels);
+        ctx.lineTo(at.x - rain.lengthPixels / 2, at.y + rain.lengthPixels);
+      }
+    }
+    ctx.stroke();
+  }
+
+  /** The likely path, widening with forecast error, with the expected line and times down it. */
+  private drawTrack(track: StormTrack): void {
+    const { ctx } = this;
+    const [from, to] = [this.toScreen(track.from), this.toScreen(track.to)];
+    const length = Math.hypot(to.x - from.x, to.y - from.y);
+    if (length < 1) return;
+    const heading = Math.atan2(to.y - from.y, to.x - from.x);
+    const [fromWidth, toWidth] = [track.fromHalfWidth * this.pixelsPerMeter, track.toHalfWidth * this.pixelsPerMeter];
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.arc(to.x, to.y, toWidth, heading - Math.PI / 2, heading + Math.PI / 2);
+    ctx.arc(from.x, from.y, fromWidth, heading + Math.PI / 2, heading - Math.PI / 2);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+    if (track.formsInMinutes > 0) this.drawChartLabel(`forms +${track.formsInMinutes}`, from.x, from.y);
+    for (const mark of track.marks) {
+      const at = this.toScreen(mark.position);
+      this.drawChevron(at.x, at.y, heading);
+      this.drawChartLabel(`+${mark.minutes}`, at.x, at.y + 16);
+    }
+    this.drawChevron(to.x, to.y, heading);
+  }
+
+  private drawChevron(x: number, y: number, heading: number): void {
+    const { ctx } = this;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(heading);
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(8, 0);
+    ctx.lineTo(-6, 6);
+    ctx.lineTo(-3, 0);
+    ctx.lineTo(-6, -6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  private drawCloudBaseLabels(forecast: Weather, tick: number): void {
+    for (const system of forecast.systems) {
+      if (tick < system.fromTick || tick > system.untilTick) continue;
+      const center = systemCenterAt(system, tick);
+      const { ceilingMeters, rain } = weatherAt(forecast, center, tick);
+      if (ceilingMeters >= forecast.baseCeilingMeters) continue;
+      const at = this.toScreen(center);
+      const visibility = Math.round(rainVisibilityMeters(forecast, rain) / 100) * 100;
+      this.drawChartLabel(`BASE ${Math.round(ceilingMeters / 10) * 10} m · VIS ${visibility} m`, at.x, at.y - 14);
+    }
+  }
+
+  private drawChartLabel(text: string, x: number, y: number): void {
+    const { ctx } = this;
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    const width = ctx.measureText(text).width + 6;
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillRect(x - width / 2, y - 7, width, 14);
+    ctx.fillStyle = '#ffffff';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, y);
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
   }
 
   private drawScaleBar(): void {

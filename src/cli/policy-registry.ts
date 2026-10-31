@@ -16,6 +16,7 @@ export function policies(scenario: Scenario): Readonly<Record<string, () => Poli
     informedNoForward: () => reconInformed(objective, false),
     informedBlind: () => reconInformed(objective, true, undefined, false),
     informedClimb: () => reconInformed(objective, true, undefined, false, RECON_CLIMB_AFTER_FIRE_METERS),
+    informedWeather: () => reconInformed(objective, true, undefined, false, null, null, true),
     informedPopUp: () => reconInformed(objective, true, undefined, false, RECON_CLIMB_AFTER_FIRE_METERS, CAS_TRANSIT_METERS),
   };
 }

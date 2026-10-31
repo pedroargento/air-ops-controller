@@ -9,6 +9,7 @@ import type { ContactId } from '../../src/domain/public/ground';
 import type { Aircraft, GroundUnit } from '../../src/domain/truth/world';
 import { updateContact, updateFriendly } from '../../src/knowledge/player-knowledge';
 import { elevationAt, hasAirLos } from '../../src/domain/public/terrain';
+import type { Weather } from '../../src/domain/public/weather';
 import { GameSession } from '../../src/game/session';
 import { project } from '../../src/knowledge/player-view';
 import { reconInformed } from '../../src/policies/air-policies';
@@ -1022,5 +1023,67 @@ describe('helicopters', () => {
     const state = createInitialState(scenario, 1);
     const entry = aircraftTelemetry(state.truth, air).find((a) => a.aircraftId === GUNSHIP);
     expect(entry?.rotary).toBe(true);
+  });
+});
+
+describe('weather in play', () => {
+  const overcast = (ceilingMeters: number): Weather => ({
+    baseCeilingMeters: ceilingMeters,
+    systems: [],
+    rampSeconds: 300,
+    clearVisibilityMeters: 8000,
+    heavyRainVisibilityMeters: 300,
+    cloudFadeMeters: 200,
+    rainMissMeters: 80,
+  });
+
+  function strikesUnder(ceilingMeters: number): number {
+    let strikes = 0;
+    for (let seed = 0; seed < 5; seed += 1) {
+      const state = createInitialState(scenario, seed);
+      state.truth.weather = overcast(ceilingMeters);
+      isolate(state, ['E-W']);
+      run(state, 1000, [order(state, CAS, support(unit(state, 'E-W').position))]);
+      strikes += state.player.log.filter((m) => m.kind === 'STRIKE_RESULT').length;
+    }
+    return strikes;
+  }
+
+  it('an aircraft above the cloud can neither see nor strike', () => {
+    expect(strikesUnder(300)).toBe(0);
+    expect(strikesUnder(5000)).toBeGreaterThan(0);
+  });
+
+  it('telemetry says when an aircraft is above cloud', () => {
+    const state = createInitialState(scenario, 1);
+    state.truth.weather = overcast(300);
+    run(state, 400, [order(state, CAS, { kind: 'MoveTo', point: outpost })]);
+    const entry = aircraftTelemetry(state.truth, air, state.tick).find((a) => a.aircraftId === CAS);
+    expect(entry?.aboveCloud).toBe(true);
+  });
+
+  it('forecasts arrive on schedule, as updates in the log', () => {
+    const state = createInitialState(scenario, 1);
+    const interval = scenario.file.weather.forecastIntervalSeconds;
+    run(state, interval + 1);
+    expect(state.player.forecastIssuedAt).toBe(interval);
+    expect(state.player.log.filter((m) => m.kind === 'COMMAND_UPDATE' && m.text.includes('forecast'))).toHaveLength(2);
+  });
+
+  it('the view holds the forecast, not the true weather', () => {
+    const state = createInitialState(scenario, 1);
+    run(state, 2);
+    const view = project(state.player, aircraftTelemetry(state.truth, air, state.tick), state.tick, scenario.file.display);
+    expect(view.forecast).not.toEqual(state.truth.weather);
+    expect(view.forecast).not.toBeNull();
+  });
+
+  it('the same seed gives the same weather and forecast', () => {
+    const first = createInitialState(scenario, 8);
+    const second = createInitialState(scenario, 8);
+    run(first, 50);
+    run(second, 50);
+    expect(second.truth.weather).toEqual(first.truth.weather);
+    expect(second.player.forecast).toEqual(first.player.forecast);
   });
 });
