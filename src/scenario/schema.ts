@@ -32,6 +32,16 @@ const doctrine = z.object({
   supportHoldBonus: unit,
   reportMemorySeconds: z.number().positive(),
   airCoverSeconds: z.number().min(0),
+  airCoverRepeatSeconds: z.number().int().positive(),
+  standoffMeters: z.number().positive(),
+  observeBias: z.number().nonnegative(),
+  probeBias: z.number().nonnegative(),
+  harassBias: z.number().nonnegative(),
+  assaultBias: z.number().nonnegative(),
+  burstSeconds: z.number().int().positive(),
+  pauseSeconds: z.number().int().min(0),
+  pressureMoraleFloor: unit,
+  airFireThreshold: unit,
   engageRangeMeters: z.number().positive(),
   closesToMeters: z.number().positive().nullable(),
   pinnedSuppression: unit,
@@ -45,10 +55,22 @@ const doctrine = z.object({
   maxReturns: z.number().int().min(0),
 });
 
+const weapon = z.object({
+  targetDomains: z.array(z.enum(['GROUND', 'AIR'])).min(1),
+  rangeMeters: z.number().positive(),
+  suppressionEffect: z.number().nonnegative(),
+  damageEffect: z.number().nonnegative(),
+  crewRequired: z.number().int().positive(),
+  ammunitionPerUse: z.number().positive(),
+  maxAltitudeMeters: z.number().min(0),
+  airHitChance: unit,
+  airCycleSeconds: z.number().int().positive(),
+});
+
 const combat = z.object({
-  lethalityPerManVolley: z.number().nonnegative(),
-  suppressionPerManVolley: z.number().nonnegative(),
-  ammoPerManVolley: z.number().nonnegative(),
+  weapons: z.object({ SMALL_ARMS: weapon, MACHINE_GUN: weapon, AAA: weapon, MANPADS: weapon }),
+  systemLossPerCasualtyFraction: z.number().nonnegative(),
+  assessmentNoise: unit,
   suppressionFirePenalty: unit,
   movingFirePenalty: unit,
   minRangeFactor: unit,
@@ -56,6 +78,12 @@ const combat = z.object({
   suppressionDecayPerUpdate: unit,
   moraleLossPerCasualtyFraction: z.number().nonnegative(),
   moraleLossUnderFirePerUpdate: z.number().nonnegative(),
+  moraleLossDeterioratingPerUpdate: z.number().nonnegative(),
+  isolationRadiusMeters: z.number().positive(),
+  lowAmmunitionFraction: unit,
+  moraleRecoveryOutOfContactPerUpdate: z.number().nonnegative(),
+  outOfContactSeconds: z.number().int().positive(),
+  behaviorFireRate: z.object({ observe: unit, probe: unit, harass: unit, assault: unit, disengage: unit }),
   moraleRecoveryPerUpdate: z.number().nonnegative(),
   moraleRecoveryCap: unit,
   postureCover: z.object({ moving: unit, firing: unit, defending: unit, prone: unit }),
@@ -68,6 +96,7 @@ const perception = z.object({
   trackedBoost: z.number().min(1),
   postureConcealment: z.object({ moving: unit, firing: unit, defending: unit, prone: unit }),
   identifyPerScan: unit,
+  weaponSeenPerScan: unit,
   sigmaBaseMeters: z.number().positive(),
   sigmaRangeFraction: z.number().nonnegative(),
   sigmaConcealmentFactor: z.number().nonnegative(),
@@ -99,6 +128,11 @@ const radio = z.object({
   sitrepIntervalSeconds: z.number().int().positive(),
   contactReportIntervalSeconds: z.number().int().positive(),
   ticRangeMeters: z.number().positive(),
+  ticStrengthRatio: z.number().positive(),
+  ticCasualtyFraction: unit,
+  supportStrengthRatio: z.number().positive(),
+  supportCasualtyFraction: unit,
+  supportAmmunitionFraction: unit,
 });
 
 const display = z.object({
@@ -111,6 +145,20 @@ const display = z.object({
   regionMaxRadiusMeters: z.number().positive(),
   regionFadeSeconds: z.number().positive(),
   effectSeconds: z.number().positive(),
+  groundFireMarkSeconds: z.number().positive(),
+  groundFireMergeMeters: z.number().positive(),
+  threatRiskPerMinute: unit,
+  archiveSeconds: z.number().positive(),
+  destroyedShowSeconds: z.number().positive(),
+  notFoundShowSeconds: z.number().positive(),
+  friendlySilentSeconds: z.number().positive(),
+  consolidateMaxAgeSeconds: z.number().positive(),
+  notFoundMinAgeSeconds: z.number().positive(),
+  notFoundLookSeconds: z.number().positive(),
+  notFoundCoverage: unit,
+  hqEnemyEstimate: z.number().positive(),
+  summaryRatioRadiusMeters: z.number().positive(),
+  summaryStaleSeconds: z.number().positive(),
 });
 
 const aircraftType = z.object({
@@ -119,15 +167,30 @@ const aircraftType = z.object({
   ammunition: z.number().int().min(0),
   takeoffSeconds: z.number().int().min(0),
   turnaroundSeconds: z.number().int().min(0),
+  repairSeconds: z.number().int().min(0),
   bingoMarginSeconds: z.number().int().min(0),
   sensorRadiusMeters: z.number().positive(),
   observerQuality: z.number().positive(),
   orbitRadiusMeters: z.number().positive(),
   turnRateRadPerSecond: z.number().positive(),
+  climbRateMps: z.number().positive(),
+  minAltitudeMeters: z.number().positive(),
+  maxAltitudeMeters: z.number().positive(),
 });
 
 const air = z.object({
   airbase: vec2,
+  operatingAltitudeMeters: z.number().positive(),
+  sensorReferenceHeightMeters: z.number().positive(),
+  terrainClearanceMeters: z.number().positive(),
+  terrainLookaheadSeconds: z.number().positive(),
+  sensorFalloffMeters: z.number().positive(),
+  sensorQualityMin: unit,
+  sensorQualityMax: z.number().min(1),
+  strikeMissPerMeterAltitude: z.number().nonnegative(),
+  groundFireSigmaMeters: z.number().positive(),
+  groundFireWeaponSeenChance: unit,
+  groundFireReportSeconds: z.number().int().positive(),
   types: z.object({ recon: aircraftType, cas: aircraftType }),
   aircraft: z.array(z.object({ id: z.string(), aircraftType: z.enum(['recon', 'cas']) })),
   groundNoticeRangeMeters: z.number().positive(),
@@ -160,12 +223,21 @@ const groundUnit = z.object({
   side: z.enum(['friendly', 'enemy']),
   position: vec2,
   personnel: z.number().int().positive(),
-  ammunition: z.number().positive(),
+  equipment: z
+    .array(
+      z.object({
+        weapon: z.enum(['SMALL_ARMS', 'MACHINE_GUN', 'AAA', 'MANPADS']),
+        quantity: z.number().int().positive(),
+        ammunition: z.number().positive(),
+      }),
+    )
+    .min(1),
   morale: unit,
   doctrine: z.string(),
   objective,
   fallback: area,
   activeFromSeconds: z.number().int().min(0).default(0),
+  objectiveSchedule: z.array(z.object({ fromSeconds: z.number().int().min(0), objective })).default([]),
 });
 
 export const scenarioFileSchema = z.object({

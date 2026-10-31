@@ -3,7 +3,7 @@ import type { ContactEstimate } from '../../src/domain/public/estimates';
 import type { ContactId } from '../../src/domain/public/ground';
 import type { MessageId, RadioMessage } from '../../src/domain/public/radio';
 import type { ContactMarker } from '../../src/knowledge/player-view';
-import { clock, compassDirection, forwardPreview, gridRef, radioLine, strengthText } from '../../src/ui/format';
+import { clock, compassDirection, cursorGrid, distanceText, forwardPreview, gridRef, radioLine, scaleBarMeters, strengthText } from '../../src/ui/format';
 
 const names = { 'F-N': 'Viper 2-1' };
 const contact: ContactEstimate = {
@@ -15,6 +15,7 @@ const contact: ContactEstimate = {
   kind: 'infantry',
   activity: 'moving',
   confidence: 'medium',
+  observedWeapons: [],
 };
 const meta = { id: 'M-1' as MessageId, senderId: 'F-N', observedAt: 100, sentAt: 110, receivedAt: 130 };
 
@@ -44,9 +45,15 @@ describe('formatting', () => {
     expect(line.coordinates).toEqual([own.center, contact.position.center]);
   });
 
-  it('reports strikes without casualty numbers', () => {
-    const message: RadioMessage = { ...meta, kind: 'STRIKE_RESULT', contact, effect: 'effect-observed' };
+  it('reports strike results as the crew\'s estimate, never a true count', () => {
+    const message: RadioMessage = { ...meta, kind: 'STRIKE_RESULT', contact, effect: 'effect-observed', assessment: null };
     expect(radioLine(message, 50).text).toBe('Strike near grid 042-081: effect observed.');
+    const hit = { ...message, assessment: { estimatedCasualties: 9, destroyed: false } };
+    expect(radioLine(hit, 50).text).toBe('Strike near grid 042-081: effect observed, about 9 casualties.');
+    const kill = { ...message, assessment: { estimatedCasualties: 12, destroyed: true } };
+    expect(radioLine(kill, 50).text).toContain('target destroyed');
+    const miss = { ...message, effect: 'no-effect-observed' as const };
+    expect(radioLine(miss, 50).text).toBe('Strike near grid 042-081: no effect observed.');
   });
 
   it('previews a forwarded contact with its real source, confidence and age', () => {
@@ -55,5 +62,26 @@ describe('formatting', () => {
       'Viper 2-1, Air Control. RECON-1 reports platoon-sized hostile infantry, moving southwest near grid 042-081. ' +
         'medium confidence, observed 3 minutes ago.',
     );
+  });
+});
+
+describe('map overlays', () => {
+  it('shows the grid under the cursor, and nothing off the map', () => {
+    expect(cursorGrid({ x: 2525, y: 2625 }, 5000, 50)).toBe('Grid 050-052');
+    expect(cursorGrid({ x: -1, y: 100 }, 5000, 50)).toBeNull();
+    expect(cursorGrid({ x: 100, y: 5000 }, 5000, 50)).toBeNull();
+  });
+
+  it('picks a round scale bar length that fits', () => {
+    expect(scaleBarMeters(0.1, 140)).toBe(1000);
+    expect(scaleBarMeters(0.06, 140)).toBe(2000);
+    expect(scaleBarMeters(0.6, 140)).toBe(200);
+    expect(scaleBarMeters(1.2, 140)).toBe(100);
+  });
+
+  it('writes a scale bar length in sensible units', () => {
+    expect(distanceText(500)).toBe('500 m');
+    expect(distanceText(1000)).toBe('1 km');
+    expect(distanceText(2000)).toBe('2 km');
   });
 });

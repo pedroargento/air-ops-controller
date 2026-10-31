@@ -1,16 +1,16 @@
 import type { AircraftId, AircraftOrder, AircraftTelemetry, CasPhase } from '../domain/public/air';
-import { atan2, cos, exp, PI, sin } from '../domain/public/det-math';
+import { atan2, cos, exp, hypot, PI, sin } from '../domain/public/det-math';
 import type { ContactEstimate } from '../domain/public/estimates';
 import { distance, type Vec2 } from '../domain/public/geometry';
 import { emptyKnowledge, type UnitKnowledge } from '../domain/public/ground';
-import type { MessageId, RadioMessage } from '../domain/public/radio';
-import { cellAt, type TerrainGrid } from '../domain/public/terrain';
+import type { MessageId, RadioMessage, StrikeAssessment } from '../domain/public/radio';
+import { cellAt, elevationAt, hasAirLos, type TerrainGrid } from '../domain/public/terrain';
 import type { Aircraft, GroundUnit, WorldTruth } from '../domain/truth/world';
-import { updateContact, updateFriendly, type PlayerKnowledge } from '../knowledge/player-knowledge';
+import { recordStrike, updateContact, updateFriendly, type PlayerKnowledge, type SensorCoverage } from '../knowledge/player-knowledge';
 import { observeTarget, type Observer } from '../perception/observe';
-import { nextBinomial, nextBool, type RngState } from '../rng/streams';
+import { nextBinomial, nextBool, nextFloat, type RngState } from '../rng/streams';
 import type { Scenario } from '../scenario/load';
-import type { AircraftTypeConfig, AirConfig, CombatConfig, PerceptionConfig } from '../scenario/schema';
+import type { AircraftTypeConfig, AirConfig, CombatConfig, DisplayConfig, PerceptionConfig } from '../scenario/schema';
 import { applyEffects } from './combat';
 import type { RadioState } from './radio';
 
@@ -23,8 +23,12 @@ export function createAircraft(scenario: Scenario): Aircraft[] {
         id: entry.id as AircraftId,
         aircraftType: entry.aircraftType,
         position: air.airbase,
+        altitudeMeters: 0,
+        targetAltitudeMeters: air.operatingAltitudeMeters,
         headingRad: PI / 2,
         status: 'ready',
+        damaged: false,
+        lastFiredOnTick: null,
         order: null,
         timerSeconds: 0,
         fuelSeconds: type.fuelSeconds,
@@ -69,7 +73,7 @@ function orbitRadius(order: AircraftOrder | null, type: AircraftTypeConfig): num
 
 /** Returns false when the aircraft can't take the order, e.g. during turnaround. */
 export function applyOrder(aircraft: Aircraft, order: AircraftOrder, air: AirConfig): boolean {
-  if (aircraft.status === 'turnaround') return false;
+  if (aircraft.status === 'turnaround' || aircraft.damaged) return false;
   if (order.kind === 'SupportArea' && aircraft.aircraftType !== 'cas') return false;
   if (order.kind === 'ReturnToBase') {
     if (aircraft.status === 'ready') return false;
@@ -126,7 +130,42 @@ function orbitHeading(aircraft: Aircraft, center: Vec2, radius: number): number 
 }
 
 /** Aircraft movement, fuel and readiness. Runs every tick. */
-export function advanceAircraft(aircraft: Aircraft, air: AirConfig): void {
+export function advanceAircraft(aircraft: Aircraft, air: AirConfig, terrain: TerrainGrid): void {
+  flyAircraft(aircraft, air);
+  if (!isAirborne(aircraft)) {
+    aircraft.altitudeMeters = 0;
+    return;
+  }
+  const rate = typeOf(aircraft, air).climbRateMps;
+  const wanted = Math.max(aircraft.targetAltitudeMeters, clearanceFloor(aircraft, air, terrain));
+  const gap = wanted - aircraft.altitudeMeters;
+  aircraft.altitudeMeters += Math.max(-rate, Math.min(rate, gap));
+}
+
+/** Pilots keep clear of the ground and of what's just ahead, whatever the altitude order says. */
+function clearanceFloor(aircraft: Aircraft, air: AirConfig, terrain: TerrainGrid): number {
+  const reach = typeOf(aircraft, air).speedMps * air.terrainLookaheadSeconds;
+  const ahead = {
+    x: aircraft.position.x + cos(aircraft.headingRad) * reach,
+    y: aircraft.position.y + sin(aircraft.headingRad) * reach,
+  };
+  return Math.max(elevationAt(terrain, aircraft.position), elevationAt(terrain, ahead)) + air.terrainClearanceMeters;
+}
+
+/** Altitude is its own order, so it survives a change of mission. */
+export function setTargetAltitude(aircraft: Aircraft, meters: number, air: AirConfig): void {
+  const { minAltitudeMeters, maxAltitudeMeters } = typeOf(aircraft, air);
+  aircraft.targetAltitudeMeters = Math.max(minAltitudeMeters, Math.min(maxAltitudeMeters, meters));
+}
+
+/** Sensors work best close to the ground, measured from the ground beneath the aircraft. */
+function altitudeQuality(aircraft: Aircraft, air: AirConfig, terrain: TerrainGrid): number {
+  const height = aircraft.altitudeMeters - elevationAt(terrain, aircraft.position);
+  const quality = 1 - (height - air.sensorReferenceHeightMeters) / air.sensorFalloffMeters;
+  return Math.max(air.sensorQualityMin, Math.min(air.sensorQualityMax, quality));
+}
+
+function flyAircraft(aircraft: Aircraft, air: AirConfig): void {
   const type = typeOf(aircraft, air);
   switch (aircraft.status) {
     case 'ready':
@@ -166,13 +205,14 @@ export function advanceAircraft(aircraft: Aircraft, air: AirConfig): void {
       if (distance(aircraft.position, air.airbase) <= type.speedMps) {
         aircraft.position = air.airbase;
         aircraft.status = 'turnaround';
-        aircraft.timerSeconds = type.turnaroundSeconds;
+        aircraft.timerSeconds = aircraft.damaged ? type.repairSeconds : type.turnaroundSeconds;
       }
       return;
     case 'turnaround':
       aircraft.timerSeconds -= 1;
       if (aircraft.timerSeconds <= 0) {
         aircraft.status = 'ready';
+        aircraft.damaged = false;
         aircraft.fuelSeconds = type.fuelSeconds;
         aircraft.ammunition = type.ammunition;
       }
@@ -180,7 +220,7 @@ export function advanceAircraft(aircraft: Aircraft, air: AirConfig): void {
   }
 }
 
-function isOverBattlefield(aircraft: Aircraft): boolean {
+export function isAirborne(aircraft: Aircraft): boolean {
   return aircraft.status === 'enroute' || aircraft.status === 'onStation' || aircraft.status === 'returning';
 }
 
@@ -202,13 +242,20 @@ function cuedBoost(aircraft: Aircraft, player: PlayerKnowledge, air: AirConfig, 
     cues.some((cue) => distance(cue, target.position) <= air.cueRadiusMeters) ? air.cueDetectionBoost : 1;
 }
 
-function aircraftObserver(aircraft: Aircraft, type: AircraftTypeConfig, boost: (t: GroundUnit) => number): Observer {
+function aircraftObserver(
+  aircraft: Aircraft,
+  air: AirConfig,
+  terrain: TerrainGrid,
+  boost: (t: GroundUnit) => number,
+): Observer {
+  const type = typeOf(aircraft, air);
   return {
     id: aircraft.id,
     side: 'friendly',
     position: aircraft.position,
     medium: 'air',
-    quality: type.observerQuality,
+    altitudeMeters: aircraft.altitudeMeters,
+    quality: type.observerQuality * altitudeQuality(aircraft, air, terrain),
     rangeMeters: type.sensorRadiusMeters,
     suppression: 0,
     detectionBoost: boost,
@@ -247,8 +294,8 @@ export function updateAircraftPerception(
   tick: number,
 ): void {
   for (const aircraft of truth.aircraft) {
-    if (!isOverBattlefield(aircraft)) continue;
-    const observer = aircraftObserver(aircraft, typeOf(aircraft, air), cuedBoost(aircraft, player, air, tick));
+    if (!isAirborne(aircraft)) continue;
+    const observer = aircraftObserver(aircraft, air, terrain, cuedBoost(aircraft, player, air, tick));
     for (const target of truth.units) {
       if (target.personnel <= 0) continue;
       const estimate = observeTarget(truth, observer, target, terrain, rng, perception, tick);
@@ -306,6 +353,18 @@ function chooseCasTarget(aircraft: Aircraft, center: Vec2, radius: number, memor
   return best;
 }
 
+/** What the crew thinks it did: noisy, because nobody counts casualties from the air. */
+function assessStrike(
+  casualties: number,
+  target: GroundUnit,
+  combat: CombatConfig,
+  rng: RngState,
+  label: string,
+): StrikeAssessment {
+  const noise = 1 + (nextFloat(rng, label) * 2 - 1) * combat.assessmentNoise;
+  return { estimatedCasualties: Math.round(casualties * noise), destroyed: target.personnel <= 0 };
+}
+
 function strikePass(
   aircraft: Aircraft,
   contact: ContactEstimate,
@@ -316,12 +375,14 @@ function strikePass(
   terrain: TerrainGrid,
   air: AirConfig,
   combat: CombatConfig,
+  display: DisplayConfig,
   rng: RngState,
   tick: number,
 ): void {
   aircraft.ammunition -= 1;
   aircraft.nextPassTick = tick + air.passIntervalSeconds;
-  const miss = distance(contact.position.center, target.position);
+  const height = Math.max(0, aircraft.altitudeMeters - elevationAt(terrain, target.position));
+  const miss = hypot(distance(contact.position.center, target.position), height * air.strikeMissPerMeterAltitude);
   const accuracy = exp(-(miss * miss) / (2 * air.blastRadiusMeters * air.blastRadiusMeters));
   const cover = cellAt(terrain, target.position).airCover;
   const label = `air/${aircraft.id}/${target.id}`;
@@ -337,9 +398,12 @@ function strikePass(
       },
     ],
     combat,
+    rng,
     tick,
   );
   const effectObserved = nextBool(rng, label, accuracy);
+  const assessment = effectObserved ? assessStrike(casualties, target, combat, rng, label) : null;
+  if (assessment !== null) recordStrike(player, contact, assessment, display.plausibleSpeedMps, tick);
   player.strikes.push({ aircraftId: aircraft.id, position: contact.position.center, tick, effectObserved });
   const message: RadioMessage = {
     id: nextId(radio),
@@ -350,6 +414,7 @@ function strikePass(
     receivedAt: tick,
     contact,
     effect: effectObserved ? 'effect-observed' : 'no-effect-observed',
+    assessment,
   };
   player.log.push(message);
 }
@@ -362,6 +427,7 @@ export function resolveCas(
   terrain: TerrainGrid,
   air: AirConfig,
   combat: CombatConfig,
+  display: DisplayConfig,
   engageMemorySeconds: number,
   rng: RngState,
   tick: number,
@@ -374,7 +440,8 @@ export function resolveCas(
     if (contact === null) continue;
     const target = unitForContact(truth, aircraft, contact);
     if (target === null || target.personnel <= 0 || target.side === 'friendly') continue;
-    strikePass(aircraft, contact, target, truth, player, radio, terrain, air, combat, rng, tick);
+    if (!hasAirLos(terrain, target.position, aircraft.position, aircraft.altitudeMeters)) continue;
+    strikePass(aircraft, contact, target, truth, player, radio, terrain, air, combat, display, rng, tick);
   }
 }
 
@@ -383,19 +450,37 @@ export function updateAircraftNotice(
   truth: WorldTruth,
   knowledge: Record<string, UnitKnowledge>,
   air: AirConfig,
+  terrain: TerrainGrid,
   rng: RngState,
   tick: number,
 ): void {
   for (const unit of truth.units) {
     if (unit.personnel <= 0 || unit.side === 'friendly') continue;
     for (const aircraft of truth.aircraft) {
-      if (!isOverBattlefield(aircraft)) continue;
+      if (!isAirborne(aircraft)) continue;
       if (distance(unit.position, aircraft.position) > air.groundNoticeRangeMeters) continue;
+      if (!hasAirLos(terrain, unit.position, aircraft.position, aircraft.altitudeMeters)) continue;
       if (nextBool(rng, `notice/${unit.id}/${aircraft.id}`, air.groundNoticePerScan)) {
-        (knowledge[unit.id] ??= emptyKnowledge()).hostileAircraftSeenAt = tick;
+        const belief = (knowledge[unit.id] ??= emptyKnowledge());
+        // A formation goes to ground when aircraft appear, then gets on with its attack:
+        // an orbiting aircraft must not pin it indefinitely just by being there (§8.2).
+        const lastCover = belief.hostileAircraftSeenAt;
+        if (lastCover === null || tick - lastCover >= unit.doctrine.airCoverRepeatSeconds) {
+          belief.hostileAircraftSeenAt = tick;
+        }
+        // Height above the unit: a weapon's reach is measured from where it stands.
+        const altitudeMeters = Math.max(0, aircraft.altitudeMeters - elevationAt(terrain, unit.position));
+        belief.noticedAircraft = { position: aircraft.position, altitudeMeters, seenAt: tick };
       }
     }
   }
+}
+
+/** Where air operations knows sensors are looking, from aircraft in the air. */
+export function sensorCoverage(truth: WorldTruth, air: AirConfig): readonly SensorCoverage[] {
+  return truth.aircraft
+    .filter(isAirborne)
+    .map((aircraft) => ({ position: aircraft.position, radiusMeters: typeOf(aircraft, air).sensorRadiusMeters }));
 }
 
 /** What the crew would say they are doing, from the contacts the aircraft itself holds. */
@@ -418,8 +503,11 @@ export function aircraftTelemetry(truth: WorldTruth, air: AirConfig): AircraftTe
       aircraftId: aircraft.id,
       aircraftType: aircraft.aircraftType,
       position: aircraft.position,
+      altitudeMeters: aircraft.altitudeMeters,
+      targetAltitudeMeters: aircraft.targetAltitudeMeters,
       headingRad: aircraft.headingRad,
       status: aircraft.status,
+      damaged: aircraft.damaged,
       casPhase: casPhase(aircraft),
       order: aircraft.order,
       fuelFraction: aircraft.fuelSeconds / type.fuelSeconds,
@@ -430,7 +518,7 @@ export function aircraftTelemetry(truth: WorldTruth, air: AirConfig): AircraftTe
         aircraft.status === 'turnaround'
           ? aircraft.timerSeconds
           : aircraft.status === 'returning'
-            ? secondsToBase(aircraft, type, air) + type.turnaroundSeconds
+            ? secondsToBase(aircraft, type, air) + (aircraft.damaged ? type.repairSeconds : type.turnaroundSeconds)
             : 0,
     };
   });

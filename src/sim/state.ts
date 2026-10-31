@@ -1,3 +1,4 @@
+import { totalAmmunition } from '../domain/public/equipment';
 import type { UnitId, UnitKnowledge } from '../domain/public/ground';
 import type { GroundUnit, WorldTruth } from '../domain/truth/world';
 import { emptyPlayerKnowledge, type PlayerKnowledge } from '../knowledge/player-knowledge';
@@ -28,15 +29,24 @@ export function createInitialState(scenario: Scenario, seed: number): SimState {
         navOffset: { x: 0, y: 0 },
         personnel: unit.personnel,
         initialPersonnel: unit.personnel,
-        ammunition: unit.ammunition,
-        initialAmmunition: unit.ammunition,
+        equipment: unit.equipment,
+        initialAmmunition: totalAmmunition(unit.equipment),
+        firedWeapons: [],
+        firesAtAircraft: false,
+        nextAirFireTick: 0,
         morale: unit.morale,
         suppression: 0,
         posture: 'defending',
         mode: 'steady',
+        behavior: null,
+        behaviorSinceTick: 0,
         returnsUsed: 0,
         patrolIndex: 0,
         objective: unit.objective,
+        objectiveSchedule: unit.objectiveSchedule.map(({ fromSeconds, objective }) => ({
+          fromTick: fromSeconds,
+          objective,
+        })),
         fallback: unit.fallback,
         doctrine,
         activeFromTick: unit.activeFromSeconds,

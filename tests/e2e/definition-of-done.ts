@@ -162,6 +162,58 @@ async function main(): Promise<void> {
     await page.waitForTimeout(100);
     await setPaused(page, false);
 
+    console.log('Read coordinates on hover');
+    await page.locator('#map').hover({ position: pixel });
+    await page.waitForFunction(() => /^Grid \d{3}-\d{3} · \d+ m$/.test(document.querySelector('#cursor-grid')?.textContent ?? ''));
+    check(true, 'hovering the map shows the grid reference and elevation');
+    const fits = await page.evaluate(() => {
+      const holder = document.querySelector('#map-holder');
+      const map = document.querySelector<HTMLCanvasElement>('#map');
+      return holder !== null && map !== null && map.height === holder.clientHeight && map.width === holder.clientWidth;
+    });
+    check(fits, 'the canvas fits its container, so the scale bar is not cut off');
+    await shot(page, '3b-overlays');
+
+    console.log('Set an altitude on the profile');
+    const box = await page.locator('#altitude-profile').boundingBox();
+    if (box === null) throw new Error('no altitude profile');
+    const targetOf = (id: string) =>
+      page.evaluate(
+        (aircraftId) =>
+          (window as unknown as { airops: { view: () => PlayerView } }).airops.view().aircraft.find((a) => a.aircraftId === aircraftId)?.targetAltitudeMeters,
+        id,
+      );
+    const before = await targetOf('RECON-1');
+    const columnPixel = await page.evaluate(
+      () => (window as unknown as { airops: { app: { profileColumn: (id: string) => number | null } } }).airops.app.profileColumn('RECON-1'),
+    );
+    if (columnPixel === null) throw new Error('recon is not on the profile');
+    const column = box.x + columnPixel;
+    await page.mouse.move(column, box.y + box.height * 0.7);
+    await page.mouse.down();
+    await page.mouse.move(column, box.y + box.height * 0.3, { steps: 4 });
+    await page.mouse.up();
+    await page.waitForFunction(
+      (old) =>
+        (window as unknown as { airops: { view: () => PlayerView } }).airops.view().aircraft.find((a) => a.aircraftId === 'RECON-1')?.targetAltitudeMeters !== old,
+      before,
+    );
+    const after = await targetOf('RECON-1');
+    check((after ?? 0) > (before ?? 0) && (after ?? 0) % 100 === 0, `dragging the profile set a target of ${after} m`);
+    const sentNow = (await log()).commands.map((command) => command.kind);
+    check(sentNow.includes('setAltitude'), 'the altitude order is in the replayable command log');
+    await page.locator('[data-action="select-aircraft"][data-id="RECON-1"]').click();
+    await page.waitForFunction(() => document.querySelector<HTMLCanvasElement>('#path-profile')?.hidden === false);
+    check(true, 'selecting an aircraft shows the terrain along its path');
+    await shot(page, '3c-profile');
+
+    console.log('Read the battle summary');
+    await page.locator('[data-action="tab"][data-id="summary"]').click();
+    await page.waitForFunction(() => document.querySelector('#summary')?.textContent?.includes('Known forces'));
+    check(true, 'the summary tab shows the reported enemy picture');
+    await shot(page, '3d-summary');
+    await page.locator('[data-action="tab"][data-id="radio"]').click();
+
     console.log('Change speed, then play to the end');
     await page.locator('[data-action="speed"][data-id="8"]').click();
     await page.waitForSelector('[data-action="speed"][data-id="8"].active');
@@ -174,11 +226,49 @@ async function main(): Promise<void> {
     check(true, `the run ended: ${result}`);
     await shot(page, '4-end');
 
+    await page.locator('[data-action="tab"][data-id="summary"]').click();
+    await page.waitForFunction(() => document.querySelector('#summary')?.textContent?.includes('what really happened'));
+    check(true, 'the end of the run shows a debrief against the estimates');
+    await shot(page, '4b-debrief');
+
     console.log('Replay the session headlessly');
     const finalLog = await log();
     const hash = await page.evaluate(() => (window as unknown as { airops: Hook }).airops.session.stateHash());
     const replayed = runReplay(loadScenarioFile(), finalLog).at(-1);
     check(replayed === hash, `replay reproduces the final hash ${hash} over ${finalLog.ticks} ticks`);
+
+    console.log('Fly into a hidden air defense team');
+    let damaged = false;
+    for (let seed = 1; seed <= 6 && !damaged; seed += 1) {
+      await page.goto(`http://localhost:${PORT}/?seed=${seed}&speed=40`);
+      await page.waitForSelector('#clock');
+      for (const id of ['CAS-1', 'CAS-2']) {
+        await page.locator(`[data-action="select-aircraft"][data-id="${id}"]`).click();
+        await page.locator('[data-action="order"][data-kind="SupportArea"]').click();
+        await clickWorld(page, { x: 2700, y: 2250 });
+      }
+      damaged = await page
+        .waitForFunction(() => [...document.querySelectorAll('.aircraft-row')].some((r) => r.textContent?.includes('DAMAGED')), undefined, {
+          timeout: 60000,
+        })
+        .then(() => true)
+        .catch(() => false);
+    }
+    check(damaged, 'an aircraft over the team was hit, and the panel shows it damaged');
+    await page.waitForSelector('.log-row.ground_fire');
+    check(true, 'the ground fire report reached the radio log');
+    await page.locator('.aircraft-row:has-text("DAMAGED")').first().click();
+    await page.waitForFunction(() => /altitude \d+ m/.test(document.body.textContent ?? ''));
+    check(true, 'the aircraft panel shows altitude');
+    const marks = () =>
+      page.evaluate(() => (window as unknown as { airops: { view: () => PlayerView } }).airops.view().groundFire.length);
+    const start = await page.evaluate(() => (window as unknown as { airops: { view: () => PlayerView } }).airops.view().tick);
+    await page.waitForFunction(
+      (from) => (window as unknown as { airops: { view: () => PlayerView } }).airops.view().tick > from + 120,
+      start,
+    );
+    check((await marks()) > 0, 'the ground fire mark outlasts the short strike effects');
+    await shot(page, '5-damaged');
 
     check(errors.length === 0, `no browser errors${errors.length > 0 ? `: ${errors.join(' | ')}` : ''}`);
     console.log(`\nPASSED ${checks} checks. ${hook} exposes only the command log and hash.`);

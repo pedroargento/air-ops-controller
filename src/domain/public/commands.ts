@@ -7,6 +7,7 @@ export type ReportRequest = 'position' | 'sitrep' | 'contact';
 export type PlayerCommand =
   | Readonly<{ kind: 'noop'; tick: number }>
   | Readonly<{ kind: 'aircraftOrder'; tick: number; aircraftId: AircraftId; order: AircraftOrder }>
+  | Readonly<{ kind: 'setAltitude'; tick: number; aircraftId: AircraftId; meters: number }>
   | Readonly<{ kind: 'forwardContact'; tick: number; contactKey: string; recipients: readonly string[] }>
   | Readonly<{ kind: 'requestReport'; tick: number; unitId: string; report: ReportRequest }>
   | Readonly<{ kind: 'acknowledge'; tick: number; unitId: string; casAircraftId: AircraftId | null }>;

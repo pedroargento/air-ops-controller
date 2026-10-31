@@ -1,4 +1,5 @@
 import type { PlayerAction, PlayerCommand } from '../domain/public/commands';
+import type { Debrief } from '../domain/public/debrief';
 import { hashState } from '../domain/public/hash';
 import type { Outcome } from '../domain/truth/world';
 import { project, type PlayerView } from '../knowledge/player-view';
@@ -50,6 +51,24 @@ export class GameSession {
 
   get tick(): number {
     return this.state.tick;
+  }
+
+  /** The truth, only once the run is over and there is nothing left to learn from it. */
+  debrief(): Debrief | null {
+    if (this.outcome === 'running') return null;
+    const units = this.state.truth.units;
+    const count = (side: 'friendly' | 'enemy', read: (u: (typeof units)[number]) => number): number =>
+      units.filter((u) => u.side === side).reduce((sum, u) => sum + read(u), 0);
+    return {
+      enemyStart: count('enemy', (u) => u.initialPersonnel),
+      enemyLeft: count('enemy', (u) => u.personnel),
+      enemyFormations: units.filter((u) => u.side === 'enemy').length,
+      enemyDestroyed: units.filter((u) => u.side === 'enemy' && u.personnel <= 0).length,
+      enemyBroken: units.filter((u) => u.side === 'enemy' && u.personnel > 0 && u.mode === 'broken').length,
+      friendlyStart: count('friendly', (u) => u.initialPersonnel),
+      friendlyLeft: count('friendly', (u) => u.personnel),
+      friendlyDestroyed: units.filter((u) => u.side === 'friendly' && u.personnel <= 0).length,
+    };
   }
 
   view(): PlayerView {

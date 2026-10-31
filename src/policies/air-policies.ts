@@ -1,5 +1,7 @@
 import type { AircraftId, AircraftTelemetryEntry } from '../domain/public/air';
 import type { PlayerCommand } from '../domain/public/commands';
+import { isAntiAir } from '../domain/public/equipment';
+import { strengthMidpoint } from '../domain/public/estimates';
 import { distance, type Vec2 } from '../domain/public/geometry';
 import type { ContactMarker, PlayerView } from '../knowledge/player-view';
 
@@ -12,6 +14,10 @@ const FRESH_CONTACT_SECONDS = 120;
 const NEARBY_FORWARD_METERS = 1200;
 const DEFAULT_LAUNCH_RANGE_METERS = 1300;
 const SECOND_CAS_CONTACTS = 3;
+const THREAT_MEMORY_SECONDS = 900;
+const CAS_STATION_METERS = 650;
+const THREAT_STANDOFF_METERS = 900;
+const STRUCK_RADIUS_METERS = 300;
 
 export const noAir: Policy = () => [];
 
@@ -66,6 +72,7 @@ function freshAirContacts(view: PlayerView, objective: Vec2): readonly ContactMa
     .filter(
       (marker) =>
         marker.viaAircraft &&
+        marker.status !== 'destroyed' &&
         marker.contact.identification === 'hostile' &&
         marker.ageSeconds <= FRESH_CONTACT_SECONDS,
     )
@@ -75,6 +82,25 @@ function freshAirContacts(view: PlayerView, objective: Vec2): readonly ContactMa
         distance(a.contact.position.center, objective) - distance(b.contact.position.center, objective) ||
         (a.key < b.key ? -1 : 1),
     );
+}
+
+const isAntiAirContact = (marker: ContactMarker): boolean => marker.contact.observedWeapons.some(isAntiAir);
+
+/** Already hit recently, so another pass there is better spent on something else. */
+function recentlyStruck(view: PlayerView, marker: ContactMarker): boolean {
+  return view.log.some(
+    (message) =>
+      message.kind === 'STRIKE_RESULT' &&
+      view.tick - message.sentAt <= THREAT_MEMORY_SECONDS &&
+      distance(message.contact.position.center, marker.contact.position.center) <= STRUCK_RADIUS_METERS,
+  );
+}
+
+/** Where aircraft have recently been fired on, as far as the crews could tell. */
+function recentFireSources(view: PlayerView): readonly Vec2[] {
+  return view.log.flatMap((message) =>
+    message.kind === 'GROUND_FIRE' && view.tick - message.sentAt <= THREAT_MEMORY_SECONDS ? [message.source.center] : [],
+  );
 }
 
 function forwardNew(view: PlayerView, contacts: readonly ContactMarker[], forwarded: Set<string>): readonly PlayerCommand[] {
@@ -97,10 +123,28 @@ export function reconInformed(
   objective: Vec2,
   forward: boolean,
   launchRangeMeters: number = DEFAULT_LAUNCH_RANGE_METERS,
+  threatAware: boolean = true,
+  climbAfterFireMeters: number | null = null,
+  casTransitMeters: number | null = null,
 ): Policy {
   const forwarded = new Set<string>();
   return (view) => {
     const commands: PlayerCommand[] = [];
+    if (casTransitMeters !== null) {
+      // A pop-up attack: stay down on the way in, then climb to work the target.
+      for (const aircraft of cas(view)) {
+        const wanted = aircraft.status === 'onStation' ? CAS_STATION_METERS : casTransitMeters;
+        if (aircraft.targetAltitudeMeters === wanted) continue;
+        commands.push({ kind: 'setAltitude', tick: view.tick, aircraftId: aircraft.aircraftId, meters: wanted });
+      }
+    }
+    if (climbAfterFireMeters !== null && view.log.some((message) => message.kind === 'GROUND_FIRE')) {
+      // Recon can afford height. CAS can't: strikes are its job, and they suffer more than a hit costs.
+      for (const aircraft of view.aircraft) {
+        if (aircraft.aircraftType !== 'recon' || aircraft.targetAltitudeMeters === climbAfterFireMeters) continue;
+        commands.push({ kind: 'setAltitude', tick: view.tick, aircraftId: aircraft.aircraftId, meters: climbAfterFireMeters });
+      }
+    }
     for (const recon of view.aircraft) {
       if (recon.aircraftType === 'recon' && recon.status === 'ready') {
         commands.push({
@@ -112,11 +156,21 @@ export function reconInformed(
       }
     }
 
-    const contacts = freshAirContacts(view, objective);
+    const fireSources = threatAware ? recentFireSources(view) : [];
+    const safe = (marker: ContactMarker): boolean =>
+      isAntiAirContact(marker) ||
+      !fireSources.some((source) => distance(source, marker.contact.position.center) <= THREAT_STANDOFF_METERS);
+    const fresh = freshAirContacts(view, objective).filter(safe);
+    // Known air defense comes first: left alone it keeps taking aircraft out of the fight.
+    const byStrength = [...fresh].sort(
+      (a, b) => strengthMidpoint(b.contact.strength) - strengthMidpoint(a.contact.strength),
+    );
+    const priority = (marker: ContactMarker): boolean => isAntiAirContact(marker) && !recentlyStruck(view, marker);
+    const contacts = threatAware ? [...byStrength.filter(priority), ...byStrength.filter((m) => !priority(m))] : byStrength;
     const nearest = contacts[0];
     if (nearest !== undefined) {
       const point = nearest.contact.position.center;
-      const threatened = distance(point, objective) <= launchRangeMeters;
+      const threatened = priority(nearest) || distance(point, objective) <= launchRangeMeters;
       const committed = cas(view).filter(engaged).length;
       const wanted = contacts.length >= SECOND_CAS_CONTACTS ? 2 : 1;
       const ready = cas(view).filter((aircraft) => aircraft.status === 'ready');

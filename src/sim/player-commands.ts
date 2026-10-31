@@ -17,7 +17,7 @@ import {
 import type { Aircraft } from '../domain/truth/world';
 import { receiveByUnit } from '../knowledge/unit-knowledge';
 import type { Scenario } from '../scenario/load';
-import { aircraftTelemetry, applyOrder } from './air';
+import { aircraftTelemetry, applyOrder, setTargetAltitude } from './air';
 import { enqueue, linkedNodes, type PendingTransmission, type RadioState } from './radio';
 import type { SimState } from './state';
 
@@ -123,6 +123,11 @@ export function applyCommand(state: SimState, command: PlayerCommand, scenario: 
     case 'aircraftOrder': {
       const aircraft = aircraftById(state.truth.aircraft, command.aircraftId);
       if (aircraft !== undefined) applyOrder(aircraft, command.order, scenario.file.air);
+      return;
+    }
+    case 'setAltitude': {
+      const aircraft = aircraftById(state.truth.aircraft, command.aircraftId);
+      if (aircraft !== undefined) setTargetAltitude(aircraft, command.meters, scenario.file.air);
       return;
     }
     case 'forwardContact':

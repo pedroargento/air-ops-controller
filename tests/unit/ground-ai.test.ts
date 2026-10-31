@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decideGround } from '../../src/ai/decide-ground';
+import { decideGround, type BehaviorFireRates } from '../../src/ai/decide-ground';
 import type { ContactEstimate, Identification } from '../../src/domain/public/estimates';
 import {
   emptyKnowledge,
@@ -20,6 +20,7 @@ const doctrine: Doctrine = {
   supportHoldBonus: 0.5,
   reportMemorySeconds: 300,
   airCoverSeconds: 30,
+  airCoverRepeatSeconds: 300,
   engageRangeMeters: 300,
   closesToMeters: 40,
   pinnedSuppression: 0.7,
@@ -31,7 +32,18 @@ const doctrine: Doctrine = {
   returnMaxCasualties: 0.6,
   returnMinAmmoFraction: 0.1,
   maxReturns: 1,
+  standoffMeters: 150,
+  observeBias: 0.1,
+  probeBias: 0.1,
+  harassBias: 0.2,
+  assaultBias: 1.5,
+  burstSeconds: 120,
+  pauseSeconds: 180,
+  pressureMoraleFloor: 0.3,
+  airFireThreshold: 0.02,
 };
+
+const rates: BehaviorFireRates = { observe: 0.5, probe: 0.6, harass: 0.35, assault: 1, disengage: 0.5 };
 
 const self = (overrides: Partial<UnitSelf> = {}): UnitSelf => ({
   id: 'U' as UnitId,
@@ -43,9 +55,15 @@ const self = (overrides: Partial<UnitSelf> = {}): UnitSelf => ({
   initialPersonnel: 40,
   ammunition: 1000,
   initialAmmunition: 1000,
+  equipment: [],
+  supportWeapons: 3,
+  airWeapons: [],
   morale: 0.8,
   suppression: 0,
   mode: 'steady',
+  behavior: null,
+  behaviorSinceTick: 0,
+  groundCover: 0,
   returnsUsed: 0,
   patrolIndex: 0,
   objective: { kind: 'MoveTo', area: { center: { x: 1000, y: 0 }, radius: 40 } },
@@ -68,6 +86,7 @@ const estimate = (
   kind: 'infantry',
   activity: 'stationary',
   confidence: 'medium',
+  observedWeapons: [],
 });
 
 const contact = (x: number, id = 'C-1'): UnitKnowledge => ({
@@ -79,7 +98,8 @@ const report = (x: number, men: number): UnitKnowledge => ({
   reports: { 'OTHER/C-9': estimate(x, 'C-9', 'hostile', men) },
 });
 const nothing: UnitKnowledge = emptyKnowledge();
-const decide = (unit: UnitSelf, knowledge: UnitKnowledge, tick = 0) => decideGround(unit, knowledge, tick);
+const decide = (unit: UnitSelf, knowledge: UnitKnowledge, tick = 0) =>
+  decideGround(unit, knowledge, tick, rates);
 
 describe('decideGround', () => {
   it('applies the same rules to both sides', () => {
@@ -174,9 +194,23 @@ describe('decideGround', () => {
       expect(intent).toEqual({ kind: 'move', destination: { x: -500, y: 0 } });
     });
 
-    it('a patrol investigates a weaker reported force', () => {
+    it('a patrol investigates a weaker reported force, stopping at standoff', () => {
       const intent = decide(patrol, report(300, 6)).intent;
-      expect(intent).toEqual({ kind: 'move', destination: { x: 300, y: 0 } });
+      expect(intent).toEqual({ kind: 'move', destination: { x: 150, y: 0 } });
+      const near = self({ ...patrol, position: { x: 200, y: 0 } });
+      expect(decide(near, report(300, 6)).intent).toEqual({ kind: 'hold', posture: 'prone' });
+    });
+
+    it('a warned patrol that has reached its fallback stays and reinforces it', () => {
+      const back = self({ ...patrol, position: { x: -500, y: 0 } });
+      expect(decide(back, report(-300, 40)).intent).toEqual({ kind: 'hold', posture: 'defending' });
+    });
+
+    it('a holding unit told what is coming fights from prepared positions', () => {
+      const unit = self({ objective: { kind: 'HoldArea', area } });
+      const warned = { ...contact(200), reports: report(250, 80).reports };
+      expect(decide(unit, contact(200)).intent).toMatchObject({ kind: 'engage', prepared: false });
+      expect(decide(unit, warned).intent).toMatchObject({ kind: 'engage', prepared: true });
     });
 
     it('an advancing unit delays for a much stronger force on its route', () => {
@@ -206,6 +240,180 @@ describe('decideGround', () => {
       expect(decide(shaken, nothing).mode).toBe('withdrawing');
       expect(decide(shaken, expecting, 100).mode).toBe('steady');
       expect(decide(shaken, expecting, 201).mode).toBe('withdrawing');
+    });
+  });
+
+  describe('firing on aircraft', () => {
+    const manpads = {
+      weapon: 'MANPADS' as const,
+      count: 1,
+      definition: {
+        targetDomains: ['AIR' as const],
+        rangeMeters: 2500,
+        suppressionEffect: 0,
+        damageEffect: 0,
+        crewRequired: 2,
+        ammunitionPerUse: 1,
+        maxAltitudeMeters: 2500,
+        airHitChance: 0.3,
+        airCycleSeconds: 90,
+      },
+    };
+    const overhead = (tick: number, altitudeMeters = 300) => ({
+      ...emptyKnowledge(),
+      noticedAircraft: { position: { x: 100, y: 0 }, altitudeMeters, seenAt: tick },
+    });
+
+    it('fires when its weapon can reach a noticed aircraft', () => {
+      expect(decide(self({ airWeapons: [manpads] }), overhead(10), 10).firesAtAircraft).toBe(true);
+    });
+
+    it('stays concealed with no useful weapon, whatever its doctrine', () => {
+      expect(decide(self(), overhead(10), 10).firesAtAircraft).toBe(false);
+    });
+
+    it('stays concealed when the shot is not worth giving away its position', () => {
+      const cautious = { ...doctrine, airFireThreshold: 0.9 };
+      expect(decide(self({ doctrine: cautious, airWeapons: [manpads] }), overhead(10), 10).firesAtAircraft).toBe(false);
+    });
+
+    it('holds fire above the weapon\'s altitude, or once the aircraft is out of mind', () => {
+      const unit = self({ airWeapons: [manpads] });
+      expect(decide(unit, overhead(10, 3000), 10).firesAtAircraft).toBe(false);
+      expect(decide(unit, overhead(10), 100).firesAtAircraft).toBe(false);
+    });
+
+    it('applies the same rule to both sides, and a broken unit does not fire', () => {
+      const unit = self({ airWeapons: [manpads] });
+      expect(decide({ ...unit, side: 'friendly' }, overhead(10), 10).firesAtAircraft).toBe(true);
+      expect(decide({ ...unit, mode: 'broken' }, overhead(10), 10).firesAtAircraft).toBe(false);
+    });
+  });
+
+  describe('tactical behaviors', () => {
+    const screening: Doctrine = { ...doctrine, observeBias: 1, probeBias: 0, harassBias: 0.1, assaultBias: 0.1, standoffMeters: 300 };
+    const screen = (overrides: Partial<UnitSelf> = {}): UnitSelf =>
+      self({
+        doctrine: screening,
+        personnel: 12,
+        initialPersonnel: 12,
+        objective: { kind: 'PatrolArea', waypoints: [{ x: 1000, y: 0 }] },
+        ...overrides,
+      });
+    const harasser: Doctrine = { ...doctrine, observeBias: 0, probeBias: 0, harassBias: 1, assaultBias: 0, closesToMeters: null };
+    const pinned = (overrides: Partial<UnitSelf>): UnitSelf => self({ doctrine: harasser, ...overrides });
+
+    it('does not treat contact as a fight: a screen observes and holds fire', () => {
+      const decision = decide(screen(), contact(400));
+      expect(decision.behavior).toBe('observe');
+      expect(decision.intent).toEqual({ kind: 'hold', posture: 'prone' });
+    });
+
+    it('a screen pulls back when the enemy closes inside its standoff', () => {
+      const decision = decide(screen(), contact(200));
+      expect(decision.behavior).toBe('observe');
+      expect(decision.intent).toEqual({ kind: 'move', destination: { x: -300, y: 0 } });
+    });
+
+    it('a screen fired on returns fire while it breaks contact', () => {
+      const intent = decide(screen({ underFire: true }), contact(200)).intent;
+      expect(intent).toMatchObject({ kind: 'engage', fireRate: rates.observe, closeTo: { x: -300, y: 0 } });
+    });
+
+    it('an assault commits at full rate and keeps closing', () => {
+      const decision = decide(self(), contact(200));
+      expect(decision.behavior).toBe('assault');
+      expect(decision.intent).toMatchObject({ kind: 'engage', fireRate: 1, closeTo: { x: 200, y: 0 } });
+      const held = decide(self({ behavior: 'assault', behaviorSinceTick: 0 }), contact(200), 1000 % 20);
+      expect(held.behavior).toBe('assault');
+    });
+
+    it('harassment fires at a reduced rate, in bursts separated by pauses', () => {
+      const first = decide(pinned({}), contact(200), 0);
+      expect(first.behavior).toBe('harass');
+      expect(first.intent).toMatchObject({ kind: 'engage', fireRate: rates.harass, closeTo: null });
+      const burst = pinned({ behavior: 'harass', behaviorSinceTick: 0 });
+      expect(decide(burst, contact(200), 15).behavior).toBe('harass');
+      const after = { ...contact(200), contacts: { 'C-1': { ...estimate(200), position: { ...estimate(200).position, observedAt: 120 } } } };
+      const paused = decide(burst, after, 125);
+      expect(paused.behavior).toBe('observe');
+      expect(paused.behaviorSinceTick).toBe(125);
+      const resting = pinned({ behavior: 'observe', behaviorSinceTick: 125 });
+      expect(decide(resting, after, 130).behavior).toBe('observe');
+    });
+
+    it('moves into range before opening a probe or harassment', () => {
+      expect(decide(pinned({}), contact(450)).intent).toMatchObject({ kind: 'engage', closeTo: { x: 450, y: 0 } });
+    });
+
+    it('fears a stronger enemy: outnumbered units stop choosing assault', () => {
+      const cautious = { ...doctrine, harassBias: 0.5, assaultBias: 0.8 };
+      const unit = self({ doctrine: cautious, personnel: 20, initialPersonnel: 20 });
+      const weak = { ...emptyKnowledge(), contacts: { 'C-1': estimate(200, 'C-1', 'hostile', 10) } };
+      const strong = { ...emptyKnowledge(), contacts: { 'C-1': estimate(200, 'C-1', 'hostile', 80) } };
+      expect(decide(unit, weak).behavior).toBe('assault');
+      expect(decide(unit, strong).behavior).toBe('harass');
+    });
+
+    it('a report changes the behavior it chooses but never its objective', () => {
+      const cautious = { ...doctrine, harassBias: 0.5, assaultBias: 0.8 };
+      const unit = self({ doctrine: cautious, personnel: 20, initialPersonnel: 20 });
+      const weak = { ...emptyKnowledge(), contacts: { 'C-1': estimate(200, 'C-1', 'hostile', 10) } };
+      const told = { ...weak, reports: report(250, 80).reports };
+      expect(decide(unit, weak).behavior).toBe('assault');
+      expect(decide(unit, told).behavior).toBe('harass');
+      expect(decide(unit, told)).not.toHaveProperty('objective');
+    });
+
+    it('real expected support makes a unit readier to commit, until it lapses', () => {
+      const cautious = { ...doctrine, harassBias: 0.5, assaultBias: 0.42 };
+      const unit = self({ doctrine: cautious });
+      const support = { aircraftId: 'CAS-1', etaAt: 10, lapsesAt: 20 };
+      const expecting = { ...contact(200), expectedSupport: support };
+      expect(decide(unit, contact(200)).behavior).toBe('harass');
+      expect(decide(unit, expecting, 15).behavior).toBe('assault');
+    });
+
+    it('prefers harassing from good cover', () => {
+      const even = { ...doctrine, harassBias: 0.4, assaultBias: 0.5 };
+      expect(decide(self({ doctrine: even }), contact(200)).behavior).toBe('assault');
+      expect(decide(self({ doctrine: even, groundCover: 0.5 }), contact(200)).behavior).toBe('harass');
+    });
+
+    it('a screen stands and fights at the fallback it came back to', () => {
+      const back = screen({ position: { x: -500, y: 0 } });
+      expect(decide(back, contact(-400)).behavior).toBe('assault');
+      expect(decide(back, contact(-400)).intent.kind).toBe('engage');
+    });
+
+    it('a unit with no heavy weapons is less inclined to assault', () => {
+      const balanced = { ...doctrine, harassBias: 0.4, assaultBias: 0.5 };
+      expect(decide(self({ doctrine: balanced }), contact(200)).behavior).toBe('assault');
+      expect(decide(self({ doctrine: balanced, supportWeapons: 0 }), contact(200)).behavior).toBe('harass');
+    });
+
+    it('a holding unit has to defend an enemy on its position', () => {
+      const area = { center: { x: 0, y: 0 }, radius: 100 };
+      const unit = pinned({ objective: { kind: 'HoldArea', area } });
+      expect(decide(unit, contact(200)).behavior).toBe('assault');
+      expect(decide(unit, contact(300)).behavior).toBe('harass');
+    });
+
+    it('a withdrawing or recovering unit only returns fire', () => {
+      const under = { underFire: true, morale: 0.2 };
+      expect(decide(self({ ...under, mode: 'withdrawing' }), contact(200)).intent).toMatchObject({
+        kind: 'engage',
+        fireRate: rates.disengage,
+        closeTo: { x: -500, y: 0 },
+      });
+      expect(decide(self({ morale: 0.2, mode: 'withdrawing' }), contact(200)).intent.kind).toBe('move');
+      const holding = self({ ...under, mode: 'recovering', position: { x: -500, y: 0 } });
+      expect(decide(holding, contact(-400)).intent).toMatchObject({ kind: 'engage', closeTo: null });
+    });
+
+    it('noticing aircraft interrupts an assault without stopping its fire', () => {
+      const seen = { ...contact(200), hostileAircraftSeenAt: 0 };
+      expect(decide(self(), seen, 5).intent).toMatchObject({ kind: 'engage', closeTo: null });
     });
   });
 

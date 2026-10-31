@@ -1,10 +1,14 @@
 import type { AircraftTelemetry, AircraftTelemetryEntry } from '../domain/public/air';
 import type { Vec2 } from '../domain/public/geometry';
-import { cellAtIndex, type TerrainGrid } from '../domain/public/terrain';
+import { isAntiAir, type WeaponType } from '../domain/public/equipment';
+import { cellAtIndex, elevationAt, type TerrainGrid } from '../domain/public/terrain';
+import { distanceText, markerSize, scaleBarMeters, weaponTag } from './format';
+import { contourEdges, hillshade, shadedColor } from './terrain-shading';
 import type {
   ContactMarker,
   FriendlyMarkerView,
   PlayerView,
+  GroundFireEffect,
   ReachableRegion,
   StrikeEffect,
 } from '../knowledge/player-view';
@@ -32,6 +36,11 @@ const MAX_ZOOM = 6;
 const EDGE_MARGIN = 18;
 const STRIKE_LINE_SECONDS = 4;
 const STRIKE_FADE_SECONDS = 20;
+const SCALE_BAR_MAX_PIXELS = 140;
+const OVERLAY_MARGIN = 16;
+const TERRAIN_PIXELS_PER_CELL = 4;
+const CONTOUR_COLOR = 'rgba(45,30,10,0.28)';
+const ANTI_AIR_COLOR = '#ff3df0';
 
 export class MapView {
   private readonly ctx: CanvasRenderingContext2D;
@@ -39,11 +48,14 @@ export class MapView {
   private readonly worldSize: number;
   private center: Vec2;
   private zoom = 1;
+  private split: ReadonlySet<string> = new Set();
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly terrain: TerrainGrid,
     private readonly sensorRadius: (aircraft: AircraftTelemetryEntry) => number,
+    private readonly threatRadius: (weapons: readonly WeaponType[], altitudeMeters: number) => number,
+    private readonly friendlyStrength: Readonly<Record<string, number>>,
   ) {
     const context = canvas.getContext('2d');
     if (context === null) throw new Error('Canvas 2D is unavailable');
@@ -56,16 +68,28 @@ export class MapView {
   private paintTerrain(): HTMLCanvasElement {
     const { terrain } = this;
     const image = document.createElement('canvas');
-    image.width = terrain.width;
-    image.height = terrain.height;
+    image.width = terrain.width * TERRAIN_PIXELS_PER_CELL;
+    image.height = terrain.height * TERRAIN_PIXELS_PER_CELL;
     const context = image.getContext('2d');
     if (context === null) throw new Error('Canvas 2D is unavailable');
-    context.fillStyle = '#000000';
-    context.fillRect(0, 0, image.width, image.height);
-    for (let index = 0; index < terrain.classIndex.length; index += 1) {
-      context.globalAlpha = 0.65 + (terrain.elevation[index] ?? 0) / 250;
-      context.fillStyle = TERRAIN_COLORS[cellAtIndex(terrain, index).terrainClass] ?? '#000000';
-      context.fillRect(index % terrain.width, Math.floor(index / terrain.width), 1, 1);
+    for (let row = 0; row < terrain.height; row += 1) {
+      for (let column = 0; column < terrain.width; column += 1) {
+        const index = row * terrain.width + column;
+        const color = TERRAIN_COLORS[cellAtIndex(terrain, index).terrainClass] ?? '#000000';
+        const lift = 0.85 + (terrain.elevation[index] ?? 0) / 1200;
+        context.fillStyle = shadedColor(color, lift * hillshade(terrain, column, row));
+        context.fillRect(column * TERRAIN_PIXELS_PER_CELL, row * TERRAIN_PIXELS_PER_CELL, TERRAIN_PIXELS_PER_CELL, TERRAIN_PIXELS_PER_CELL);
+      }
+    }
+    context.fillStyle = CONTOUR_COLOR;
+    for (let row = 0; row < terrain.height; row += 1) {
+      for (let column = 0; column < terrain.width; column += 1) {
+        const { east, south } = contourEdges(terrain, column, row);
+        const x = (column + 1) * TERRAIN_PIXELS_PER_CELL;
+        const y = (row + 1) * TERRAIN_PIXELS_PER_CELL;
+        if (east) context.fillRect(x - 1, y - TERRAIN_PIXELS_PER_CELL, 1, TERRAIN_PIXELS_PER_CELL);
+        if (south) context.fillRect(x - TERRAIN_PIXELS_PER_CELL, y - 1, TERRAIN_PIXELS_PER_CELL, 1);
+      }
     }
     return image;
   }
@@ -121,6 +145,26 @@ export class MapView {
     };
   }
 
+  showSplit(split: ReadonlySet<string>): void {
+    this.split = split;
+  }
+
+  /** What the map draws: consolidated markers, except groups the player has split apart. */
+  private shownContacts(view: PlayerView): readonly ContactMarker[] {
+    return view.contacts.flatMap((marker) =>
+      this.split.has(marker.key) ? [{ ...marker, members: [] }, ...marker.members] : [marker],
+    );
+  }
+
+  /** The ground fire mark under the cursor. Marks are reports, so they aren't selectable. */
+  groundFireAt(pixel: Vec2, view: PlayerView): GroundFireEffect | null {
+    const near = (fire: GroundFireEffect): boolean => {
+      const at = this.toScreen(fire.position);
+      return Math.hypot(at.x - pixel.x, at.y - pixel.y) <= HIT_RADIUS_PIXELS;
+    };
+    return view.groundFire.find(near) ?? null;
+  }
+
   /** Everything under the cursor, nearest first, so overlapping markers can all be reached. */
   hitsAt(pixel: Vec2, view: PlayerView): readonly MapHit[] {
     const hits: { hit: MapHit; gap: number }[] = [];
@@ -135,13 +179,13 @@ export class MapView {
     for (const friendly of view.friendlies) {
       consider(this.toScreen(friendly.position.center), { kind: 'friendly', id: friendly.unitId });
     }
-    for (const marker of view.contacts) {
+    for (const marker of this.shownContacts(view)) {
       consider(this.toScreen(marker.contact.position.center), { kind: 'contact', key: marker.key });
     }
     return hits.sort((a, b) => a.gap - b.gap).map(({ hit }) => hit);
   }
 
-  render(view: PlayerView, selection: Selection): void {
+  render(view: PlayerView, selection: Selection, threatAltitudeMeters: number): void {
     const { ctx, canvas } = this;
     ctx.fillStyle = '#10140f';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -152,7 +196,8 @@ export class MapView {
     this.drawGrid(origin, size);
 
     const shown = (fade: number, selected: boolean): number => (selected ? Math.max(fade, 0.6) : fade);
-    for (const marker of view.contacts) {
+    const contacts = this.shownContacts(view);
+    for (const marker of contacts) {
       const selected = selection?.kind === 'contact' && selection.key === marker.key;
       this.drawRegion(marker.region, shown(marker.regionOpacity, selected), '#ff6b5a');
     }
@@ -160,14 +205,16 @@ export class MapView {
       const selected = selection?.kind === 'friendly' && selection.id === friendly.unitId;
       this.drawRegion(friendly.region, shown(friendly.regionOpacity, selected), '#59a8ff');
     }
-    for (const marker of view.contacts) {
-      this.drawContact(marker, selection?.kind === 'contact' && selection.key === marker.key);
+    for (const marker of contacts) {
+      const selected = selection?.kind === 'contact' && selection.key === marker.key;
+      if (selected) this.drawThreatRing(marker, threatAltitudeMeters);
+      this.drawContact(marker, selected);
     }
     for (const friendly of view.friendlies) {
       this.drawFriendly(friendly, selection?.kind === 'friendly' && selection.id === friendly.unitId);
     }
-    for (const marker of view.contacts) {
-      if (marker.engaging) this.drawFireRing(marker.contact.position.center, view.tick);
+    for (const marker of contacts) {
+      if (marker.engaging && marker.status !== 'destroyed') this.drawFireRing(marker.contact.position.center, view.tick);
     }
     for (const friendly of view.friendlies) {
       if (friendly.engaging) this.drawFireRing(friendly.position.center, view.tick);
@@ -180,6 +227,55 @@ export class MapView {
       this.drawAircraft(aircraft, selection?.kind === 'aircraft' && selection.id === aircraft.aircraftId);
     }
     for (const strike of view.strikes) this.drawStrike(strike, view.aircraft);
+    for (const fire of view.groundFire) this.drawGroundFire(fire);
+    this.drawScaleBar();
+    this.drawNorthArrow();
+  }
+
+  private drawScaleBar(): void {
+    const { ctx, canvas } = this;
+    const meters = scaleBarMeters(this.pixelsPerMeter, SCALE_BAR_MAX_PIXELS);
+    const width = meters * this.pixelsPerMeter;
+    const left = OVERLAY_MARGIN;
+    const y = canvas.height - OVERLAY_MARGIN;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(left - 6, y - 24, width + 12, 34);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(left, y - 6);
+    ctx.lineTo(left, y);
+    ctx.lineTo(left + width, y);
+    ctx.lineTo(left + width, y - 6);
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(distanceText(meters), left + width / 2, y - 9);
+    ctx.textAlign = 'left';
+  }
+
+  /** The map never rotates and world y grows southward, so north is always up. */
+  private drawNorthArrow(): void {
+    const { ctx, canvas } = this;
+    const x = canvas.width - OVERLAY_MARGIN - 12;
+    const y = OVERLAY_MARGIN + 12;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.beginPath();
+    ctx.arc(x, y + 6, 22, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(x, y - 12);
+    ctx.lineTo(x + 7, y + 6);
+    ctx.lineTo(x, y + 2);
+    ctx.lineTo(x - 7, y + 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('N', x, y + 20);
+    ctx.textAlign = 'left';
   }
 
   /** Pulsing ring on anything reported or seen fighting. */
@@ -192,6 +288,53 @@ export class MapView {
     ctx.globalAlpha = 0.9 - pulse * 0.6;
     ctx.beginPath();
     ctx.arc(at.x, at.y, 13 + pulse * 9, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  /** Where the weapons seen on this contact are a real danger to aircraft at their altitude. */
+  private drawThreatRing(marker: ContactMarker, altitudeMeters: number): void {
+    const { ctx } = this;
+    const height = Math.max(0, altitudeMeters - elevationAt(this.terrain, marker.contact.position.center));
+    const radius = this.threatRadius(marker.contact.observedWeapons, height) * this.pixelsPerMeter;
+    if (radius <= 0) return;
+    const at = this.toScreen(marker.contact.position.center);
+    ctx.strokeStyle = ANTI_AIR_COLOR;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 6]);
+    ctx.beginPath();
+    ctx.arc(at.x, at.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  private drawTag(text: string, x: number, y: number, color: string): void {
+    const { ctx } = this;
+    ctx.font = 'bold 11px monospace';
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#000000';
+    ctx.strokeText(text, x, y);
+    ctx.lineJoin = 'miter';
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y);
+  }
+
+  /** A red cross at the reported source of ground fire, heavier when it scored a hit. */
+  private drawGroundFire(fire: GroundFireEffect): void {
+    const { ctx } = this;
+    const at = this.toScreen(fire.position);
+    const size = fire.hit ? 10 : 7;
+    ctx.globalAlpha = fire.opacity;
+    const tag = fire.weapon === null ? null : weaponTag([fire.weapon]);
+    if (tag !== null) this.drawTag(tag, at.x + size + 3, at.y + 4, ANTI_AIR_COLOR);
+    ctx.strokeStyle = '#ff4d4d';
+    ctx.lineWidth = fire.hit ? 3 : 2;
+    ctx.beginPath();
+    ctx.moveTo(at.x - size, at.y - size);
+    ctx.lineTo(at.x + size, at.y + size);
+    ctx.moveTo(at.x + size, at.y - size);
+    ctx.lineTo(at.x - size, at.y + size);
     ctx.stroke();
     ctx.globalAlpha = 1;
   }
@@ -264,31 +407,82 @@ export class MapView {
   private drawContact(marker: ContactMarker, selected: boolean): void {
     const { ctx } = this;
     const at = this.toScreen(marker.contact.position.center);
-    const size = 8;
+    const size = markerSize(marker.contact.strength);
     ctx.globalAlpha = marker.opacity;
-    ctx.fillStyle = marker.contact.identification === 'hostile' ? '#e8483a' : '#e0b040';
-    ctx.strokeStyle = selected ? '#ffffff' : '#000000';
-    ctx.lineWidth = selected ? 2.5 : 1;
+    if (marker.status === 'destroyed') {
+      this.drawDestroyed(at, size);
+      ctx.globalAlpha = 1;
+      return;
+    }
+    const color = marker.contact.identification === 'hostile' ? '#e8483a' : '#e0b040';
+    const hollow = marker.status === 'not-found' || marker.contact.strength.kind === 'unknown';
+    ctx.fillStyle = color;
+    ctx.strokeStyle = selected ? '#ffffff' : hollow ? color : '#000000';
+    ctx.lineWidth = selected ? 2.5 : hollow ? 2 : 1;
     ctx.beginPath();
     ctx.moveTo(at.x, at.y - size);
     ctx.lineTo(at.x + size, at.y);
     ctx.lineTo(at.x, at.y + size);
     ctx.lineTo(at.x - size, at.y);
     ctx.closePath();
-    ctx.fill();
+    if (!hollow) ctx.fill();
     ctx.stroke();
+    if (marker.status === 'hit') this.drawHitTick(at, size);
+    const weapons = marker.contact.observedWeapons;
+    const antiAir = weapons.some(isAntiAir);
+    if (antiAir) {
+      ctx.strokeStyle = ANTI_AIR_COLOR;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(at.x - 8, at.y - size - 3);
+      ctx.lineTo(at.x, at.y - size - 11);
+      ctx.lineTo(at.x + 8, at.y - size - 3);
+      ctx.stroke();
+    }
+    const tag = weaponTag(weapons);
+    if (tag !== null) this.drawTag(tag, at.x + size + 4, at.y + 4, antiAir ? ANTI_AIR_COLOR : '#ffffff');
+    if (marker.members.length > 0) {
+      this.drawTag(`×${marker.members.length + 1}`, at.x + size + 4, at.y - size, '#ffffff');
+    }
     ctx.globalAlpha = 1;
+  }
+
+  private drawHitTick(at: Vec2, size: number): void {
+    const { ctx } = this;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(at.x - size / 2, at.y + size / 2);
+    ctx.lineTo(at.x + size / 2, at.y - size / 2);
+    ctx.stroke();
+  }
+
+  private drawDestroyed(at: Vec2, size: number): void {
+    const { ctx } = this;
+    ctx.strokeStyle = '#b8b8b8';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(at.x - size, at.y - size);
+    ctx.lineTo(at.x + size, at.y + size);
+    ctx.moveTo(at.x + size, at.y - size);
+    ctx.lineTo(at.x - size, at.y + size);
+    ctx.stroke();
   }
 
   private drawFriendly(friendly: FriendlyMarkerView, selected: boolean): void {
     const { ctx } = this;
     const at = this.toScreen(friendly.position.center);
+    const personnel = friendly.statusReport?.personnel ?? this.friendlyStrength[friendly.unitId] ?? 0;
+    const width = personnel <= 14 ? 12 : personnel <= 50 ? 18 : 24;
+    const height = (width * 2) / 3;
     ctx.globalAlpha = friendly.opacity;
     ctx.fillStyle = '#3f8fe8';
-    ctx.strokeStyle = selected ? '#ffffff' : '#000000';
-    ctx.lineWidth = selected ? 2.5 : 1;
-    ctx.fillRect(at.x - 9, at.y - 6, 18, 12);
-    ctx.strokeRect(at.x - 9, at.y - 6, 18, 12);
+    ctx.strokeStyle = selected ? '#ffffff' : friendly.silent ? '#ffd24a' : '#000000';
+    ctx.lineWidth = selected ? 2.5 : friendly.silent ? 2 : 1;
+    if (friendly.silent) ctx.setLineDash([3, 3]);
+    else ctx.fillRect(at.x - width / 2, at.y - height / 2, width, height);
+    ctx.strokeRect(at.x - width / 2, at.y - height / 2, width, height);
+    ctx.setLineDash([]);
     ctx.globalAlpha = 1;
   }
 

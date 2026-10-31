@@ -45,6 +45,22 @@ export function elevationAt(grid: TerrainGrid, position: Vec2): number {
 const EYE_HEIGHT_METERS = 2;
 
 /**
+ * Whether terrain lets a ground position and something in the air see each other, in both
+ * directions. Vegetation is left out: `airConcealment` and `airObstruction` cover it.
+ */
+export function hasAirLos(grid: TerrainGrid, ground: Vec2, air: Vec2, altitudeMeters: number): boolean {
+  const gap = hypot(air.x - ground.x, air.y - ground.y);
+  const samples = Math.floor(gap / grid.cellSize);
+  const start = elevationAt(grid, ground) + EYE_HEIGHT_METERS;
+  for (let i = 1; i < samples; i += 1) {
+    const t = i / samples;
+    const point = { x: ground.x + (air.x - ground.x) * t, y: ground.y + (air.y - ground.y) * t };
+    if (elevationAt(grid, point) > start + (altitudeMeters - start) * t) return false;
+  }
+  return true;
+}
+
+/**
  * Samples the cells between two points. Line of sight fails when terrain rises
  * above the sight line or when accumulated vegetation obstruction reaches 1.
  */

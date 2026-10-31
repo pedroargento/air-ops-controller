@@ -9,13 +9,16 @@ import type {
   ReportKind,
   ReportNeed,
 } from '../domain/public/radio';
+import { strengthMidpoint } from '../domain/public/estimates';
 import type { RadioConfig } from '../scenario/schema';
 
 export const REPORT_PRIORITY: Readonly<Record<ReportKind, number>> = {
   TIC: 0,
   SUPPORT_REQUEST: 1,
-  CONTACT_REPORT: 2,
-  SITREP: 3,
+  // Ahead of contact reports: a unit in a heavy fight always has another contact to
+  // report, and its own casualties would otherwise never get through.
+  SITREP: 2,
+  CONTACT_REPORT: 3,
   POSITION_REPORT: 4,
 };
 
@@ -31,19 +34,47 @@ export function initialRadioMemory(personnel: number): RadioMemory {
   };
 }
 
-function nearestHostile(self: UnitSelf, knowledge: UnitKnowledge, within: number): ContactEstimate | null {
+/** The hostile within reach that the unit believes is strongest, breaking ties by contact ID. */
+function strongestHostile(self: UnitSelf, knowledge: UnitKnowledge, within: number): ContactEstimate | null {
   let best: ContactEstimate | null = null;
-  let bestRange = within;
   for (const id of Object.keys(knowledge.contacts).sort()) {
     const contact = knowledge.contacts[id];
     if (contact === undefined || contact.identification !== 'hostile') continue;
-    const range = distance(self.position, contact.position.center);
-    if (range <= bestRange) {
-      best = contact;
-      bestRange = range;
-    }
+    if (distance(self.position, contact.position.center) > within) continue;
+    if (best === null || strengthMidpoint(contact.strength) > strengthMidpoint(best.strength)) best = contact;
   }
   return best;
+}
+
+function hostileOnObjective(self: UnitSelf, threat: ContactEstimate): boolean {
+  const { objective } = self;
+  return (
+    objective.kind === 'HoldArea' &&
+    distance(threat.position.center, objective.area.center) <= objective.area.radius + self.doctrine.standoffMeters
+  );
+}
+
+/** Whether a fight is serious enough to report as a TIC, from the unit's own beliefs (§6.2.1). */
+function declaresTic(self: UnitSelf, threat: ContactEstimate, config: RadioConfig): boolean {
+  if (!self.underFire) return false;
+  const lost = 1 - self.personnel / self.initialPersonnel;
+  return (
+    strengthMidpoint(threat.strength) / self.personnel >= config.ticStrengthRatio ||
+    lost >= config.ticCasualtyFraction ||
+    self.suppression >= self.doctrine.pinnedSuppression ||
+    hostileOnObjective(self, threat)
+  );
+}
+
+/** Whether the unit judges that it can't deal with the fight on its own. */
+function needsSupport(self: UnitSelf, threat: ContactEstimate, config: RadioConfig): boolean {
+  const lost = 1 - self.personnel / self.initialPersonnel;
+  return (
+    strengthMidpoint(threat.strength) / self.personnel >= config.supportStrengthRatio ||
+    lost >= config.supportCasualtyFraction ||
+    self.ammunition <= self.initialAmmunition * config.supportAmmunitionFraction ||
+    hostileOnObjective(self, threat)
+  );
 }
 
 export type ReportDecision = Readonly<{ needs: readonly ReportNeed[]; memory: RadioMemory }>;
@@ -63,8 +94,8 @@ export function decideReports(
   const needs: ReportNeed[] = [];
   let next = memory;
 
-  const threat = nearestHostile(self, knowledge, config.ticRangeMeters);
-  const inContact = threat !== null && (self.underFire || self.ammunition < self.initialAmmunition);
+  const threat = strongestHostile(self, knowledge, config.ticRangeMeters);
+  const inContact = threat !== null && declaresTic(self, threat, config);
   const ticDue = next.lastTicAt === null || tick - next.lastTicAt >= config.ticCooldownSeconds;
   if (inContact && ticDue) {
     needs.push({ kind: 'TIC', contactId: threat.contactId });
@@ -77,7 +108,7 @@ export function decideReports(
   const acknowledged =
     next.supportAcknowledgedAt !== null &&
     tick - next.supportAcknowledgedAt < config.supportRequestCooldownSeconds;
-  if (inContact && canRequestSupport && requestDue && !acknowledged) {
+  if (inContact && needsSupport(self, threat, config) && canRequestSupport && requestDue && !acknowledged) {
     needs.push({ kind: 'SUPPORT_REQUEST', contactId: null });
     next = { ...next, lastSupportRequestAt: tick };
   }

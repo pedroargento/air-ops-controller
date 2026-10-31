@@ -1,3 +1,4 @@
+import type { WeaponType } from './equipment';
 import type { ContactEstimate, PositionEstimate } from './estimates';
 import type { ContactId, GroundMode } from './ground';
 
@@ -34,7 +35,17 @@ export type RadioMessage =
       Readonly<{ kind: 'ACKNOWLEDGEMENT'; support: ExpectedSupport | null; supportCancelled: boolean }>)
   | (MessageMeta & Readonly<{ kind: 'INTEL_REPORT'; contact: ContactEstimate }>)
   | (MessageMeta &
-      Readonly<{ kind: 'STRIKE_RESULT'; contact: ContactEstimate; effect: 'effect-observed' | 'no-effect-observed' }>);
+      Readonly<{
+        kind: 'STRIKE_RESULT';
+        contact: ContactEstimate;
+        effect: 'effect-observed' | 'no-effect-observed';
+        assessment: StrikeAssessment | null;
+      }>)
+  | (MessageMeta &
+      Readonly<{ kind: 'GROUND_FIRE'; source: PositionEstimate; weapon: WeaponType | null; hit: boolean }>);
+
+// The crew's estimate, never a true count. It exists only when they saw an effect.
+export type StrikeAssessment = Readonly<{ estimatedCasualties: number; destroyed: boolean }>;
 
 export type ExpectedSupport = Readonly<{
   aircraftId: string;

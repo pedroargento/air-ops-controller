@@ -24,6 +24,7 @@ const contact: ContactEstimate = {
   kind: 'infantry',
   activity: 'moving',
   confidence: 'medium',
+  observedWeapons: [],
 };
 
 function setup() {
@@ -36,12 +37,18 @@ function setup() {
     ownPosition: { center: { x: 512, y: 488 }, sigmaMeters: 40, headingRad: null, speedMps: null, observedAt: 0 },
     personnel: unit.personnel,
     initialPersonnel: unit.initialPersonnel,
-    ammunition: unit.ammunition,
+    ammunition: unit.initialAmmunition,
     initialAmmunition: unit.initialAmmunition,
+    equipment: unit.equipment,
+    supportWeapons: 1,
+    airWeapons: [],
     morale: unit.morale,
     suppression: 0,
     underFire: false,
     mode: 'steady',
+    behavior: null,
+    behaviorSinceTick: 0,
+    groundCover: 0,
     returnsUsed: 0,
     patrolIndex: 0,
     objective: unit.objective,
@@ -58,6 +65,7 @@ function setup() {
 }
 
 const need: ReportNeed = { kind: 'POSITION_REPORT', contactId: null };
+const faraway: UnitSelf['objective'] = { kind: 'MoveTo', area: { center: { x: 0, y: 0 }, radius: 10 } };
 
 function runSeconds(s: ReturnType<typeof setup>, seconds: number, from = 0): void {
   for (let tick = from; tick < from + seconds; tick += 1) {
@@ -82,7 +90,7 @@ describe('radio tasks', () => {
   it('runs at full speed when idle, modestly slower when engaging, and stops under heavy suppression', () => {
     const { unit } = setup();
     expect(radioRate(unit, config)).toBe(1);
-    unit.intent = { kind: 'engage', contactId: 'C-1' as ContactId, closeTo: null };
+    unit.intent = { kind: 'engage', contactId: 'C-1' as ContactId, closeTo: null, fireRate: 1, prepared: false };
     expect(radioRate(unit, config)).toBe(config.engagedRate);
     expect(config.engagedRate).toBeGreaterThan(0.5);
     unit.suppression = config.interruptSuppression;
@@ -140,6 +148,49 @@ describe('deciding what to report', () => {
     expect(decide(self, emptyKnowledge()).needs.map((n) => n.kind)).not.toContain('TIC');
     const kinds = decide({ ...self, underFire: true }, inContact).needs.map((n) => n.kind);
     expect(kinds).toEqual(expect.arrayContaining(['TIC', 'SUPPORT_REQUEST', 'CONTACT_REPORT']));
+  });
+
+  it('does not declare a TIC for an unthreatening contact, even after firing', () => {
+    const { self } = setup();
+    const weak = { ...contact, strength: { kind: 'range' as const, min: 2, max: 6 } };
+    const near = { ...emptyKnowledge(), contacts: { 'C-1': { ...weak, position: { ...weak.position, center: self.position } } } };
+    const fired = { ...self, ammunition: self.initialAmmunition - 100, objective: faraway };
+    expect(decide(fired, near).needs.map((n) => n.kind)).not.toContain('TIC');
+    expect(decide({ ...fired, underFire: true }, near).needs.map((n) => n.kind)).not.toContain('TIC');
+  });
+
+  it('can declare a TIC without asking for air support', () => {
+    const { self } = setup();
+    const even = { ...contact, strength: { kind: 'range' as const, min: 45, max: 55 } };
+    const near = { ...emptyKnowledge(), contacts: { 'C-1': { ...even, position: { ...even.position, center: self.position } } } };
+    const needs = decide({ ...self, underFire: true, objective: faraway }, near).needs.map((n) => n.kind);
+    expect(needs).toContain('TIC');
+    expect(needs).not.toContain('SUPPORT_REQUEST');
+  });
+
+  it('asks for air support when it judges its own resources insufficient', () => {
+    const { self } = setup();
+    const even = { ...contact, strength: { kind: 'range' as const, min: 45, max: 55 } };
+    const near = { ...emptyKnowledge(), contacts: { 'C-1': { ...even, position: { ...even.position, center: self.position } } } };
+    const low = { ...self, underFire: true, objective: faraway, ammunition: self.initialAmmunition * 0.1 };
+    expect(decide(low, near).needs.map((n) => n.kind)).toContain('SUPPORT_REQUEST');
+    const bloodied = { ...self, underFire: true, objective: faraway, personnel: 30 };
+    expect(decide(bloodied, near).needs.map((n) => n.kind)).toContain('SUPPORT_REQUEST');
+  });
+
+  it('treats an enemy on its position as a threat whatever its size', () => {
+    const { self } = setup();
+    const weak = { ...contact, strength: { kind: 'range' as const, min: 2, max: 6 } };
+    const near = { ...emptyKnowledge(), contacts: { 'C-1': { ...weak, position: { ...weak.position, center: self.position } } } };
+    const kinds = decide({ ...self, underFire: true }, near).needs.map((n) => n.kind);
+    expect(kinds).toEqual(expect.arrayContaining(['TIC', 'SUPPORT_REQUEST']));
+  });
+
+  it('gets a status report through ahead of routine contact reports', () => {
+    const s = setup();
+    enqueue(s.unitRadio, { kind: 'CONTACT_REPORT', contactId: 'C-1' as ContactId }, 10);
+    enqueue(s.unitRadio, { kind: 'SITREP', contactId: null }, 20);
+    expect(s.unitRadio.queue.map((t) => t.need.kind)).toEqual(['SITREP', 'CONTACT_REPORT']);
   });
 
   it('paces repeat TICs', () => {

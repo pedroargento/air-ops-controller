@@ -1,3 +1,4 @@
+import type { WeaponType } from './equipment';
 import type { Vec2 } from './geometry';
 import type { ContactId } from './ground';
 
@@ -27,6 +28,7 @@ export type ContactEstimate = Readonly<{
   kind: 'infantry' | 'vehicle' | 'unknown';
   activity: ContactActivity;
   confidence: Confidence;
+  observedWeapons: readonly WeaponType[];
 }>;
 
 const STRENGTH_CATEGORIES: readonly (readonly [min: number, max: number])[] = [

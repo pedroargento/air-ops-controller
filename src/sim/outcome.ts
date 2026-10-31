@@ -1,10 +1,11 @@
+import { totalAmmunition } from '../domain/public/equipment';
 import { distance } from '../domain/public/geometry';
 import type { GroundUnit, WorldTruth } from '../domain/truth/world';
 import type { CaptureConfig } from '../scenario/schema';
 
 /** Personnel who can still fight: unbroken, not retreating, with ammunition left. */
 export function effectiveStrength(unit: GroundUnit): number {
-  if (unit.personnel <= 0 || unit.ammunition <= 0) return 0;
+  if (unit.personnel <= 0 || totalAmmunition(unit.equipment) <= 0) return 0;
   return unit.mode === 'steady' ? unit.personnel : 0;
 }
 

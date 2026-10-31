@@ -1,11 +1,13 @@
 // Hidden ground truth. Only sim, perception, scenario, debug and cli may import this.
 import type { AircraftId, AircraftOrder, AircraftStatus, AircraftType } from '../public/air';
+import type { Equipment, WeaponType } from '../public/equipment';
 import type { ContactActivity, ContactEstimate } from '../public/estimates';
 import type { Vec2 } from '../public/geometry';
 import type {
   Area,
   ContactId,
   Doctrine,
+  GroundBehavior,
   GroundIntent,
   GroundMode,
   GroundObjective,
@@ -13,6 +15,9 @@ import type {
   Side,
   UnitId,
 } from '../public/ground';
+
+// An authored change of standing orders, from the scenario file (§11).
+export type ScheduledObjective = Readonly<{ fromTick: number; objective: GroundObjective }>;
 
 export type GroundUnit = {
   id: UnitId;
@@ -22,15 +27,21 @@ export type GroundUnit = {
   navOffset: Vec2;
   personnel: number;
   initialPersonnel: number;
-  ammunition: number;
+  equipment: Equipment[];
   initialAmmunition: number;
+  firedWeapons: readonly WeaponType[];
+  firesAtAircraft: boolean;
+  nextAirFireTick: number;
   morale: number;
   suppression: number;
   posture: GroundPosture;
   mode: GroundMode;
+  behavior: GroundBehavior | null;
+  behaviorSinceTick: number;
   returnsUsed: number;
   patrolIndex: number;
   objective: GroundObjective;
+  objectiveSchedule: readonly ScheduledObjective[];
   fallback: Area;
   doctrine: Doctrine;
   activeFromTick: number;
@@ -59,8 +70,12 @@ export type Aircraft = {
   id: AircraftId;
   aircraftType: AircraftType;
   position: Vec2;
+  altitudeMeters: number;
+  targetAltitudeMeters: number;
   headingRad: number;
   status: AircraftStatus;
+  damaged: boolean;
+  lastFiredOnTick: number | null;
   order: AircraftOrder | null;
   timerSeconds: number;
   fuelSeconds: number;

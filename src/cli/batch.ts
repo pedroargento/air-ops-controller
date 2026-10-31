@@ -3,9 +3,11 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { Policy } from '../policies/air-policies';
 import type { Scenario } from '../scenario/load';
+import type { GroundBehavior } from '../domain/public/ground';
 import { runBattle, type BattleResult } from './battle';
 import { loadScenarioFile } from './load-scenario';
 import { policies } from './policy-registry';
+import type { WithdrawalTrigger } from './tempo';
 
 function option(name: string, fallback: string): string {
   const index = process.argv.indexOf(`--${name}`);
@@ -25,12 +27,78 @@ export type Summary = Readonly<{
   meanStrikePasses: number;
   meanUnusedOrdnance: number;
   meanResponseMinutes: number | null;
+  meanAircraftHits: number;
+  runsWithHit: number;
+  tempo: TempoSummary;
+}>;
+
+export type TempoSummary = Readonly<{
+  fireMinuteShare: number;
+  bouts: number;
+  meanBoutMinutes: number;
+  friendlyCasualtiesPerMinute: number;
+  enemyCasualtiesPerMinute: number;
+  suppressionRecoverySeconds: number | null;
+  lowestGarrisonMorale: number;
+  firstGarrisonFireMinute: number | null;
+  firstDecisiveAssaultMinute: number | null;
+  earliestCaptureMinute: number | null;
+  warningMinutes: number | null;
+  withdrawals: Readonly<Record<WithdrawalTrigger, number>>;
+  returnsPerRun: number;
+  behaviorChangesPerRun: number;
+  behaviorShare: Readonly<Record<GroundBehavior, number>>;
 }>;
 
 const mean = (values: readonly number[]): number =>
   values.reduce((sum, v) => sum + v, 0) / Math.max(1, values.length);
 
 const rounded = (value: number): number => Number(value.toFixed(3));
+
+/** Middle value, or null when no run produced one. */
+function median(values: readonly (number | null)[]): number | null {
+  const present = values.filter((v): v is number => v !== null).sort((a, b) => a - b);
+  const middle = present[Math.floor((present.length - 1) / 2)];
+  return middle === undefined ? null : rounded(middle);
+}
+
+const toMinutes = (tick: number | null): number | null => (tick === null ? null : tick / 60);
+
+function summarizeTempo(results: readonly BattleResult[]): TempoSummary {
+  const tempos = results.map((r) => r.tempo);
+  const captures = results.filter((r) => r.outcome === 'captured').map((r) => r.endedAtTick / 60);
+  const withdrawals = { casualties: 0, morale: 0, suppression: 0, ammunition: 0, other: 0 };
+  const seconds = { observe: 0, probe: 0, harass: 0, assault: 0, disengage: 0 };
+  for (const tempo of tempos) {
+    for (const key of Object.keys(withdrawals) as WithdrawalTrigger[]) withdrawals[key] += tempo.withdrawals[key];
+    for (const key of Object.keys(seconds) as GroundBehavior[]) seconds[key] += tempo.behaviorSeconds[key];
+  }
+  const totalSeconds = Math.max(1, Object.values(seconds).reduce((sum, value) => sum + value, 0));
+  const share = (key: GroundBehavior): number => rounded(seconds[key] / totalSeconds);
+  return {
+    fireMinuteShare: median(tempos.map((t) => t.fireMinuteShare)) ?? 0,
+    bouts: median(tempos.map((t) => t.bouts)) ?? 0,
+    meanBoutMinutes: median(tempos.map((t) => t.meanBoutSeconds / 60)) ?? 0,
+    friendlyCasualtiesPerMinute: median(tempos.map((t) => t.friendlyCasualtiesPerMinute)) ?? 0,
+    enemyCasualtiesPerMinute: median(tempos.map((t) => t.enemyCasualtiesPerMinute)) ?? 0,
+    suppressionRecoverySeconds: median(tempos.map((t) => t.meanSuppressionRecoverySeconds)),
+    lowestGarrisonMorale: median(tempos.map((t) => t.lowestGarrisonMorale)) ?? 0,
+    firstGarrisonFireMinute: median(tempos.map((t) => toMinutes(t.firstGarrisonFireTick))),
+    firstDecisiveAssaultMinute: median(tempos.map((t) => toMinutes(t.firstDecisiveAssaultTick))),
+    earliestCaptureMinute: captures.length > 0 ? rounded(Math.min(...captures)) : null,
+    warningMinutes: median(tempos.map((t) => toMinutes(t.warningSeconds))),
+    withdrawals,
+    returnsPerRun: rounded(mean(tempos.map((t) => t.returns))),
+    behaviorChangesPerRun: rounded(mean(tempos.map((t) => t.behaviorChanges))),
+    behaviorShare: {
+      observe: share('observe'),
+      probe: share('probe'),
+      harass: share('harass'),
+      assault: share('assault'),
+      disengage: share('disengage'),
+    },
+  };
+}
 
 export function summarize(policy: string, results: readonly BattleResult[]): Summary {
   const rate = (outcome: BattleResult['outcome']): number =>
@@ -53,6 +121,9 @@ export function summarize(policy: string, results: readonly BattleResult[]): Sum
     meanStrikePasses: rounded(mean(results.map((r) => r.strikePasses))),
     meanUnusedOrdnance: rounded(mean(results.map((r) => r.unusedOrdnance))),
     meanResponseMinutes: responses.length > 0 ? rounded(mean(responses)) : null,
+    meanAircraftHits: rounded(mean(results.map((r) => r.aircraftHits))),
+    runsWithHit: rounded(results.filter((r) => r.aircraftHits > 0).length / results.length),
+    tempo: summarizeTempo(results),
   };
 }
 

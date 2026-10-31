@@ -17,8 +17,11 @@ export type AircraftTelemetryEntry = Readonly<{
   aircraftId: AircraftId;
   aircraftType: AircraftType;
   position: Vec2;
+  altitudeMeters: number;
+  targetAltitudeMeters: number;
   headingRad: number;
   status: AircraftStatus;
+  damaged: boolean;
   casPhase: CasPhase | null;
   order: AircraftOrder | null;
   fuelFraction: number;

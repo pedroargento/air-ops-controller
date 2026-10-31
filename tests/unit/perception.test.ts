@@ -171,3 +171,48 @@ describe('estimates', () => {
     expect(cellAt(open.terrain, { x: 0, y: 0 }).groundConcealment).toBe(0);
   });
 });
+
+describe('observed weapons', () => {
+  const unseen = { ...perception, weaponSeenPerScan: 0 };
+  const scan = (setup: ReturnType<typeof pair>, config: typeof perception, tick: number) =>
+    updatePerception(setup.truth, setup.knowledge, open.terrain, setup.rng, config, tick);
+
+  it('starts empty, and identifying a contact as hostile reveals none', () => {
+    const setup = pair(100);
+    for (let i = 0; i < 40; i += 1) scan(setup, unseen, i * 5);
+    const [contact] = contactsOf(setup);
+    expect(contact?.identification).toBe('hostile');
+    expect(contact?.observedWeapons).toEqual([]);
+  });
+
+  it('never lists a weapon the target does not have', () => {
+    const setup = pair(100);
+    setup.target.equipment = [{ weapon: 'SMALL_ARMS', quantity: 40, ammunition: 100 }];
+    const always = { ...perception, weaponSeenPerScan: 1 };
+    for (let i = 0; i < 20; i += 1) scan(setup, always, i * 5);
+    expect(contactsOf(setup)[0]?.observedWeapons).toEqual(['SMALL_ARMS']);
+  });
+
+  it('a hidden weapon is revealed when it fires, and stays known', () => {
+    const setup = pair(100);
+    scan(setup, unseen, 0);
+    for (let i = 1; i < 40 && contactsOf(setup).length === 0; i += 1) scan(setup, unseen, i * 5);
+    setup.target.firedWeapons = ['AAA'];
+    setup.target.lastFiredAtTick = 1000;
+    for (let i = 0; i < 20; i += 1) scan(setup, unseen, 1000 + i);
+    expect(contactsOf(setup)[0]?.observedWeapons).toEqual(['AAA']);
+    for (let i = 0; i < 40; i += 1) scan(setup, unseen, 2000 + i * 5);
+    expect(contactsOf(setup)[0]?.observedWeapons).toEqual(['AAA']);
+  });
+
+  it('seeing a weapon changes nothing else about the estimate', () => {
+    const setup = pair(100);
+    setup.target.posture = 'defending';
+    for (let i = 0; i < 40; i += 1) scan(setup, unseen, i * 5);
+    const before = contactsOf(setup)[0];
+    for (let i = 0; i < 20; i += 1) scan(setup, { ...perception, weaponSeenPerScan: 1 }, 200 + i * 5);
+    const after = contactsOf(setup)[0];
+    expect(after?.position.center).toEqual(before?.position.center);
+    expect(after?.observedWeapons.length).toBeGreaterThan(0);
+  });
+});

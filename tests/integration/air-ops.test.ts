@@ -8,6 +8,10 @@ import { distance, type Vec2 } from '../../src/domain/public/geometry';
 import type { ContactId } from '../../src/domain/public/ground';
 import type { Aircraft, GroundUnit } from '../../src/domain/truth/world';
 import { updateContact, updateFriendly } from '../../src/knowledge/player-knowledge';
+import { elevationAt, hasAirLos } from '../../src/domain/public/terrain';
+import { GameSession } from '../../src/game/session';
+import { project } from '../../src/knowledge/player-view';
+import { reconInformed } from '../../src/policies/air-policies';
 import { aircraftTelemetry } from '../../src/sim/air';
 import { createInitialState, type SimState } from '../../src/sim/state';
 import { step } from '../../src/sim/step';
@@ -232,6 +236,10 @@ describe('reconnaissance', () => {
       contact: { ...contact, identification: 'hostile', position: { ...contact.position, observedAt: state.tick } },
       receivedAt: state.tick,
       viaAircraft: true,
+      status: 'active',
+      statusAt: -1,
+      estimatedLosses: 0,
+      clearLookSeconds: 0,
     };
     step(state, [{ kind: 'forwardContact', tick: state.tick, contactKey: key, recipients: ['F-A'] }], scenario);
     run(state, radioConfig.transmitSeconds + 6);
@@ -323,6 +331,7 @@ describe('CAS engagement', () => {
             kind: 'infantry',
             activity: 'stationary',
             confidence: 'high',
+            observedWeapons: [],
           };
           updateContact(state.player, contact, 0, true);
         }
@@ -444,4 +453,431 @@ describe('replay with player commands', () => {
     const without = runReplay(scenario, { seed: 6, commands: [], ticks: 1000 });
     expect(firstDivergence(with_, without)).toBe(900);
   }, 30000);
+});
+
+describe('altitude and ground fire', () => {
+  const team = { x: 2700, y: 2250 };
+  const { MANPADS } = scenario.file.combat.weapons;
+  const sure = {
+    ...scenario,
+    file: {
+      ...scenario.file,
+      combat: {
+        ...scenario.file.combat,
+        weapons: { ...scenario.file.combat.weapons, MANPADS: { ...MANPADS, airHitChance: 1 } },
+      },
+      air: { ...air, groundNoticePerScan: 1 },
+    },
+  };
+
+  function exposed(ticks: number): SimState {
+    const state = createInitialState(sure, 1);
+    isolate(state, ['E-AD']);
+    step(state, [order(state, CAS, support(team))], sure);
+    for (let i = 1; i < ticks && aircraft(state, CAS).damaged === false; i += 1) step(state, [], sure);
+    return state;
+  }
+
+  it('is zero on the ground and the shared operating altitude in flight', () => {
+    const state = createInitialState(scenario, 1);
+    expect(aircraft(state, CAS).altitudeMeters).toBe(0);
+    run(state, 30, [order(state, CAS, { kind: 'MoveTo', point: outpost })]);
+    expect(aircraft(state, CAS).altitudeMeters).toBe(0);
+    run(state, 60);
+    run(state, 10, [order(state, RECON, { kind: 'MoveTo', point: outpost })]);
+    run(state, 150);
+    expect(aircraft(state, CAS).altitudeMeters).toBe(air.operatingAltitudeMeters);
+    expect(aircraft(state, RECON).altitudeMeters).toBe(air.operatingAltitudeMeters);
+    expect(aircraftTelemetry(state.truth, air)[0]?.altitudeMeters).toBe(air.operatingAltitudeMeters);
+  });
+
+  it('a hit damages the aircraft, ends its mission and sends it home', () => {
+    const state = exposed(900);
+    const plane = aircraft(state, CAS);
+    expect(plane.damaged).toBe(true);
+    expect(plane.status).toBe('returning');
+    expect(plane.order).toBeNull();
+    expect(state.truth.aircraft).toHaveLength(3);
+  });
+
+  it('tells the player: telemetry at once, and a report with an estimated source', () => {
+    const state = exposed(900);
+    const entry = aircraftTelemetry(state.truth, air).find((a) => a.aircraftId === CAS);
+    expect(entry?.damaged).toBe(true);
+    const report = state.player.log.find((m) => m.kind === 'GROUND_FIRE');
+    if (report?.kind !== 'GROUND_FIRE') throw new Error('no ground fire report');
+    expect(report.hit).toBe(true);
+    expect(report.source.sigmaMeters).toBe(air.groundFireSigmaMeters);
+    expect(distance(report.source.center, team)).toBeLessThan(air.groundFireSigmaMeters * 5);
+    expect(state.player.groundFire).toHaveLength(1);
+  });
+
+  it('a damaged aircraft refuses orders, does not attack, and needs the longer repair', () => {
+    const state = exposed(900);
+    const plane = aircraft(state, CAS);
+    const ammunition = plane.ammunition;
+    run(state, 1, [order(state, CAS, support(team))]);
+    expect(plane.status).toBe('returning');
+    expect(plane.order).toBeNull();
+    for (let i = 0; i < 2000 && plane.status === 'returning'; i += 1) step(state, [], sure);
+    expect(plane.status).toBe('turnaround');
+    expect(plane.ammunition).toBe(ammunition);
+    expect(plane.timerSeconds).toBe(air.types.cas.repairSeconds);
+    for (let i = 0; i < air.types.cas.repairSeconds; i += 1) step(state, [], sure);
+    expect(plane.status).toBe('ready');
+    expect(plane.damaged).toBe(false);
+  });
+
+  it('damage corrects a CAS inbound promise, which takes time to arrive', () => {
+    const state = createInitialState(sure, 1);
+    isolate(state, ['E-AD', 'F-A']);
+    updateFriendly(state.player, 'F-A', { center: team, sigmaMeters: 30, headingRad: null, speedMps: null, observedAt: 0 }, 'self-report', 0, 120);
+    step(state, [order(state, CAS, support(team))], sure);
+    step(state, [{ kind: 'acknowledge', tick: state.tick, unitId: 'F-A', casAircraftId: CAS }], sure);
+    for (let i = 0; i < 1000 && !aircraft(state, CAS).damaged; i += 1) step(state, [], sure);
+    expect(aircraft(state, CAS).damaged).toBe(true);
+    for (let i = 0; i < 120; i += 1) step(state, [], sure);
+    expect(state.unitKnowledge['F-A']?.expectedSupport).toBeNull();
+  });
+
+  it('firing exposes the team: the aircraft comes to see its weapon', () => {
+    const state = createInitialState(scenario, 1);
+    isolate(state, ['E-AD']);
+    const shooter = unit(state, 'E-AD');
+    shooter.firedWeapons = ['MANPADS'];
+    run(state, 500, [order(state, RECON, { kind: 'ReconArea', center: team, radius: 400 })]);
+    shooter.lastFiredAtTick = state.tick;
+    for (let i = 0; i < 300; i += 1) {
+      shooter.lastFiredAtTick = state.tick;
+      step(state, [], scenario);
+    }
+    const seen = Object.values(state.player.contacts).flatMap((c) => c.contact.observedWeapons);
+    expect(seen).toContain('MANPADS');
+  });
+
+  it('an ordinary formation under an aircraft holds its fire', () => {
+    const state = createInitialState(sure, 1);
+    isolate(state, ['E-N2']);
+    unit(state, 'E-N2').position = team;
+    for (let i = 0; i < 800; i += 1) {
+      step(state, i === 0 ? [order(state, CAS, support(team))] : [], sure);
+      expect(unit(state, 'E-N2').firesAtAircraft).toBe(false);
+    }
+    expect(aircraft(state, CAS).damaged).toBe(false);
+  });
+
+  it('a friendly unit with the same weapon does not fire on its own aircraft', () => {
+    const state = createInitialState(sure, 1);
+    isolate(state, ['F-A']);
+    const friendly = unit(state, 'F-A');
+    friendly.position = team;
+    friendly.equipment = [{ weapon: 'MANPADS', quantity: 1, ammunition: 4 }];
+    run(state, 800, [order(state, CAS, support(team))]);
+    expect(aircraft(state, CAS).damaged).toBe(false);
+    expect(friendly.equipment[0]?.ammunition).toBe(4);
+  });
+
+  it('goes to ground when aircraft appear, then gets on with the attack', () => {
+    const state = createInitialState(sure, 1);
+    isolate(state, ['E-N2']);
+    const attacker = unit(state, 'E-N2');
+    attacker.position = team;
+    run(state, 1, [order(state, CAS, support(team))]);
+    const taken: number[] = [];
+    for (let i = 0; i < 700; i += 1) {
+      const before = state.unitKnowledge['E-N2']?.hostileAircraftSeenAt ?? null;
+      step(state, [], sure);
+      const after = state.unitKnowledge['E-N2']?.hostileAircraftSeenAt ?? null;
+      if (after !== before && after !== null) taken.push(after);
+    }
+    expect(taken.length).toBeGreaterThan(0);
+    for (let i = 1; i < taken.length; i += 1) {
+      expect((taken[i] ?? 0) - (taken[i - 1] ?? 0)).toBeGreaterThanOrEqual(attacker.doctrine.airCoverRepeatSeconds);
+    }
+  });
+
+  it('replays ground fire deterministically', () => {
+    const first = exposed(900);
+    const second = exposed(900);
+    expect(second.tick).toBe(first.tick);
+    expect(second.player.log).toEqual(first.player.log);
+  });
+});
+
+describe('reacting to known air threats', () => {
+  const objective = outpost;
+  const near = { x: objective.x + 200, y: objective.y };
+  const hostile = (id: string, center: Vec2, observedWeapons: ContactEstimate['observedWeapons'] = []): ContactEstimate => ({
+    contactId: id as ContactId,
+    provenance: { sourceId: 'RECON-1', observedAt: 100 },
+    identification: 'hostile',
+    position: { center, sigmaMeters: 40, headingRad: null, speedMps: null, observedAt: 100 },
+    strength: { kind: 'range', min: 30, max: 50 },
+    kind: 'infantry',
+    activity: 'moving',
+    confidence: 'high',
+    observedWeapons,
+  });
+  const ordersFor = (state: SimState, aware = true) => {
+    state.tick = 100;
+    const view = project(state.player, aircraftTelemetry(state.truth, air), 100, scenario.file.display);
+    return reconInformed(objective, false, undefined, aware)(view).flatMap((c) =>
+      c.kind === 'aircraftOrder' && c.order.kind === 'SupportArea' ? [c.order.center] : [],
+    );
+  };
+  const fireReport = (state: SimState, center: Vec2): void => {
+    state.player.log.push({
+      id: 'M-1' as never,
+      kind: 'GROUND_FIRE',
+      senderId: 'CAS-1',
+      observedAt: 90,
+      sentAt: 90,
+      receivedAt: 90,
+      source: { center, sigmaMeters: 150, headingRad: null, speedMps: null, observedAt: 90 },
+      weapon: null,
+      hit: true,
+    });
+  };
+
+  it('does not send CAS into an area where aircraft were just fired on', () => {
+    const state = createInitialState(scenario, 1);
+    updateContact(state.player, hostile('C-1', near), 100, true);
+    fireReport(state, near);
+    expect(ordersFor(state)).toEqual([]);
+  });
+
+  it('the threat-blind baseline goes anyway', () => {
+    const state = createInitialState(scenario, 1);
+    updateContact(state.player, hostile('C-1', near), 100, true);
+    fireReport(state, near);
+    expect(ordersFor(state, false).length).toBeGreaterThan(0);
+  });
+
+  it('goes after identified air defense first, even out of normal launch range', () => {
+    const state = createInitialState(scenario, 1);
+    const far = { x: objective.x, y: objective.y - 2000 };
+    updateContact(state.player, hostile('C-1', near), 100, true);
+    updateContact(state.player, hostile('C-2', far, ['MANPADS']), 100, true);
+    expect(ordersFor(state)[0]).toEqual(far);
+  });
+});
+
+describe('altitude control', () => {
+  const setAltitude = (state: SimState, id: AircraftId, meters: number): PlayerCommand => ({
+    kind: 'setAltitude',
+    tick: state.tick,
+    aircraftId: id,
+    meters,
+  });
+
+  const airborne = (): SimState => {
+    const state = createInitialState(scenario, 1);
+    run(state, 200, [order(state, CAS, { kind: 'MoveTo', point: outpost })]);
+    return state;
+  };
+
+  it('climbs and descends at the type\'s rate, not instantly', () => {
+    const state = airborne();
+    const plane = aircraft(state, CAS);
+    run(state, 1, [setAltitude(state, CAS, 1000)]);
+    expect(plane.altitudeMeters).toBe(air.operatingAltitudeMeters + air.types.cas.climbRateMps);
+    run(state, 60);
+    expect(plane.altitudeMeters).toBe(1000);
+    run(state, 1, [setAltitude(state, CAS, 200)]);
+    expect(plane.altitudeMeters).toBe(1000 - air.types.cas.climbRateMps);
+  });
+
+  it('stays inside the type\'s limits', () => {
+    const state = airborne();
+    run(state, 1, [setAltitude(state, CAS, 99999)]);
+    expect(aircraft(state, CAS).targetAltitudeMeters).toBe(air.types.cas.maxAltitudeMeters);
+    run(state, 1, [setAltitude(state, CAS, 0)]);
+    expect(aircraft(state, CAS).targetAltitudeMeters).toBe(air.types.cas.minAltitudeMeters);
+  });
+
+  it('survives a change of mission and is flown to after takeoff', () => {
+    const state = createInitialState(scenario, 1);
+    run(state, 1, [setAltitude(state, CAS, 800)]);
+    expect(aircraft(state, CAS).altitudeMeters).toBe(0);
+    run(state, 200, [order(state, CAS, { kind: 'MoveTo', point: outpost })]);
+    run(state, 1, [order(state, CAS, { kind: 'Orbit', point: outpost, radius: 500 })]);
+    expect(aircraft(state, CAS).targetAltitudeMeters).toBe(800);
+    expect(aircraft(state, CAS).altitudeMeters).toBe(800);
+  });
+
+  // A stationary team under an orbiting recon, so that only altitude differs.
+  function sightings(meters: number): number {
+    let total = 0;
+    for (let seed = 0; seed < 20; seed += 1) {
+      const state = createInitialState(scenario, seed);
+      isolate(state, ['E-W']);
+      const startup = [
+        setAltitude(state, RECON, meters),
+        order(state, RECON, { kind: 'ReconArea', center: unit(state, 'E-W').position, radius: 500 }),
+      ];
+      run(state, 500, startup);
+      total += Object.keys(state.player.contacts).length === 0 ? 0 : 1;
+    }
+    return total;
+  }
+
+  it('sees less from higher up', () => {
+    expect(sightings(3000)).toBeLessThan(sightings(200));
+  });
+
+  function strikeEffect(meters: number): number {
+    let effects = 0;
+    for (let seed = 0; seed < 30; seed += 1) {
+      const state = createInitialState(scenario, seed);
+      isolate(state, ['E-W']);
+      const target = unit(state, 'E-W');
+      run(state, 1, [setAltitude(state, CAS, meters), order(state, CAS, support(target.position))]);
+      run(state, 1000);
+      effects += state.player.log.filter((m) => m.kind === 'STRIKE_RESULT' && m.effect === 'effect-observed').length;
+    }
+    return effects;
+  }
+
+  it('strikes less accurately from higher up', () => {
+    expect(strikeEffect(2500)).toBeLessThan(strikeEffect(300));
+  });
+
+  it('the climbing policy takes recon up after being fired on, and leaves CAS low', () => {
+    const state = createInitialState(scenario, 1);
+    state.player.log.push({
+      id: 'M-1' as never,
+      kind: 'GROUND_FIRE',
+      senderId: 'RECON-1',
+      observedAt: 0,
+      sentAt: 0,
+      receivedAt: 0,
+      source: { center: outpost, sigmaMeters: 150, headingRad: null, speedMps: null, observedAt: 0 },
+      weapon: null,
+      hit: false,
+    });
+    const view = project(state.player, aircraftTelemetry(state.truth, air), 0, scenario.file.display);
+    const orders = reconInformed(outpost, true, undefined, false, 1200)(view).filter((c) => c.kind === 'setAltitude');
+    expect(orders).toEqual([{ kind: 'setAltitude', tick: 0, aircraftId: RECON, meters: 1200 }]);
+  });
+
+  it('replays altitude changes', () => {
+    const state = createInitialState(scenario, 3);
+    const log = {
+      scenarioId: scenario.file.id,
+      seed: 3,
+      ticks: 300,
+      commands: [{ kind: 'setAltitude', tick: 5, aircraftId: CAS, meters: 900 } satisfies PlayerCommand],
+    };
+    expect(state.tick).toBe(0);
+    expect(runReplay(scenario, log as never)).toEqual(runReplay(scenario, log as never));
+  });
+});
+
+describe('battle damage in play', () => {
+  it('a strike that kills its target reports it destroyed, with the crew\'s estimate', () => {
+    const state = createInitialState(scenario, 1);
+    isolate(state, ['E-W']);
+    const target = unit(state, 'E-W');
+    target.personnel = 1;
+    run(state, 1000, [order(state, CAS, support(target.position))]);
+    expect(target.personnel).toBe(0);
+    const strikes = state.player.log.flatMap((m) => (m.kind === 'STRIKE_RESULT' ? [m] : []));
+    expect(strikes.some((m) => m.assessment?.destroyed === true)).toBe(true);
+    expect(state.player.confirmedDestroyed).toBe(1);
+  });
+
+  it('a debrief exists only once the run is over', () => {
+    const session = new GameSession(scenario, 1);
+    expect(session.debrief()).toBeNull();
+    while (session.outcome === 'running') session.advance();
+    expect(session.debrief()?.enemyFormations).toBe(scenario.file.units.filter((u) => u.side === 'enemy').length);
+  });
+});
+
+describe('terrain and aircraft', () => {
+  // A wall of high ground between x 2000 and 2100, with everything else low.
+  function walled(): typeof scenario {
+    const { terrain } = scenario;
+    const elevation = new Float32Array(terrain.elevation.length).fill(20);
+    for (let row = 0; row < terrain.height; row += 1) {
+      for (let column = 40; column < 42; column += 1) elevation[row * terrain.width + column] = 300;
+    }
+    return { ...scenario, terrain: { ...terrain, elevation } };
+  }
+  const flat = (): typeof scenario => ({
+    ...scenario,
+    terrain: { ...scenario.terrain, elevation: new Float32Array(scenario.terrain.elevation.length).fill(20) },
+  });
+
+  it('hides a low aircraft behind a ridge, both ways, and not a high one', () => {
+    const { terrain } = walled();
+    const ground = { x: 1500, y: 2500 };
+    const air = { x: 2600, y: 2500 };
+    expect(hasAirLos(terrain, ground, air, 100)).toBe(false);
+    expect(hasAirLos(terrain, ground, air, 1500)).toBe(true);
+    expect(hasAirLos(flat().terrain, ground, air, 100)).toBe(true);
+  });
+
+  // An aircraft orbiting behind the wall from a team, with a certain-hit weapon.
+  function behindWall(world: typeof scenario, altitude: number): SimState {
+    const lethal = {
+      ...world,
+      file: {
+        ...world.file,
+        combat: {
+          ...world.file.combat,
+          weapons: { ...world.file.combat.weapons, MANPADS: { ...world.file.combat.weapons.MANPADS, airHitChance: 1 } },
+        },
+        air: { ...world.file.air, groundNoticePerScan: 1, types: { ...world.file.air.types, cas: { ...world.file.air.types.cas, minAltitudeMeters: 50 } } },
+      },
+    };
+    const state = createInitialState(lethal, 1);
+    isolate(state, ['E-AD']);
+    // It would otherwise walk back to its scenario position, across the ridge.
+    const team = unit(state, 'E-AD');
+    team.position = { x: 1800, y: 2500 };
+    team.objective = { kind: 'HoldArea', area: { center: team.position, radius: 60 } };
+    const commands: PlayerCommand[] = [
+      { kind: 'setAltitude', tick: 0, aircraftId: CAS, meters: altitude },
+      order(state, CAS, { kind: 'Orbit', point: { x: 2500, y: 2500 }, radius: 100 }),
+    ];
+    step(state, commands, lethal);
+    for (let i = 0; i < 700 && !aircraft(state, CAS).damaged; i += 1) step(state, [], lethal);
+    return state;
+  }
+
+  it('a ridge stops ground fire that open ground would not', () => {
+    expect(aircraft(behindWall(flat(), 100), CAS).damaged).toBe(true);
+    expect(aircraft(behindWall(walled(), 100), CAS).damaged).toBe(false);
+  });
+
+  it('terrain also blocks what the aircraft can see', () => {
+    expect(Object.keys(behindWall(walled(), 100).player.contacts)).toEqual([]);
+  });
+
+  it('pilots keep clear of the terrain whatever the order says', () => {
+    const state = createInitialState(scenario, 1);
+    step(state, [{ kind: 'setAltitude', tick: 0, aircraftId: CAS, meters: 100 }, order(state, CAS, { kind: 'Orbit', point: outpost, radius: 500 })], scenario);
+    for (let i = 0; i < 500; i += 1) {
+      step(state, [], scenario);
+      const plane = aircraft(state, CAS);
+      if (plane.status === 'onStation') {
+        expect(plane.altitudeMeters).toBeGreaterThanOrEqual(elevationAt(scenario.terrain, plane.position) + 10);
+      }
+    }
+    expect(aircraft(state, CAS).status).toBe('onStation');
+  });
+
+  it('a weapon on a hill reaches higher than the same weapon below it', () => {
+    const { terrain } = scenario;
+    expect(Math.max(...terrain.elevation)).toBeGreaterThanOrEqual(240);
+  });
+
+  it('the pop-up policy goes in low and climbs on station', () => {
+    const state = createInitialState(scenario, 1);
+    const view = project(state.player, aircraftTelemetry(state.truth, air), 0, scenario.file.display);
+    const orders = reconInformed(outpost, true, undefined, false, null, 100)(view).filter((c) => c.kind === 'setAltitude');
+    expect(orders).toHaveLength(2);
+    expect(orders[0]).toMatchObject({ meters: 100 });
+  });
 });

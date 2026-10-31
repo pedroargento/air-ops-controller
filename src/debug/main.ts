@@ -1,4 +1,5 @@
 // Omniscient debug view. Reads hidden truth by design; never linked from the game page.
+import { totalAmmunition } from '../domain/public/equipment';
 import scenarioJson from '../../scenarios/outpost-under-pressure.json';
 import classLayer from '../../scenarios/outpost-under-pressure/terrain.txt?raw';
 import elevationLayer from '../../scenarios/outpost-under-pressure/elevation.txt?raw';
@@ -14,8 +15,8 @@ import { advancePlayhead } from './playback';
 
 type UnitFrame = Pick<
   GroundUnit,
-  'id' | 'side' | 'position' | 'personnel' | 'ammunition' | 'morale' | 'suppression' | 'mode' | 'posture'
-> & { target: Vec2 | null };
+  'id' | 'side' | 'position' | 'personnel' | 'morale' | 'suppression' | 'mode' | 'posture'
+> & { ammunition: number; target: Vec2 | null };
 
 type AircraftFrame = Readonly<{
   id: string;
@@ -115,7 +116,7 @@ function recordBattle(seed: number, policyName: string): void {
         side: u.side,
         position: u.position,
         personnel: u.personnel,
-        ammunition: u.ammunition,
+        ammunition: totalAmmunition(u.equipment),
         morale: u.morale,
         suppression: u.suppression,
         mode: u.mode,

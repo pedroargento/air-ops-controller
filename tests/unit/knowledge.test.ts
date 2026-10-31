@@ -5,6 +5,8 @@ import type { MessageId, RadioMessage } from '../../src/domain/public/radio';
 import {
   emptyPlayerKnowledge,
   receiveByPlayer,
+  recordStrike,
+  reviewContacts,
   updateContact,
   updateFriendly,
 } from '../../src/knowledge/player-knowledge';
@@ -20,6 +22,13 @@ const display = {
   regionMaxRadiusMeters: 700,
   regionFadeSeconds: 480,
   effectSeconds: 40,
+  groundFireMarkSeconds: 900,
+  groundFireMergeMeters: 300,
+  archiveSeconds: 1200,
+  destroyedShowSeconds: 300,
+  notFoundShowSeconds: 120,
+  friendlySilentSeconds: 600,
+  consolidateMaxAgeSeconds: 120,
 };
 
 const position = (overrides: Partial<PositionEstimate> = {}): PositionEstimate => ({
@@ -40,6 +49,7 @@ const contact = (id: string, sourceId: string, observedAt: number, x = 100): Con
   kind: 'infantry',
   activity: 'moving',
   confidence: 'medium',
+  observedWeapons: [],
 });
 
 const meta = { id: 'M-1' as MessageId, senderId: 'F-A', observedAt: 0, sentAt: 10, receivedAt: 30 };
@@ -150,6 +160,142 @@ describe('player knowledge', () => {
   });
 });
 
+describe('closing contacts', () => {
+  const review = { plausibleSpeedMps: 1, notFoundMinAgeSeconds: 60, notFoundLookSeconds: 60, notFoundCoverage: 0.7, consolidateMaxAgeSeconds: 120 };
+  const sensors = [{ position: { x: 100, y: 100 }, radiusMeters: 1000 }];
+  const hit = { estimatedCasualties: 8, destroyed: false };
+  const kill = { estimatedCasualties: 12, destroyed: true };
+
+  function looked(from: number, scans: number, player = emptyPlayerKnowledge()) {
+    updateContact(player, contact('C-1', 'F-A', 0), 10, false);
+    for (let i = 0; i < scans; i += 1) reviewContacts(player, sensors, review, 5, from + i * 5);
+    return player.contacts['F-A/C-1'];
+  }
+
+  it('closes a report after a clear look finds nothing', () => {
+    expect(looked(100, 13)).toMatchObject({ status: 'not-found' });
+  });
+
+  it('needs enough looking, by an aircraft actually covering the spot', () => {
+    expect(looked(100, 3)?.status).toBe('active');
+    const player = emptyPlayerKnowledge();
+    updateContact(player, contact('C-1', 'F-A', 0), 10, false);
+    for (let i = 0; i < 20; i += 1) reviewContacts(player, [{ position: { x: 5000, y: 0 }, radiusMeters: 1000 }], review, 5, 100 + i * 5);
+    expect(player.contacts['F-A/C-1']?.status).toBe('active');
+  });
+
+  it('leaves a report alone if an aircraft has a fresh sighting that could be it', () => {
+    const player = emptyPlayerKnowledge();
+    updateContact(player, contact('C-1', 'F-A', 0), 10, false);
+    updateContact(player, contact('C-9', 'RECON-1', 190, 130), 190, true);
+    for (let i = 0; i < 13; i += 1) reviewContacts(player, sensors, review, 5, 200 + i * 5);
+    expect(player.contacts['F-A/C-1']?.status).toBe('active');
+  });
+
+  it('a new sighting reopens a closed report; an older one does not', () => {
+    const player = emptyPlayerKnowledge();
+    expect(looked(100, 13, player)?.status).toBe('not-found');
+    updateContact(player, contact('C-1', 'F-A', 150), 160, false);
+    expect(player.contacts['F-A/C-1']?.status).toBe('not-found');
+    updateContact(player, contact('C-1', 'F-A', 500), 510, false);
+    expect(player.contacts['F-A/C-1']?.status).toBe('active');
+  });
+
+  it('a strike records damage, which stays through later sightings', () => {
+    const player = emptyPlayerKnowledge();
+    const seen = contact('C-1', 'CAS-1', 100);
+    updateContact(player, seen, 100, true);
+    recordStrike(player, seen, hit, 1, 110);
+    updateContact(player, contact('C-1', 'CAS-1', 120), 120, true);
+    expect(player.contacts['CAS-1/C-1']).toMatchObject({ status: 'hit', estimatedLosses: 8 });
+    expect(player.estimatedLosses).toBe(8);
+  });
+
+  it('a kill closes the reports likely to be the same unit, and only those', () => {
+    const player = emptyPlayerKnowledge();
+    const seen = contact('C-1', 'CAS-1', 100);
+    updateContact(player, seen, 100, true);
+    updateContact(player, contact('C-2', 'F-A', 90, 120), 100, false);
+    updateContact(player, contact('C-3', 'F-B', 95, 4000), 100, false);
+    recordStrike(player, seen, kill, 1, 110);
+    expect(player.contacts['F-A/C-2']?.status).toBe('destroyed');
+    expect(player.contacts['F-B/C-3']?.status).toBe('active');
+    expect(player.confirmedDestroyed).toBe(1);
+  });
+
+  it('old and closed reports leave the map but are counted as archived', () => {
+    const player = emptyPlayerKnowledge();
+    updateContact(player, contact('C-1', 'F-A', 0), 10, false);
+    expect(project(player, [], 1000, display).contacts).toHaveLength(1);
+    const later = project(player, [], 1300, display);
+    expect(later.contacts).toHaveLength(0);
+    expect(later.archivedContacts).toBe(1);
+  });
+
+  it('flags a friendly unit that has gone silent, without calling it lost', () => {
+    const player = emptyPlayerKnowledge();
+    updateFriendly(player, 'F-A', position({ observedAt: 0 }), 'self-report', 0, 120);
+    expect(project(player, [], 300, display).friendlies[0]?.silent).toBe(false);
+    expect(project(player, [], 600, display).friendlies[0]).toMatchObject({ silent: true, unitId: 'F-A' });
+  });
+
+  it('keeps a unit\'s last status report for the summary', () => {
+    const player = emptyPlayerKnowledge();
+    receiveByPlayer(player, { ...meta, kind: 'SITREP', ownPosition: position(), personnel: 22, ammunitionFraction: 0.5, status: 'holding' }, 120);
+    expect(project(player, [], 100, display).friendlies[0]?.statusReport).toMatchObject({ personnel: 22, ammunitionFraction: 0.5 });
+  });
+});
+
+describe('consolidation', () => {
+  it('a fresh aircraft sighting absorbs older reports that could be the same unit', () => {
+    const player = emptyPlayerKnowledge();
+    updateContact(player, contact('C-1', 'F-A', 80, 120), 90, false);
+    updateContact(player, contact('C-2', 'F-B', 85, 110), 90, false);
+    updateContact(player, contact('C-3', 'RECON-1', 100), 100, true);
+    const { contacts } = project(player, [], 105, display);
+    expect(contacts.map((m) => m.key)).toEqual(['RECON-1/C-3']);
+    expect(contacts[0]?.members.map((m) => m.key).sort()).toEqual(['F-A/C-1', 'F-B/C-2']);
+  });
+
+  it('never deletes anything: stored reports stay as they were', () => {
+    const player = emptyPlayerKnowledge();
+    updateContact(player, contact('C-1', 'F-A', 80, 120), 90, false);
+    updateContact(player, contact('C-3', 'RECON-1', 100), 100, true);
+    project(player, [], 105, display);
+    expect(Object.keys(player.contacts).sort()).toEqual(['F-A/C-1', 'RECON-1/C-3']);
+  });
+
+  it('does not merge ground reports with each other, or anything on age alone', () => {
+    const player = emptyPlayerKnowledge();
+    updateContact(player, contact('C-1', 'F-A', 80, 120), 90, false);
+    updateContact(player, contact('C-2', 'F-B', 85, 110), 90, false);
+    expect(project(player, [], 105, display).contacts).toHaveLength(2);
+  });
+
+  it('needs a fresh, confident sighting', () => {
+    const player = emptyPlayerKnowledge();
+    updateContact(player, contact('C-1', 'F-A', 80, 120), 90, false);
+    updateContact(player, { ...contact('C-3', 'RECON-1', 100), confidence: 'low' }, 100, true);
+    expect(project(player, [], 105, display).contacts).toHaveLength(2);
+  });
+
+  it('keeps reports apart when the estimates can\'t be one unit', () => {
+    const player = emptyPlayerKnowledge();
+    updateContact(player, contact('C-1', 'F-A', 80, 3000), 90, false);
+    updateContact(player, { ...contact('C-2', 'F-B', 80, 120), strength: { kind: 'range', min: 100, max: 150 } }, 90, false);
+    updateContact(player, contact('C-3', 'RECON-1', 100), 100, true);
+    expect(project(player, [], 105, display).contacts).toHaveLength(3);
+  });
+
+  it('carries over a weapon any report saw, without changing the stored report', () => {
+    const player = emptyPlayerKnowledge();
+    updateContact(player, { ...contact('C-1', 'F-A', 80, 120), observedWeapons: ['MANPADS'] }, 90, false);
+    updateContact(player, contact('C-3', 'RECON-1', 100), 100, true);
+    expect(project(player, [], 105, display).contacts[0]?.contact.observedWeapons).toEqual(['MANPADS']);
+    expect(player.contacts['RECON-1/C-3']?.contact.observedWeapons).toEqual([]);
+  });
+});
+
 describe('PlayerView', () => {
   it('gives the same output for the same knowledge, telemetry and time', () => {
     const player = emptyPlayerKnowledge();
@@ -162,7 +308,7 @@ describe('PlayerView', () => {
   it('marks contacts seen fighting, only while the sighting is recent', () => {
     const player = emptyPlayerKnowledge();
     updateContact(player, { ...contact('C-1', 'RECON-1', 100), activity: 'engaging' }, 100, true);
-    updateContact(player, contact('C-2', 'RECON-1', 100), 100, true);
+    updateContact(player, contact('C-2', 'RECON-1', 100, 3000), 100, true);
     const now = project(player, [], 110, display).contacts;
     expect(now.map((m) => m.engaging)).toEqual([true, false]);
     expect(project(player, [], 200, display).contacts[0]?.engaging).toBe(false);
@@ -186,9 +332,30 @@ describe('PlayerView', () => {
     expect(project(player, [], 200, display).strikes).toEqual([]);
   });
 
-  it('keeps a marker selectable at the opacity floor when very old', () => {
+  it('keeps a ground fire mark for its full time, fading, then drops it', () => {
+    const player = emptyPlayerKnowledge();
+    player.groundFire.push({ aircraftId: 'CAS-1', position: { x: 1, y: 2 }, tick: 100, hit: true, weapon: 'MANPADS' });
+    expect(project(player, [], 110, display).groundFire[0]).toMatchObject({ weapon: 'MANPADS', ageSeconds: 10 });
+    const later = project(player, [], 550, display).groundFire[0];
+    expect(later?.opacity).toBeCloseTo(0.5);
+    expect(project(player, [], 1001, display).groundFire).toEqual([]);
+  });
+
+  it('merges ground fire in one place, keeping the newest time and anything learned', () => {
+    const player = emptyPlayerKnowledge();
+    const mark = (x: number, tick: number, hit: boolean, weapon: 'MANPADS' | null) =>
+      player.groundFire.push({ aircraftId: 'CAS-1', position: { x, y: 0 }, tick, hit, weapon });
+    mark(0, 100, true, 'MANPADS');
+    mark(2000, 150, false, null);
+    mark(100, 200, false, null);
+    const marks = project(player, [], 300, display).groundFire;
+    expect(marks).toHaveLength(2);
+    expect(marks[0]).toMatchObject({ position: { x: 100, y: 0 }, ageSeconds: 100, hit: true, weapon: 'MANPADS' });
+  });
+
+  it('keeps an aged marker selectable at the opacity floor until it is archived', () => {
     const player = emptyPlayerKnowledge();
     updateContact(player, contact('C-1', 'F-A', 0), 20, false);
-    expect(project(player, [], 100000, display).contacts[0]?.opacity).toBe(0.25);
+    expect(project(player, [], 1100, display).contacts[0]?.opacity).toBe(0.25);
   });
 });

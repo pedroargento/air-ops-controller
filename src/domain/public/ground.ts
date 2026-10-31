@@ -1,3 +1,4 @@
+import type { AirWeapon, Equipment } from './equipment';
 import type { ContactEstimate, PositionEstimate } from './estimates';
 import type { Vec2 } from './geometry';
 import type { ExpectedSupport } from './radio';
@@ -20,6 +21,9 @@ export type GroundPosture = 'moving' | 'firing' | 'defending' | 'prone';
 // fallback, `recovering` units regroup there, and `broken` units stay out of the fight.
 export type GroundMode = 'steady' | 'withdrawing' | 'recovering' | 'broken';
 
+// What a formation does about an enemy it knows of (§4.0). Null means it knows of none.
+export type GroundBehavior = 'observe' | 'probe' | 'harass' | 'assault' | 'disengage';
+
 export type Doctrine = Readonly<{
   speedMps: number;
   detectRangeMeters: number;
@@ -41,6 +45,16 @@ export type Doctrine = Readonly<{
   supportHoldBonus: number;
   reportMemorySeconds: number;
   airCoverSeconds: number;
+  airCoverRepeatSeconds: number;
+  standoffMeters: number;
+  observeBias: number;
+  probeBias: number;
+  harassBias: number;
+  assaultBias: number;
+  burstSeconds: number;
+  pauseSeconds: number;
+  pressureMoraleFloor: number;
+  airFireThreshold: number;
 }>;
 
 /** What a formation knows about itself. Contains nothing about other units. */
@@ -53,16 +67,24 @@ export type UnitSelf = Readonly<{
   initialPersonnel: number;
   ammunition: number;
   initialAmmunition: number;
+  equipment: readonly Equipment[];
+  supportWeapons: number;
+  airWeapons: readonly AirWeapon[];
   morale: number;
   suppression: number;
   underFire: boolean;
   mode: GroundMode;
+  behavior: GroundBehavior | null;
+  behaviorSinceTick: number;
+  groundCover: number;
   returnsUsed: number;
   patrolIndex: number;
   objective: GroundObjective;
   fallback: Area;
   doctrine: Doctrine;
 }>;
+
+export type NoticedAircraft = Readonly<{ position: Vec2; altitudeMeters: number; seenAt: number }>;
 
 export type UnitKnowledge = {
   // The unit's own tracks, which it can engage.
@@ -71,21 +93,25 @@ export type UnitKnowledge = {
   reports: Record<string, ContactEstimate>;
   expectedSupport: ExpectedSupport | null;
   hostileAircraftSeenAt: number | null;
+  noticedAircraft: NoticedAircraft | null;
 };
 
 export function emptyKnowledge(): UnitKnowledge {
-  return { contacts: {}, reports: {}, expectedSupport: null, hostileAircraftSeenAt: null };
+  return { contacts: {}, reports: {}, expectedSupport: null, hostileAircraftSeenAt: null, noticedAircraft: null };
 }
 
 export type GroundIntent =
   | Readonly<{ kind: 'wait' }>
   | Readonly<{ kind: 'hold'; posture: GroundPosture }>
   | Readonly<{ kind: 'move'; destination: Vec2 }>
-  | Readonly<{ kind: 'engage'; contactId: ContactId; closeTo: Vec2 | null }>;
+  | Readonly<{ kind: 'engage'; contactId: ContactId; closeTo: Vec2 | null; fireRate: number; prepared: boolean }>;
 
 export type GroundDecision = Readonly<{
   intent: GroundIntent;
   mode: GroundMode;
+  behavior: GroundBehavior | null;
+  behaviorSinceTick: number;
+  firesAtAircraft: boolean;
   returnsUsed: number;
   patrolIndex: number;
 }>;

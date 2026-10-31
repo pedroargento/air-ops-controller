@@ -7,9 +7,10 @@ import {
   type Identification,
   type StrengthEstimate,
 } from '../domain/public/estimates';
+import type { WeaponType } from '../domain/public/equipment';
 import { distance, type Vec2 } from '../domain/public/geometry';
 import { emptyKnowledge, type ContactId, type Side, type UnitKnowledge } from '../domain/public/ground';
-import { cellAt, hasGroundLos, type TerrainGrid } from '../domain/public/terrain';
+import { cellAt, hasAirLos, hasGroundLos, type TerrainGrid } from '../domain/public/terrain';
 import type { GroundUnit, Track, WorldTruth } from '../domain/truth/world';
 import { nextBinomial, nextBool, nextFloat, nextGaussian, type RngState } from '../rng/streams';
 import type { PerceptionConfig } from '../scenario/schema';
@@ -22,6 +23,7 @@ export type Observer = Readonly<{
   side: Side;
   position: Vec2;
   medium: 'ground' | 'air';
+  altitudeMeters: number;
   quality: number;
   rangeMeters: number;
   suppression: number;
@@ -39,7 +41,9 @@ function activityOf(target: GroundUnit, tick: number): ContactActivity {
 }
 
 function hasLineOfSight(observer: Observer, target: GroundUnit, terrain: TerrainGrid): boolean {
-  return observer.medium === 'air' || hasGroundLos(terrain, observer.position, target.position);
+  return observer.medium === 'air'
+    ? hasAirLos(terrain, target.position, observer.position, observer.altitudeMeters)
+    : hasGroundLos(terrain, observer.position, target.position);
 }
 
 function detectionChance(
@@ -167,6 +171,7 @@ function sampleEstimate(
     kind: identification === 'unidentified' ? 'unknown' : 'infantry',
     activity,
     confidence: confidenceFor(sigma, config),
+    observedWeapons: track?.estimate.observedWeapons ?? [],
   };
 
   return {
@@ -178,6 +183,24 @@ function sampleEstimate(
     lastSeenTick: tick,
     estimate,
   };
+}
+
+/**
+ * Weapons this scan actually shows: whatever the target just fired, plus, with a good
+ * look, what it is carrying. Being identified as hostile reveals nothing by itself.
+ */
+function seenWeapons(
+  observer: Observer,
+  target: GroundUnit,
+  range: number,
+  rng: RngState,
+  config: PerceptionConfig,
+  tick: number,
+): readonly WeaponType[] {
+  const fired = activityOf(target, tick) === 'engaging' ? target.firedWeapons : [];
+  const chance = config.weaponSeenPerScan * observer.quality * (1 - range / observer.rangeMeters);
+  if (!nextBool(rng, `weapons/${observer.id}/${target.id}`, Math.min(1, chance))) return fired;
+  return [...fired, ...target.equipment.filter((item) => item.quantity > 0).map((item) => item.weapon)];
 }
 
 function isGenuinelyNew(
@@ -246,6 +269,12 @@ export function observeTarget(
     confirmTrack(track, target, identification, tick);
     current = track;
   }
+  const known = new Set(current.estimate.observedWeapons);
+  const seen = seenWeapons(observer, target, range, rng, config, tick);
+  if (seen.some((weapon) => !known.has(weapon))) {
+    const observedWeapons = [...new Set([...known, ...seen])].sort();
+    current.estimate = { ...current.estimate, observedWeapons };
+  }
   tracks[target.id] = current;
   return current.estimate;
 }
@@ -256,6 +285,7 @@ function groundObserver(unit: GroundUnit): Observer {
     side: unit.side,
     position: unit.position,
     medium: 'ground',
+    altitudeMeters: 0,
     quality: unit.doctrine.observerQuality,
     rangeMeters: unit.doctrine.detectRangeMeters,
     suppression: unit.suppression,

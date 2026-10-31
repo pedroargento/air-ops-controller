@@ -1,3 +1,4 @@
+import { isAntiAir, threatRadiusMeters } from './domain/public/equipment';
 import scenarioJson from '../scenarios/outpost-under-pressure.json';
 import classLayer from '../scenarios/outpost-under-pressure/terrain.txt?raw';
 import elevationLayer from '../scenarios/outpost-under-pressure/elevation.txt?raw';
@@ -43,6 +44,32 @@ const app = new App({
   objective: `Hold the outpost for ${Math.round(scenario.file.durationSeconds / 60)} minutes`,
   ackDistanceMeters: scenario.file.air.supportAckDistanceMeters,
   sensorRadius: (aircraft) => scenario.file.air.types[aircraft.aircraftType].sensorRadiusMeters,
+  threatRadius: (weapons, altitudeMeters) =>
+    Math.max(
+      0,
+      ...weapons
+        .filter(isAntiAir)
+        .map((weapon) =>
+          threatRadiusMeters(
+            scenario.file.combat.weapons[weapon],
+            altitudeMeters,
+            scenario.file.display.threatRiskPerMinute,
+          ),
+        ),
+    ),
+  weaponCeiling: (weapon) => scenario.file.combat.weapons[weapon].maxAltitudeMeters,
+  maxAltitudeMeters: Math.max(...Object.values(scenario.file.air.types).map((type) => type.maxAltitudeMeters)),
+  defaultAltitudeMeters: scenario.file.air.operatingAltitudeMeters,
+  // The player's own order of battle and the HQ estimate: nothing here reveals enemy truth.
+  summary: {
+    objective: scenario.file.capture.area.center,
+    objectiveRadiusMeters: scenario.file.capture.area.radius,
+    hqEnemyEstimate: scenario.file.display.hqEnemyEstimate,
+    ratioRadiusMeters: scenario.file.display.summaryRatioRadiusMeters,
+    staleSeconds: scenario.file.display.summaryStaleSeconds,
+    friendlyStrength: Object.fromEntries(friendlies.map((unit) => [unit.id, unit.personnel])),
+    plausibleSpeedMps: scenario.file.display.plausibleSpeedMps,
+  },
   speeds: SPEEDS,
   onAction: (action) => session.issue(action),
   onSpeed: (value) => {
@@ -80,7 +107,7 @@ function frame(now: number): void {
     if (ticks === MAX_TICKS_PER_FRAME) accumulator = 0;
   }
   const result = session.outcome === 'running' ? null : (RESULT_TEXT[session.outcome] ?? session.outcome);
-  app.update(session.view(), { paused, speed, result });
+  app.update(session.view(), { paused, speed, result, debrief: session.debrief() });
   requestAnimationFrame(frame);
 }
 

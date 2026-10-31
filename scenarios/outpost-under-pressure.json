@@ -4,7 +4,7 @@
   "durationSeconds": 4500,
   "terrain": {
     "cellSizeMeters": 50,
-    "elevationStepMeters": 10,
+    "elevationStepMeters": 40,
     "classLayer": "outpost-under-pressure/terrain.txt",
     "elevationLayer": "outpost-under-pressure/elevation.txt",
     "legend": {
@@ -82,7 +82,7 @@
       "withdrawSuppression": 1,
       "returnMorale": 0.4,
       "returnSuppression": 0.3,
-      "returnMaxCasualties": 0.85,
+      "returnMaxCasualties": 0.75,
       "returnMinAmmoFraction": 0.02,
       "maxReturns": 3,
       "observerQuality": 1,
@@ -91,7 +91,17 @@
       "delayStrengthRatio": 3,
       "supportHoldBonus": 0.4,
       "reportMemorySeconds": 300,
-      "airCoverSeconds": 0
+      "airCoverSeconds": 0,
+      "standoffMeters": 200,
+      "burstSeconds": 120,
+      "pauseSeconds": 180,
+      "pressureMoraleFloor": 0.2,
+      "observeBias": 0.2,
+      "probeBias": 0,
+      "harassBias": 0.5,
+      "assaultBias": 0.3,
+      "airFireThreshold": 0.5,
+      "airCoverRepeatSeconds": 300
     },
     "patrol": {
       "speedMps": 1,
@@ -99,12 +109,140 @@
       "engageRangeMeters": 300,
       "closesToMeters": null,
       "pinnedSuppression": 0.6,
-      "withdrawCasualties": 0.3,
-      "withdrawMorale": 0.4,
+      "withdrawCasualties": 0.45,
+      "withdrawMorale": 0.35,
       "withdrawSuppression": 0.8,
       "returnMorale": 0.6,
       "returnSuppression": 0.3,
-      "returnMaxCasualties": 0.6,
+      "returnMaxCasualties": 0.4,
+      "returnMinAmmoFraction": 0.1,
+      "maxReturns": 1,
+      "observerQuality": 1.2,
+      "alertRadiusMeters": 500,
+      "avoidStrengthRatio": 1.5,
+      "delayStrengthRatio": 1.5,
+      "supportHoldBonus": 0.3,
+      "reportMemorySeconds": 900,
+      "airCoverSeconds": 0,
+      "standoffMeters": 300,
+      "burstSeconds": 120,
+      "pauseSeconds": 180,
+      "pressureMoraleFloor": 0.45,
+      "observeBias": 1,
+      "probeBias": 0.3,
+      "harassBias": 0.1,
+      "assaultBias": 0.1,
+      "airFireThreshold": 0.5,
+      "airCoverRepeatSeconds": 300
+    },
+    "assault": {
+      "speedMps": 1,
+      "detectRangeMeters": 500,
+      "engageRangeMeters": 300,
+      "closesToMeters": 40,
+      "pinnedSuppression": 0.7,
+      "withdrawCasualties": 0.6,
+      "withdrawMorale": 0.25,
+      "withdrawSuppression": 0.95,
+      "returnMorale": 0.45,
+      "returnSuppression": 0.25,
+      "returnMaxCasualties": 0.55,
+      "returnMinAmmoFraction": 0.1,
+      "maxReturns": 3,
+      "observerQuality": 0.9,
+      "alertRadiusMeters": 400,
+      "avoidStrengthRatio": 3,
+      "delayStrengthRatio": 3,
+      "supportHoldBonus": 0,
+      "reportMemorySeconds": 300,
+      "airCoverSeconds": 30,
+      "standoffMeters": 150,
+      "burstSeconds": 120,
+      "pauseSeconds": 180,
+      "pressureMoraleFloor": 0.3,
+      "observeBias": 0.1,
+      "probeBias": 0.1,
+      "harassBias": 0.2,
+      "assaultBias": 1.5,
+      "airFireThreshold": 0.02,
+      "airCoverRepeatSeconds": 300
+    },
+    "harass": {
+      "speedMps": 1,
+      "detectRangeMeters": 500,
+      "engageRangeMeters": 300,
+      "closesToMeters": null,
+      "pinnedSuppression": 0.7,
+      "withdrawCasualties": 0.45,
+      "withdrawMorale": 0.4,
+      "withdrawSuppression": 0.95,
+      "returnMorale": 0.45,
+      "returnSuppression": 0.25,
+      "returnMaxCasualties": 0.4,
+      "returnMinAmmoFraction": 0.1,
+      "maxReturns": 3,
+      "observerQuality": 0.9,
+      "alertRadiusMeters": 400,
+      "avoidStrengthRatio": 3,
+      "delayStrengthRatio": 3,
+      "supportHoldBonus": 0,
+      "reportMemorySeconds": 300,
+      "airCoverSeconds": 30,
+      "standoffMeters": 250,
+      "burstSeconds": 120,
+      "pauseSeconds": 180,
+      "pressureMoraleFloor": 0.45,
+      "observeBias": 0.3,
+      "probeBias": 0.2,
+      "harassBias": 1,
+      "assaultBias": 0.2,
+      "airFireThreshold": 0.02,
+      "airCoverRepeatSeconds": 300
+    },
+    "recon": {
+      "speedMps": 1,
+      "detectRangeMeters": 500,
+      "engageRangeMeters": 300,
+      "closesToMeters": null,
+      "pinnedSuppression": 0.6,
+      "withdrawCasualties": 0.45,
+      "withdrawMorale": 0.35,
+      "withdrawSuppression": 0.8,
+      "returnMorale": 0.6,
+      "returnSuppression": 0.3,
+      "returnMaxCasualties": 0.4,
+      "returnMinAmmoFraction": 0.1,
+      "maxReturns": 2,
+      "observerQuality": 1.2,
+      "alertRadiusMeters": 500,
+      "avoidStrengthRatio": 1.5,
+      "delayStrengthRatio": 1.5,
+      "supportHoldBonus": 0.3,
+      "reportMemorySeconds": 300,
+      "airCoverSeconds": 0,
+      "standoffMeters": 300,
+      "burstSeconds": 120,
+      "pauseSeconds": 180,
+      "pressureMoraleFloor": 0.45,
+      "observeBias": 0.8,
+      "probeBias": 1.5,
+      "harassBias": 0.1,
+      "assaultBias": 0.1,
+      "airFireThreshold": 0.5,
+      "airCoverRepeatSeconds": 300
+    },
+    "antiair": {
+      "speedMps": 1,
+      "detectRangeMeters": 500,
+      "engageRangeMeters": 300,
+      "closesToMeters": null,
+      "pinnedSuppression": 0.6,
+      "withdrawCasualties": 0.45,
+      "withdrawMorale": 0.35,
+      "withdrawSuppression": 0.8,
+      "returnMorale": 0.6,
+      "returnSuppression": 0.3,
+      "returnMaxCasualties": 0.4,
       "returnMinAmmoFraction": 0.1,
       "maxReturns": 1,
       "observerQuality": 1.2,
@@ -113,41 +251,26 @@
       "delayStrengthRatio": 1.5,
       "supportHoldBonus": 0.3,
       "reportMemorySeconds": 300,
-      "airCoverSeconds": 0
-    },
-    "assault": {
-      "speedMps": 1,
-      "detectRangeMeters": 500,
-      "engageRangeMeters": 300,
-      "closesToMeters": 40,
-      "pinnedSuppression": 0.7,
-      "withdrawCasualties": 0.5,
-      "withdrawMorale": 0.25,
-      "withdrawSuppression": 0.95,
-      "returnMorale": 0.55,
-      "returnSuppression": 0.25,
-      "returnMaxCasualties": 0.6,
-      "returnMinAmmoFraction": 0.1,
-      "maxReturns": 2,
-      "observerQuality": 0.9,
-      "alertRadiusMeters": 400,
-      "avoidStrengthRatio": 3,
-      "delayStrengthRatio": 3,
-      "supportHoldBonus": 0,
-      "reportMemorySeconds": 300,
-      "airCoverSeconds": 30
+      "airCoverSeconds": 0,
+      "standoffMeters": 100,
+      "burstSeconds": 120,
+      "pauseSeconds": 180,
+      "pressureMoraleFloor": 0.45,
+      "observeBias": 1,
+      "probeBias": 0,
+      "harassBias": 0,
+      "assaultBias": 0,
+      "airFireThreshold": 0.02,
+      "airCoverRepeatSeconds": 300
     }
   },
   "combat": {
-    "lethalityPerManVolley": 0.01,
-    "suppressionPerManVolley": 0.09,
-    "ammoPerManVolley": 1,
     "suppressionFirePenalty": 0.8,
     "movingFirePenalty": 0.5,
     "minRangeFactor": 0.25,
     "suppressionDecayPerUpdate": 0.08,
     "moraleLossPerCasualtyFraction": 1,
-    "moraleLossUnderFirePerUpdate": 0.002,
+    "moraleLossUnderFirePerUpdate": 0.004,
     "moraleRecoveryPerUpdate": 0.01,
     "moraleRecoveryCap": 0.75,
     "postureCover": {
@@ -156,7 +279,78 @@
       "defending": 0.35,
       "prone": 0.3
     },
-    "assessmentSigmaMeters": 150
+    "assessmentSigmaMeters": 150,
+    "moraleLossDeterioratingPerUpdate": 0.002,
+    "isolationRadiusMeters": 1000,
+    "lowAmmunitionFraction": 0.15,
+    "moraleRecoveryOutOfContactPerUpdate": 0.002,
+    "outOfContactSeconds": 60,
+    "behaviorFireRate": {
+      "observe": 0.5,
+      "probe": 0.6,
+      "harass": 0.35,
+      "assault": 1,
+      "disengage": 0.5
+    },
+    "weapons": {
+      "SMALL_ARMS": {
+        "targetDomains": [
+          "GROUND",
+          "AIR"
+        ],
+        "rangeMeters": 350,
+        "suppressionEffect": 0.07,
+        "damageEffect": 0.01,
+        "crewRequired": 1,
+        "ammunitionPerUse": 1,
+        "maxAltitudeMeters": 150,
+        "airHitChance": 0.01,
+        "airCycleSeconds": 30
+      },
+      "MACHINE_GUN": {
+        "targetDomains": [
+          "GROUND",
+          "AIR"
+        ],
+        "rangeMeters": 350,
+        "suppressionEffect": 0.4,
+        "damageEffect": 0.02,
+        "crewRequired": 2,
+        "ammunitionPerUse": 6,
+        "maxAltitudeMeters": 350,
+        "airHitChance": 0.02,
+        "airCycleSeconds": 15
+      },
+      "AAA": {
+        "targetDomains": [
+          "GROUND",
+          "AIR"
+        ],
+        "rangeMeters": 1500,
+        "suppressionEffect": 0.4,
+        "damageEffect": 0.03,
+        "crewRequired": 3,
+        "ammunitionPerUse": 4,
+        "maxAltitudeMeters": 2000,
+        "airHitChance": 0.08,
+        "airCycleSeconds": 15
+      },
+      "MANPADS": {
+        "targetDomains": [
+          "AIR"
+        ],
+        "rangeMeters": 2500,
+        "suppressionEffect": 0,
+        "damageEffect": 0,
+        "crewRequired": 2,
+        "ammunitionPerUse": 1,
+        "maxAltitudeMeters": 2500,
+        "airHitChance": 0.3,
+        "airCycleSeconds": 90
+      }
+    },
+    "systemLossPerCasualtyFraction": 1,
+    "assessmentNoise": 0.5
   },
   "capture": {
     "area": {
@@ -169,7 +363,7 @@
     "enemyMinEffective": 20,
     "defenderMinEffective": 15,
     "holdSeconds": 60,
-    "successMinDefenders": 45
+    "successMinDefenders": 50
   },
   "units": [
     {
@@ -181,7 +375,6 @@
         "y": 2580
       },
       "personnel": 40,
-      "ammunition": 20000,
       "morale": 0.8,
       "doctrine": "garrison",
       "objective": {
@@ -200,7 +393,19 @@
           "y": 2625
         },
         "radius": 90
-      }
+      },
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 40,
+          "ammunition": 17000
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 3,
+          "ammunition": 9000
+        }
+      ]
     },
     {
       "id": "F-B",
@@ -211,7 +416,6 @@
         "y": 2650
       },
       "personnel": 30,
-      "ammunition": 15000,
       "morale": 0.8,
       "doctrine": "garrison",
       "objective": {
@@ -230,7 +434,19 @@
           "y": 2625
         },
         "radius": 90
-      }
+      },
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 30,
+          "ammunition": 13000
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 2,
+          "ammunition": 6000
+        }
+      ]
     },
     {
       "id": "F-N",
@@ -241,7 +457,6 @@
         "y": 2000
       },
       "personnel": 12,
-      "ammunition": 2400,
       "morale": 0.75,
       "doctrine": "patrol",
       "objective": {
@@ -263,7 +478,19 @@
           "y": 2625
         },
         "radius": 120
-      }
+      },
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 12,
+          "ammunition": 2000
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 1,
+          "ammunition": 1200
+        }
+      ]
     },
     {
       "id": "F-S",
@@ -274,7 +501,6 @@
         "y": 3100
       },
       "personnel": 12,
-      "ammunition": 2400,
       "morale": 0.75,
       "doctrine": "patrol",
       "objective": {
@@ -296,127 +522,257 @@
           "y": 2625
         },
         "radius": 120
-      }
+      },
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 12,
+          "ammunition": 2000
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 1,
+          "ammunition": 1200
+        }
+      ]
     },
     {
       "id": "E-N1",
-      "name": "North One",
+      "name": "North Screen",
       "side": "enemy",
       "position": {
-        "x": 2100,
-        "y": 1150
+        "x": 2250,
+        "y": 1450
       },
       "personnel": 40,
-      "ammunition": 16000,
       "morale": 0.75,
-      "doctrine": "assault",
+      "doctrine": "harass",
       "objective": {
         "kind": "MoveTo",
         "area": {
           "center": {
-            "x": 2525,
-            "y": 2625
+            "x": 2400,
+            "y": 1900
           },
-          "radius": 40
+          "radius": 60
         }
       },
       "fallback": {
         "center": {
-          "x": 2100,
-          "y": 800
+          "x": 2300,
+          "y": 1500
         },
-        "radius": 150
-      }
+        "radius": 120
+      },
+      "objectiveSchedule": [
+        {
+          "fromSeconds": 1500,
+          "objective": {
+            "kind": "MoveTo",
+            "area": {
+              "center": {
+                "x": 2450,
+                "y": 2340
+              },
+              "radius": 40
+            }
+          }
+        },
+        {
+          "fromSeconds": 3300,
+          "objective": {
+            "kind": "MoveTo",
+            "area": {
+              "center": {
+                "x": 2525,
+                "y": 2625
+              },
+              "radius": 40
+            }
+          }
+        }
+      ],
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 40,
+          "ammunition": 13600
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 3,
+          "ammunition": 7200
+        }
+      ]
     },
     {
       "id": "E-N2",
-      "name": "North Two",
+      "name": "North Assault",
       "side": "enemy",
       "position": {
         "x": 2800,
         "y": 1100
       },
-      "personnel": 40,
-      "ammunition": 16000,
+      "personnel": 60,
       "morale": 0.75,
       "doctrine": "assault",
       "objective": {
-        "kind": "MoveTo",
+        "kind": "HoldArea",
         "area": {
           "center": {
-            "x": 2525,
-            "y": 2625
+            "x": 2800,
+            "y": 1650
           },
-          "radius": 40
+          "radius": 100
         }
       },
       "fallback": {
         "center": {
-          "x": 2800,
-          "y": 800
+          "x": 2650,
+          "y": 2200
         },
-        "radius": 150
-      }
+        "radius": 120
+      },
+      "objectiveSchedule": [
+        {
+          "fromSeconds": 1500,
+          "objective": {
+            "kind": "MoveTo",
+            "area": {
+              "center": {
+                "x": 2525,
+                "y": 2625
+              },
+              "radius": 40
+            }
+          }
+        }
+      ],
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 60,
+          "ammunition": 20000
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 5,
+          "ammunition": 12000
+        }
+      ]
     },
     {
       "id": "E-S1",
-      "name": "South One",
+      "name": "Scouts",
       "side": "enemy",
       "position": {
-        "x": 3700,
-        "y": 3300
+        "x": 3600,
+        "y": 2800
       },
-      "personnel": 40,
-      "ammunition": 16000,
+      "personnel": 20,
       "morale": 0.75,
-      "doctrine": "assault",
+      "doctrine": "recon",
       "objective": {
-        "kind": "MoveTo",
-        "area": {
-          "center": {
-            "x": 2525,
-            "y": 2625
+        "kind": "PatrolArea",
+        "waypoints": [
+          {
+            "x": 3300,
+            "y": 2700
           },
-          "radius": 40
-        }
-      },
-      "fallback": {
-        "center": {
-          "x": 4100,
-          "y": 3500
-        },
-        "radius": 150
-      }
-    },
-    {
-      "id": "E-S2",
-      "name": "South Two",
-      "side": "enemy",
-      "position": {
-        "x": 3400,
-        "y": 3900
-      },
-      "personnel": 40,
-      "ammunition": 16000,
-      "morale": 0.75,
-      "doctrine": "assault",
-      "objective": {
-        "kind": "MoveTo",
-        "area": {
-          "center": {
-            "x": 2525,
-            "y": 2625
+          {
+            "x": 2900,
+            "y": 3300
           },
-          "radius": 40
-        }
+          {
+            "x": 3350,
+            "y": 3000
+          }
+        ]
       },
       "fallback": {
         "center": {
           "x": 3700,
-          "y": 4300
+          "y": 3100
         },
-        "radius": 150
-      }
+        "radius": 120
+      },
+      "objectiveSchedule": [],
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 20,
+          "ammunition": 4000
+        }
+      ]
+    },
+    {
+      "id": "E-S2",
+      "name": "South Screen",
+      "side": "enemy",
+      "position": {
+        "x": 3400,
+        "y": 3600
+      },
+      "personnel": 40,
+      "morale": 0.75,
+      "doctrine": "harass",
+      "objective": {
+        "kind": "MoveTo",
+        "area": {
+          "center": {
+            "x": 3100,
+            "y": 3350
+          },
+          "radius": 60
+        }
+      },
+      "fallback": {
+        "center": {
+          "x": 3400,
+          "y": 3500
+        },
+        "radius": 120
+      },
+      "objectiveSchedule": [
+        {
+          "fromSeconds": 1500,
+          "objective": {
+            "kind": "MoveTo",
+            "area": {
+              "center": {
+                "x": 2720,
+                "y": 2830
+              },
+              "radius": 40
+            }
+          }
+        },
+        {
+          "fromSeconds": 3300,
+          "objective": {
+            "kind": "MoveTo",
+            "area": {
+              "center": {
+                "x": 2525,
+                "y": 2625
+              },
+              "radius": 40
+            }
+          }
+        }
+      ],
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 40,
+          "ammunition": 13600
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 3,
+          "ammunition": 7200
+        }
+      ]
     },
     {
       "id": "E-R",
@@ -426,59 +782,150 @@
         "x": 1200,
         "y": 3700
       },
-      "personnel": 50,
-      "ammunition": 20000,
+      "personnel": 60,
       "morale": 0.8,
       "doctrine": "assault",
-      "activeFromSeconds": 1500,
       "objective": {
-        "kind": "MoveTo",
+        "kind": "HoldArea",
         "area": {
           "center": {
-            "x": 2525,
-            "y": 2625
+            "x": 1700,
+            "y": 3350
           },
-          "radius": 40
+          "radius": 100
         }
       },
       "fallback": {
         "center": {
-          "x": 800,
-          "y": 4000
+          "x": 2200,
+          "y": 3000
         },
-        "radius": 150
-      }
+        "radius": 120
+      },
+      "objectiveSchedule": [
+        {
+          "fromSeconds": 2100,
+          "objective": {
+            "kind": "MoveTo",
+            "area": {
+              "center": {
+                "x": 2525,
+                "y": 2625
+              },
+              "radius": 40
+            }
+          }
+        }
+      ],
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 60,
+          "ammunition": 20000
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 5,
+          "ammunition": 12000
+        }
+      ]
     },
     {
       "id": "E-W",
-      "name": "Second Echelon",
+      "name": "West Assault",
       "side": "enemy",
       "position": {
         "x": 1650,
         "y": 2400
       },
-      "personnel": 60,
-      "ammunition": 24000,
+      "personnel": 70,
       "morale": 0.8,
       "doctrine": "assault",
-      "activeFromSeconds": 1500,
       "objective": {
-        "kind": "MoveTo",
+        "kind": "HoldArea",
         "area": {
           "center": {
-            "x": 2525,
-            "y": 2625
+            "x": 1650,
+            "y": 2400
           },
-          "radius": 40
+          "radius": 100
         }
       },
       "fallback": {
         "center": {
-          "x": 600,
-          "y": 1800
+          "x": 2080,
+          "y": 2550
         },
-        "radius": 150
-      }
+        "radius": 120
+      },
+      "objectiveSchedule": [
+        {
+          "fromSeconds": 1800,
+          "objective": {
+            "kind": "MoveTo",
+            "area": {
+              "center": {
+                "x": 2525,
+                "y": 2625
+              },
+              "radius": 40
+            }
+          }
+        }
+      ],
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 70,
+          "ammunition": 24000
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 5,
+          "ammunition": 12000
+        }
+      ]
+    },
+    {
+      "id": "E-AD",
+      "name": "Air Defense Team",
+      "side": "enemy",
+      "position": {
+        "x": 2700,
+        "y": 2250
+      },
+      "personnel": 4,
+      "morale": 0.75,
+      "doctrine": "antiair",
+      "objective": {
+        "kind": "HoldArea",
+        "area": {
+          "center": {
+            "x": 2700,
+            "y": 2250
+          },
+          "radius": 60
+        }
+      },
+      "fallback": {
+        "center": {
+          "x": 2800,
+          "y": 1900
+        },
+        "radius": 120
+      },
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 4,
+          "ammunition": 800
+        },
+        {
+          "weapon": "MANPADS",
+          "quantity": 1,
+          "ammunition": 4
+        }
+      ]
     }
   ],
   "perception": {
@@ -508,7 +955,8 @@
     "highConfidenceSigmaMeters": 40,
     "mediumConfidenceSigmaMeters": 90,
     "navSigmaMeters": 40,
-    "navDriftPerMeter": 0.6
+    "navDriftPerMeter": 0.6,
+    "weaponSeenPerScan": 0.1
   },
   "radio": {
     "prepareSeconds": 15,
@@ -522,7 +970,12 @@
     "sitrepCasualtyStep": 0.15,
     "contactReportIntervalSeconds": 120,
     "ticRangeMeters": 350,
-    "sitrepIntervalSeconds": 300
+    "sitrepIntervalSeconds": 300,
+    "ticStrengthRatio": 1.2,
+    "ticCasualtyFraction": 0.1,
+    "supportStrengthRatio": 1.5,
+    "supportCasualtyFraction": 0.2,
+    "supportAmmunitionFraction": 0.25
   },
   "display": {
     "opacityFloor": 0.25,
@@ -533,7 +986,21 @@
     "freshReportSeconds": 120,
     "regionMaxRadiusMeters": 700,
     "regionFadeSeconds": 480,
-    "effectSeconds": 40
+    "effectSeconds": 40,
+    "groundFireMarkSeconds": 900,
+    "threatRiskPerMinute": 0.1,
+    "groundFireMergeMeters": 300,
+    "archiveSeconds": 1200,
+    "destroyedShowSeconds": 300,
+    "notFoundShowSeconds": 120,
+    "friendlySilentSeconds": 600,
+    "consolidateMaxAgeSeconds": 120,
+    "notFoundMinAgeSeconds": 60,
+    "notFoundLookSeconds": 60,
+    "notFoundCoverage": 0.7,
+    "hqEnemyEstimate": 350,
+    "summaryRatioRadiusMeters": 1000,
+    "summaryStaleSeconds": 600
   },
   "links": [
     [
@@ -579,12 +1046,16 @@
     [
       "E-S2",
       "E-R"
+    ],
+    [
+      "E-AD",
+      "E-N2"
     ]
   ],
   "ceconMessages": [
     {
       "atSeconds": 0,
-      "text": "Outpost must hold for seventy-five minutes. Enemy formations reported moving toward your area."
+      "text": "Outpost must hold for seventy-five minutes. Intelligence estimates about 350 enemy moving toward your area."
     },
     {
       "atSeconds": 1800,
@@ -607,7 +1078,11 @@
         "sensorRadiusMeters": 1000,
         "observerQuality": 1.3,
         "orbitRadiusMeters": 600,
-        "turnRateRadPerSecond": 0.3
+        "turnRateRadPerSecond": 0.3,
+        "repairSeconds": 1500,
+        "climbRateMps": 10,
+        "minAltitudeMeters": 100,
+        "maxAltitudeMeters": 3000
       },
       "cas": {
         "speedMps": 100,
@@ -619,7 +1094,11 @@
         "sensorRadiusMeters": 700,
         "observerQuality": 0.9,
         "orbitRadiusMeters": 400,
-        "turnRateRadPerSecond": 0.4
+        "turnRateRadPerSecond": 0.4,
+        "repairSeconds": 1500,
+        "climbRateMps": 15,
+        "minAltitudeMeters": 100,
+        "maxAltitudeMeters": 3000
       }
     },
     "aircraft": [
@@ -642,13 +1121,24 @@
     "cueMaxAgeSeconds": 180,
     "cueDetectionBoost": 3,
     "passIntervalSeconds": 120,
-    "casualtyFractionPerPass": 0.15,
-    "suppressionPerPass": 0.4,
-    "moralePerPass": 0.1,
+    "casualtyFractionPerPass": 0.3,
+    "suppressionPerPass": 0.6,
+    "moralePerPass": 0.2,
     "blastRadiusMeters": 120,
     "supportAckDistanceMeters": 300,
     "supportGraceSeconds": 180,
     "supportEtaSlipSeconds": 60,
-    "sightingDedupeMeters": 400
+    "sightingDedupeMeters": 400,
+    "operatingAltitudeMeters": 650,
+    "groundFireSigmaMeters": 150,
+    "groundFireWeaponSeenChance": 0.5,
+    "groundFireReportSeconds": 60,
+    "sensorFalloffMeters": 4000,
+    "sensorQualityMin": 0.2,
+    "sensorQualityMax": 1.3,
+    "strikeMissPerMeterAltitude": 0.04,
+    "sensorReferenceHeightMeters": 300,
+    "terrainClearanceMeters": 60,
+    "terrainLookaheadSeconds": 8
   }
 }

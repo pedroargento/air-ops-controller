@@ -29,6 +29,7 @@ export function receiveByUnit(knowledge: UnitKnowledge, message: RadioMessage): 
     case 'SUPPORT_REQUEST':
     case 'COMMAND_UPDATE':
     case 'STRIKE_RESULT':
+    case 'GROUND_FIRE':
       return;
   }
 }
