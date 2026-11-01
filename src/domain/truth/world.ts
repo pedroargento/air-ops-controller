@@ -58,6 +58,7 @@ export type GroundUnit = {
   name: string;
   side: Side;
   position: Vec2;
+  facingRad: number;
   navOffset: Vec2;
   /** Metres walked since the navigation error last drifted. */
   navMeters: number;
@@ -128,6 +129,8 @@ export type WorldTruth = {
   nextContactNumber: number;
   weather: Weather;
   captureProgressSeconds: number;
+  /** How much of the enemy the player had found, for a `LocateForce` mission. */
+  locatedShare: number | null;
   outcome: Outcome;
   endedAtTick: number | null;
 };

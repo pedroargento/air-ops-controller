@@ -1,6 +1,7 @@
 import type { WeaponType } from './equipment';
 import type { ContactEstimate, PositionEstimate } from './estimates';
 import type { ContactId, DrillKind, GroundMode } from './ground';
+import type { Poi } from './poi';
 
 export const AIR_OPS = 'AIR_OPS';
 export const CECON = 'CECON';
@@ -35,6 +36,7 @@ export type RadioMessage =
   | (MessageMeta &
       Readonly<{ kind: 'ACKNOWLEDGEMENT'; support: ExpectedSupport | null; supportCancelled: boolean }>)
   | (MessageMeta & Readonly<{ kind: 'INTEL_REPORT'; contact: ContactEstimate }>)
+  | (MessageMeta & Readonly<{ kind: 'POI_REPORT'; poi: Poi; cancelled: boolean }>)
   | (MessageMeta &
       Readonly<{
         kind: 'STRIKE_RESULT';
@@ -108,6 +110,7 @@ export function reportLevel(message: RadioMessage): ReportLevel {
     case 'POSITION_REPORT':
     case 'ACKNOWLEDGEMENT':
     case 'INTEL_REPORT':
+    case 'POI_REPORT':
       return 'routine';
   }
 }

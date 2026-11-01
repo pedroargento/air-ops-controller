@@ -20,6 +20,10 @@ export function receiveByUnit(knowledge: UnitKnowledge, message: RadioMessage): 
     case 'TIC':
       if (message.contact !== null) storeReport(knowledge, message.contact);
       return;
+    case 'POI_REPORT':
+      if (message.cancelled) delete knowledge.pois[message.poi.id];
+      else knowledge.pois[message.poi.id] = message.poi;
+      return;
     case 'ACKNOWLEDGEMENT':
       if (message.supportCancelled) knowledge.expectedSupport = null;
       else if (message.support !== null) knowledge.expectedSupport = message.support;

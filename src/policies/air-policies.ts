@@ -1,3 +1,5 @@
+import { cos, sin } from '../domain/public/det-math';
+import { POI_KINDS } from '../domain/public/poi';
 import type { AircraftId, AircraftTelemetryEntry } from '../domain/public/air';
 import type { PlayerCommand } from '../domain/public/commands';
 import { isAntiAir } from '../domain/public/equipment';
@@ -13,6 +15,8 @@ const SUPPORT_RADIUS_METERS = 500;
 const RECON_RADIUS_METERS = 1500;
 const FRESH_CONTACT_SECONDS = 120;
 const NEARBY_FORWARD_METERS = 1200;
+const KILL_ZONE_REACH_METERS = 150;
+const KILL_ZONE_GROUP_METERS = 150;
 const DEFAULT_LAUNCH_RANGE_METERS = 1300;
 const SECOND_CAS_CONTACTS = 3;
 const THREAT_MEMORY_SECONDS = 900;
@@ -251,5 +255,63 @@ export function scoutingOnly(policy: Policy): Policy {
   return (view) => {
     const strikers = new Set(cas(view).map((aircraft) => aircraft.aircraftId as string));
     return policy(view).filter((command) => !('aircraftId' in command) || !strikers.has(command.aircraftId));
+  };
+}
+
+/** Where a still contact is looking, if the crew saw. */
+function facedPoint(marker: ContactMarker): Vec2 | null {
+  const { facingRad, position } = marker.contact;
+  if (facingRad === undefined || marker.contact.activity !== 'stationary') return null;
+  return {
+    x: position.center.x + cos(facingRad) * KILL_ZONE_REACH_METERS,
+    y: position.center.y + sin(facingRad) * KILL_ZONE_REACH_METERS,
+  };
+}
+
+/**
+ * Reads the pattern as a player would: still squads looking at the same ground. It works
+ * only from what crews reported, so it can miss an ambush or mark an empty road.
+ */
+export function markingKillZones(policy: Policy, minContacts = 2): Policy {
+  return (view) => {
+    const commands = [...policy(view)];
+    // Consolidation can fold squads into one marker, and each of them still looked somewhere.
+    const faced = view.contacts.flatMap((marker) => [marker, ...marker.members]).flatMap((marker) => {
+      const point = marker.contact.identification === 'hostile' ? facedPoint(marker) : null;
+      return point === null ? [] : [point];
+    });
+    for (const point of faced) {
+      const together = faced.filter((other) => distance(other, point) <= KILL_ZONE_GROUP_METERS);
+      if (together.length < minContacts) continue;
+      if (view.pois.some((poi) => distance(poi.center, point) <= KILL_ZONE_GROUP_METERS * 2)) continue;
+      const center = {
+        x: together.reduce((sum, other) => sum + other.x, 0) / together.length,
+        y: together.reduce((sum, other) => sum + other.y, 0) / together.length,
+      };
+      commands.push({
+        kind: 'reportPoi',
+        tick: view.tick,
+        poiKind: 'killZone',
+        center,
+        radiusMeters: POI_KINDS.killZone.radiusMeters,
+        recipients: view.friendlies.map((friendly) => friendly.unitId),
+      });
+      break;
+    }
+    return commands;
+  };
+}
+
+/** Works through a list of areas in turn: a planned search rather than a single orbit. */
+export function sweepingRecon(areas: readonly Vec2[], radiusMeters: number, dwellSeconds: number): Policy {
+  return (view) => {
+    const recon = view.aircraft.filter((aircraft) => aircraft.aircraftType === 'recon');
+    const leg = Math.floor(view.tick / dwellSeconds);
+    return recon.flatMap((aircraft, index) => {
+      const center = areas[(leg + index * Math.ceil(areas.length / recon.length)) % areas.length] as Vec2;
+      const assigned = aircraft.order?.kind === 'ReconArea' && distance(aircraft.order.center, center) < 1;
+      if (assigned || (aircraft.status !== 'ready' && aircraft.status !== 'onStation' && aircraft.status !== 'enroute')) return [];
+      return [{ kind: 'aircraftOrder', tick: view.tick, aircraftId: aircraft.aircraftId, order: { kind: 'ReconArea', center, radius: radiusMeters } } as const];
+    });
   };
 }

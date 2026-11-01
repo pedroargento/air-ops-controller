@@ -1,5 +1,5 @@
 import type { Vec2 } from '../domain/public/geometry';
-import { immediateCas, noAir, reactiveCas, reconInformed, scoutingOnly, type Policy } from '../policies/air-policies';
+import { immediateCas, noAir, reactiveCas, markingKillZones, reconInformed, scoutingOnly, sweepingRecon, type Policy } from '../policies/air-policies';
 import type { Scenario } from '../scenario/load';
 
 const RECON_CLIMB_AFTER_FIRE_METERS = 1500;
@@ -37,12 +37,32 @@ function valleyRoadPolicies(scenario: Scenario): PolicySet {
     ...BASELINE,
     routeRecon: () => reconInformed(route, true),
     routeReconNoForward: () => reconInformed(route, false),
+    routeReconMark: () => markingKillZones(reconInformed(route, true)),
+    scoutOnlyMark: () => markingKillZones(scoutingOnly(reconInformed(route, true))),
     scoutOnly: () => scoutingOnly(reconInformed(route, true)),
     scoutOnlyNoForward: () => scoutingOnly(reconInformed(route, false)),
   };
 }
 
+function findThemPolicies(scenario: Scenario): PolicySet {
+  const size = scenario.terrain.width * scenario.terrain.cellSize;
+  const center = { x: size / 2, y: size / 2 };
+  const quarter = size / 4;
+  const sectors = [
+    { x: quarter, y: quarter },
+    { x: 3 * quarter, y: quarter },
+    { x: 3 * quarter, y: 3 * quarter },
+    { x: quarter, y: 3 * quarter },
+  ];
+  return {
+    none: BASELINE.none,
+    oneOrbit: () => sweepingRecon([center], 1500, 600),
+    sweep: () => sweepingRecon(sectors, 1200, 420),
+  } as PolicySet;
+}
+
 const SCENARIO_POLICIES: Readonly<Record<string, (scenario: Scenario) => PolicySet>> = {
+  'find-them': findThemPolicies,
   'outpost-under-pressure': outpostPolicies,
   'valley-road': valleyRoadPolicies,
 };

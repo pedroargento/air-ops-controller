@@ -133,7 +133,11 @@
           },
           "radius": 35
         },
-        "openFireMeters": 150
+        "openFireMeters": 150,
+        "watches": {
+          "x": 1775,
+          "y": 2325
+        }
       },
       "fallback": {
         "center": {
@@ -175,7 +179,11 @@
           },
           "radius": 35
         },
-        "openFireMeters": 150
+        "openFireMeters": 150,
+        "watches": {
+          "x": 2125,
+          "y": 1525
+        }
       },
       "fallback": {
         "center": {

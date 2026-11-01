@@ -21,7 +21,7 @@ const objective = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('PatrolArea'), waypoints: z.array(vec2).min(1) }),
   z.object({ kind: z.literal('WithdrawTo'), area }),
   z.object({ kind: z.literal('AssaultArea'), area }),
-  z.object({ kind: z.literal('AmbushArea'), area, openFireMeters: z.number().positive() }),
+  z.object({ kind: z.literal('AmbushArea'), area, openFireMeters: z.number().positive(), watches: vec2.optional() }),
 ]);
 
 const scheduledObjective = z.union([
@@ -119,6 +119,8 @@ const perception = z.object({
   trackedBoost: z.number().min(1),
   postureConcealment: z.object({ moving: unit, firing: unit, defending: unit, prone: unit, hidden: unit }),
   hiddenAirConcealment: unit,
+  facingSeenPerScan: unit,
+  facingNoiseRad: z.number().nonnegative(),
   reportCueBoost: z.number().min(1),
   reportCueMeters: z.number().positive(),
   identifyPerScan: unit,
@@ -296,6 +298,14 @@ const mission = z.discriminatedUnion('kind', [
     unitIds: z.array(z.string()).min(1),
     successMinPersonnel: z.number().positive(),
     partialMinPersonnel: z.number().positive(),
+  }),
+  z.object({
+    kind: z.literal('LocateForce'),
+    ...missionCommon,
+    locateMeters: z.number().positive(),
+    freshSeconds: z.number().positive(),
+    successShare: unit,
+    partialShare: unit,
   }),
 ]);
 

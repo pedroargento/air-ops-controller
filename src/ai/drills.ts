@@ -1,6 +1,8 @@
 import { strengthMidpoint, type ContactEstimate } from '../domain/public/estimates';
 import { cos, sin } from '../domain/public/det-math';
 import { distance, type Vec2 } from '../domain/public/geometry';
+import { POI_KINDS, type Poi } from '../domain/public/poi';
+import { AIR_OPS } from '../domain/public/radio';
 import type {
   Area,
   Drill,
@@ -21,17 +23,19 @@ export type DrillDefinition = Readonly<{
   rest: SquadRole;
   /** A platoon of one squad has nobody to pin or flank for it. */
   solo: SquadRole;
+  /** Squads needed to send some wide: under fire, a small platoon can't spare them. */
+  flankFrom: number;
   ends: EndCondition;
 }>;
 
 // The drills themselves (§4.0.2). Their numbers come from doctrine.
 export const DRILLS: Readonly<Record<DrillKind, DrillDefinition>> = {
-  nearAmbush: { lead: 'assault', rest: 'assault', solo: 'assault', ends: 'enemyGone' },
-  farAmbush: { lead: 'support', rest: 'maneuver', solo: 'cover', ends: 'enemyGone' },
-  attack: { lead: 'support', rest: 'maneuver', solo: 'assault', ends: 'areaClear' },
-  bypass: { lead: 'bypass', rest: 'bypass', solo: 'bypass', ends: 'passed' },
-  hastyAmbush: { lead: 'ambush', rest: 'ambush', solo: 'ambush', ends: 'enemyGone' },
-  waitForAir: { lead: 'hold', rest: 'hold', solo: 'hold', ends: 'supportLapsed' },
+  nearAmbush: { lead: 'assault', rest: 'assault', solo: 'assault', flankFrom: 2, ends: 'enemyGone' },
+  farAmbush: { lead: 'support', rest: 'maneuver', solo: 'cover', flankFrom: 3, ends: 'enemyGone' },
+  attack: { lead: 'support', rest: 'maneuver', solo: 'assault', flankFrom: 2, ends: 'areaClear' },
+  bypass: { lead: 'bypass', rest: 'bypass', solo: 'bypass', flankFrom: 2, ends: 'passed' },
+  hastyAmbush: { lead: 'ambush', rest: 'ambush', solo: 'ambush', flankFrom: 2, ends: 'enemyGone' },
+  waitForAir: { lead: 'hold', rest: 'hold', solo: 'hold', flankFrom: 2, ends: 'supportLapsed' },
 };
 
 const GROUP_RADIUS_METERS = 200;
@@ -50,7 +54,25 @@ function knownHostiles(self: UnitSelf, knowledge: UnitKnowledge, tick: number): 
   const told = Object.values(knowledge.reports).filter(
     (report) => report.identification === 'hostile' && tick - report.position.observedAt <= self.doctrine.reportMemorySeconds,
   );
-  return [...own, ...told];
+  const marked = Object.values(knowledge.pois)
+    .filter((poi) => POI_KINDS[poi.kind].effect === 'suspectedEnemy')
+    .map(suspectedEnemy);
+  return [...own, ...told, ...marked];
+}
+
+/** A mark as the platoon holds it: an enemy of unknown strength, on someone's say-so. */
+function suspectedEnemy(poi: Poi): ContactEstimate {
+  return {
+    contactId: `poi/${poi.id}` as ContactEstimate['contactId'],
+    provenance: { sourceId: AIR_OPS, observedAt: poi.placedAt },
+    identification: 'hostile',
+    position: { center: poi.center, sigmaMeters: poi.radiusMeters, headingRad: null, speedMps: null, observedAt: poi.placedAt },
+    strength: { kind: 'unknown' },
+    kind: 'unknown',
+    activity: 'stationary',
+    confidence: 'low',
+    observedWeapons: [],
+  };
 }
 
 /** Headcount believed around a point, counting each reported contact once. */
@@ -126,7 +148,7 @@ function flankPoint(self: UnitSelf, target: Vec2, map: DrillMap): Vec2 {
 
 function drill(self: UnitSelf, kind: DrillKind, target: Vec2, tick: number, map: DrillMap, radius = ATTACK_RADIUS_METERS): Drill {
   const definition = DRILLS[kind];
-  const flanks = definition.rest === 'maneuver' && self.squads > 1;
+  const flanks = definition.rest === 'maneuver' && self.squads >= definition.flankFrom;
   const avoid: Area = { center: target, radius: self.doctrine.flankMeters * 0.75 };
   return {
     kind,

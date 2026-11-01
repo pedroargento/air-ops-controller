@@ -1,3 +1,4 @@
+import { POI_KINDS, type Poi } from '../domain/public/poi';
 import {
   qualifiesForSupport,
   type AircraftId,
@@ -111,6 +112,47 @@ function forwardContact(state: SimState, scenario: Scenario, contactKey: string,
   }
 }
 
+function sendPoi(state: SimState, scenario: Scenario, poi: Poi, cancelled: boolean): void {
+  const { tick } = state;
+  for (const recipient of poi.recipients) {
+    const message: RadioMessage = {
+      id: nextId(state.radio),
+      kind: 'POI_REPORT',
+      senderId: AIR_OPS,
+      observedAt: tick,
+      sentAt: tick,
+      receivedAt: tick + scenario.file.radio.transmitSeconds,
+      poi,
+      cancelled,
+    };
+    transmit(state, scenario, { kind: 'message', recipient, message });
+  }
+}
+
+function reportPoi(state: SimState, scenario: Scenario, command: Extract<PlayerCommand, { kind: 'reportPoi' }>): void {
+  if (POI_KINDS[command.poiKind] === undefined || command.radiusMeters <= 0) return;
+  const recipients = [...new Set(command.recipients)].sort().filter((recipient) => canReach(scenario, recipient));
+  if (recipients.length === 0) return;
+  state.radio.nextMessageNumber += 1;
+  const poi: Poi = {
+    id: `P-${state.radio.nextMessageNumber}`,
+    kind: command.poiKind,
+    center: command.center,
+    radiusMeters: command.radiusMeters,
+    placedAt: state.tick,
+    recipients,
+  };
+  state.player.pois.push(poi);
+  sendPoi(state, scenario, poi, false);
+}
+
+function cancelPoi(state: SimState, scenario: Scenario, poiId: string): void {
+  const poi = state.player.pois.find((entry) => entry.id === poiId);
+  if (poi === undefined) return;
+  state.player.pois = state.player.pois.filter((entry) => entry !== poi);
+  sendPoi(state, scenario, poi, true);
+}
+
 function aircraftById(aircraft: readonly Aircraft[], id: AircraftId): Aircraft | undefined {
   return aircraft.find((entry) => entry.id === id);
 }
@@ -130,6 +172,12 @@ export function applyCommand(state: SimState, command: PlayerCommand, scenario: 
       if (aircraft !== undefined) setTargetAltitude(aircraft, command.meters, scenario.file.air);
       return;
     }
+    case 'reportPoi':
+      reportPoi(state, scenario, command);
+      return;
+    case 'cancelPoi':
+      cancelPoi(state, scenario, command.poiId);
+      return;
     case 'forwardContact':
       forwardContact(state, scenario, command.contactKey, command.recipients);
       return;

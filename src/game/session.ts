@@ -73,6 +73,7 @@ export class GameSession {
       friendlyStart: count('friendly', (u) => u.initialPersonnel),
       friendlyLeft: count('friendly', (u) => u.personnel),
       friendlyDestroyed: platoons.filter((p) => p.side === 'friendly' && lost(p)).length,
+      locatedShare: truth.locatedShare,
     };
   }
 

@@ -1,6 +1,7 @@
 import type { AirWeapon, Equipment } from './equipment';
 import type { ContactEstimate, PositionEstimate } from './estimates';
 import type { Vec2 } from './geometry';
+import type { Poi } from './poi';
 import type { ExpectedSupport } from './radio';
 
 export type Side = 'friendly' | 'enemy';
@@ -15,7 +16,7 @@ export type GroundObjective =
   | Readonly<{ kind: 'PatrolArea'; waypoints: readonly Vec2[] }>
   | Readonly<{ kind: 'WithdrawTo'; area: Area }>
   | Readonly<{ kind: 'AssaultArea'; area: Area }>
-  | Readonly<{ kind: 'AmbushArea'; area: Area; openFireMeters: number }>;
+  | Readonly<{ kind: 'AmbushArea'; area: Area; openFireMeters: number; watches?: Vec2 | undefined }>;
 
 export type GroundPosture = 'moving' | 'firing' | 'defending' | 'prone' | 'hidden';
 
@@ -146,13 +147,15 @@ export type UnitKnowledge = {
   contacts: Record<string, ContactEstimate>;
   // Information received from others, keyed by source and contact.
   reports: Record<string, ContactEstimate>;
+  // Places the player has marked, keyed by mark.
+  pois: Record<string, Poi>;
   expectedSupport: ExpectedSupport | null;
   hostileAircraftSeenAt: number | null;
   noticedAircraft: NoticedAircraft | null;
 };
 
 export function emptyKnowledge(): UnitKnowledge {
-  return { contacts: {}, reports: {}, expectedSupport: null, hostileAircraftSeenAt: null, noticedAircraft: null };
+  return { contacts: {}, reports: {}, pois: {}, expectedSupport: null, hostileAircraftSeenAt: null, noticedAircraft: null };
 }
 
 export type GroundIntent =

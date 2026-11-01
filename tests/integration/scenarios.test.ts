@@ -123,6 +123,8 @@ describe('a second scenario', () => {
       'reactive',
       'routeRecon',
       'routeReconNoForward',
+      'routeReconMark',
+      'scoutOnlyMark',
       'scoutOnly',
       'scoutOnlyNoForward',
     ]);

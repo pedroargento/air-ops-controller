@@ -96,6 +96,7 @@ export function createSquads(file: PlatoonFile, scenario: Scenario): readonly Gr
       name: `${file.name} ${index + 1}`,
       side: file.side,
       position: startPosition(file, slot, index, count, columnSpacingMeters),
+      facingRad: 0,
       navOffset: { x: 0, y: 0 },
       navMeters: 0,
       personnel: size,

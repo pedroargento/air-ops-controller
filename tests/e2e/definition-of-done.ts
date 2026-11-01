@@ -158,6 +158,16 @@ async function main(): Promise<void> {
 
     console.log('Inspect a marker');
     await setPaused(page, true);
+    await page.locator('#map').click({ button: 'right', position: { x: 400, y: 300 } });
+    await page.locator('[data-action="report-poi"][data-id="killZone"]').click();
+    await setPaused(page, false);
+    await page.waitForTimeout(300);
+    await setPaused(page, true);
+    const reportedMarks = (await log()).commands.filter((command) => command.kind === 'reportPoi');
+    check(reportedMarks.length === 1, 'a right-click reports a suspected kill zone by radio');
+    await page.locator('#map').click({ button: 'right', position: { x: 400, y: 300 } });
+    check(await page.locator('[data-action="cancel-poi"]').isVisible(), 'the mark can be cancelled from the same menu');
+    await page.locator('[data-action="close-menu"]').click();
     const routineHidden = await page.locator('.log-row.position_report').first().isHidden();
     check(routineHidden, 'the main radio view leaves out routine position reports');
     await page.locator('[data-action="radio-filter"][data-id="all"]').click();

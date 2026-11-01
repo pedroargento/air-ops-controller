@@ -335,7 +335,7 @@ Replaced the original calibration milestone. The theater work changes what needs
 
 The direction is a larger map covering a slice of a fictional, Afghanistan-like country in the Vietnam era, about 200 km across as a starting value. It has several bases with different aircraft, and sites that zoom into today's 5 km grid. Play is continuous, with no win condition, and ops requests appear at random. Today's aircraft models stay, with no drones or satellites.
 
-Each milestone needs its own spec section before it starts. **Status:** S0 and S1 are complete, and S2 is complete apart from the per-drill benefit.
+Each milestone needs its own spec section before it starts. **Status:** S0, S1 and S4 are complete, and S2 is complete apart from the per-drill benefit.
 
 Scenarios come first: they give playable missions sooner, test the ground AI on new maps, and become incident templates later, so each scenario's objective is written as an incident: a place, a time window, what it needs, and what happens if nobody comes. Timed orders are fine in a scenario, but each ground action is reusable, so an assault works the same for either side, in any scenario, however it was started. A scenario's stated objective is the mission only: threats and what to do about them are for the player to discover through recon. Numbers below are provisional.
 
@@ -403,6 +403,8 @@ Armed aircraft carry two weapon classes, each with its own ammunition, replacing
 **Ambush recognition** arrives with Convoy. The sim never labels anything an ambush. Crews report only what they can see: stationary squads, their weapons, and which way they face, which is a new observation. The player reads the pattern and marks a suspected kill zone, which is forwarded as an area with a new command. It enters the platoon's picture as a low-confidence enemy position, so it can trigger a bypass or deliberate attack. A wrong mark costs real time, and an ambush the player missed still gets sprung. This brings in the player-authored assessments and area markers that v0.1 ruled out.
 
 **Exit:** In both, better recon gives measurably better results.
+
+**Result:** Met. Over 1,000 seeds, Find Them scores 0% with no aircraft, 0% with one fixed orbit and 81.6% with a planned sweep. Valley Road, which is Convoy for now, gets through 27.5% of the time with no air and 26.4% with reactive CAS. With scouting only it's 23.3% unforwarded, 38.0% forwarded and 44.4% with kill-zone marks, and with CAS it's 67.2%, 77.1% and 80.8%. The kill zone is the first kind of a generic point of interest: right-click the map, choose recipients and report, and a new kind is one entry in `POI_KINDS`. Crews now sometimes see which way a still squad faces, drawn as a short line, and nothing labels an ambush. Limiting wide flanks to platoons of three or more squads stopped far ambush hurting, so it's now neutral rather than useful. The marking bot needs two squads seen facing the same ground. A wrong mark isn't a real risk yet: two marks on empty road cost about 80 seconds and no measurable success (81.0% against 76.8%, over 400 seeds), because the 2-hour limit leaves plenty of slack.
 
 #### S5: Compound support
 

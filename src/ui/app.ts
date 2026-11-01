@@ -2,7 +2,7 @@ import { qualifiesForSupport, type AircraftId, type AircraftOrder, type Aircraft
 import type { PlayerAction, ReportRequest } from '../domain/public/commands';
 import type { Debrief } from '../domain/public/debrief';
 import type { WeaponType } from '../domain/public/equipment';
-import type { Vec2 } from '../domain/public/geometry';
+import { distance, type Vec2 } from '../domain/public/geometry';
 import { elevationAt, type TerrainGrid } from '../domain/public/terrain';
 import { weatherAt } from '../domain/public/weather';
 import type { ContactMarker, FriendlyMarkerView, PlayerView } from '../knowledge/player-view';
@@ -31,6 +31,7 @@ import { PathProfile } from './path-profile';
 import { summarizeBattle, type BattleSummary, type SummaryConfig } from './battle-summary';
 import { MapView, type Selection, type WeatherLayer } from './map-view';
 import { ToastQueue } from './toasts';
+import { POI_KINDS, type PoiKind } from '../domain/public/poi';
 import { morphHtml } from './morph';
 import { stormMovement, type ForecastError } from './weather-chart';
 
@@ -107,6 +108,7 @@ function debriefHtml(debrief: Debrief, summary: BattleSummary): string {
     `<h3>Debrief: what really happened</h3>` +
     `<p>Enemy: ${debrief.enemyStart} at start, ${debrief.enemyLeft} left. ${enemyLost} lost, against your estimate of ${rangeText(summary.losses)}.</p>` +
     `<p>Formations: ${debrief.enemyFormations}, of which ${debrief.enemyDestroyed} destroyed and ${debrief.enemyBroken} broken.</p>` +
+    (debrief.locatedShare === null ? '' : `<p>Your picture had ${Math.round(debrief.locatedShare * 100)}% of the enemy's squads about right.</p>`) +
     `<p>Friendly: ${debrief.friendlyStart} at start, ${debrief.friendlyLeft} left, ${debrief.friendlyDestroyed} formations lost.</p>`
   );
 }
@@ -124,6 +126,7 @@ export class App {
   private heardContacts: readonly ContactMemory[] = [];
   private readonly toasts = new ToastQueue();
   private lastFrameAt: number | null = null;
+  private menuPoint: Vec2 | null = null;
   private readonly layers = new Set<'weather' | 'threats'>();
   private forecastLeadSeconds = 0;
   private readonly profile: AltitudeProfile;
@@ -153,7 +156,7 @@ export class App {
     element('forecast-lead').addEventListener('input', (event) => {
       this.forecastLeadSeconds = Number((event.target as HTMLInputElement).value);
     });
-    for (const panel of ['controls', 'aircraft', 'selection', 'requests', 'radio-log', 'side-tabs', 'map-layers', 'forecast', 'map-toasts']) {
+    for (const panel of ['controls', 'aircraft', 'selection', 'requests', 'radio-log', 'side-tabs', 'map-layers', 'forecast', 'map-toasts', 'map-menu']) {
       element(panel).addEventListener('click', (event) => this.onPanelClick(event));
       element(panel).addEventListener('change', (event) => this.onPanelChange(event));
     }
@@ -192,6 +195,11 @@ export class App {
       this.dragFrom = null;
       if (!this.dragged) this.onMapClick(pixel(event));
     });
+    canvas.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      this.openMapMenu(pixel(event));
+    });
+    canvas.addEventListener('mousedown', () => this.closeMapMenu());
     canvas.addEventListener(
       'wheel',
       (event) => {
@@ -200,6 +208,46 @@ export class App {
       },
       { passive: false },
     );
+  }
+
+  /** Things the player can report at a place. New kinds of mark appear here by themselves. */
+  private openMapMenu(pixel: Vec2): void {
+    const { recipients, names, terrain } = this.config;
+    const point = this.map.toWorld(pixel);
+    this.menuPoint = point;
+    const near = this.view?.pois.filter((poi) => distance(poi.center, point) <= poi.radiusMeters) ?? [];
+    const cancels = near.map(
+      (poi) => `<button data-action="cancel-poi" data-id="${poi.id}">Cancel ${escapeHtml(POI_KINDS[poi.kind].label.toLowerCase())}</button>`,
+    );
+    const boxes = recipients.map(
+      (id) => `<label><input type="checkbox" data-poi-recipient="${escapeHtml(id)}" checked /> ${escapeHtml(displayName(id, names))}</label>`,
+    );
+    const kinds = Object.entries(POI_KINDS).map(
+      ([kind, { label }]) => `<button data-action="report-poi" data-id="${kind}">Report ${escapeHtml(label.toLowerCase())}</button>`,
+    );
+    const menu = element('map-menu');
+    menu.innerHTML =
+      `<h3>Grid ${gridRef(point, terrain.cellSize)}</h3>${cancels.join('')}` +
+      `<div class="menu-recipients">${boxes.join('')}</div>${kinds.join('')}` +
+      `<button data-action="close-menu">Close</button>`;
+    menu.style.left = `${pixel.x}px`;
+    menu.style.top = `${pixel.y}px`;
+    menu.hidden = false;
+  }
+
+  private closeMapMenu(): void {
+    element('map-menu').hidden = true;
+    this.menuPoint = null;
+  }
+
+  private reportPoi(kind: PoiKind): void {
+    const center = this.menuPoint;
+    if (center === null) return;
+    const boxes = element('map-menu').querySelectorAll<HTMLInputElement>('input[data-poi-recipient]');
+    const recipients = [...boxes].flatMap((box) => (box.checked ? [box.dataset['poiRecipient'] as string] : []));
+    if (recipients.length === 0) return;
+    this.config.onAction({ kind: 'reportPoi', poiKind: kind, center, radiusMeters: POI_KINDS[kind].radiusMeters, recipients });
+    this.closeMapMenu();
   }
 
   private onMapClick(pixel: Vec2): void {
@@ -367,6 +415,16 @@ export class App {
         return;
       case 'center':
         this.map.centerOn({ x: Number(x), y: Number(y) });
+        return;
+      case 'report-poi':
+        this.reportPoi(id as PoiKind);
+        return;
+      case 'cancel-poi':
+        if (id !== undefined) this.config.onAction({ kind: 'cancelPoi', poiId: id });
+        this.closeMapMenu();
+        return;
+      case 'close-menu':
+        this.closeMapMenu();
         return;
       case 'toast':
         if (x !== undefined && y !== undefined) this.map.centerOn({ x: Number(x), y: Number(y) });

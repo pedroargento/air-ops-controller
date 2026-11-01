@@ -1,0 +1,284 @@
+{
+  "id": "find-them",
+  "name": "Find Them",
+  "rules": "standard",
+  "durationSeconds": 3600,
+  "terrain": {
+    "classLayer": "outpost-under-pressure/terrain.txt",
+    "elevationLayer": "outpost-under-pressure/elevation.txt"
+  },
+  "mission": {
+    "kind": "LocateForce",
+    "area": {
+      "center": {
+        "x": 2525,
+        "y": 2625
+      },
+      "radius": 2000
+    },
+    "briefing": "Find the infiltrating force within the hour",
+    "areaLabel": "Located",
+    "results": {
+      "success": "FORCE FOUND: mission success",
+      "partial": "FORCE PARTLY FOUND: mission failed",
+      "failure": "FORCE NOT FOUND: mission failed"
+    },
+    "locateMeters": 250,
+    "freshSeconds": 600,
+    "successShare": 0.8,
+    "partialShare": 0.4
+  },
+  "units": [
+    {
+      "id": "F-O",
+      "name": "Observation Post",
+      "side": "friendly",
+      "position": {
+        "x": 2525,
+        "y": 2625
+      },
+      "personnel": 12,
+      "morale": 0.8,
+      "doctrine": "garrison",
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 12,
+          "ammunition": 2040
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 1,
+          "ammunition": 1200
+        }
+      ],
+      "objective": {
+        "kind": "HoldArea",
+        "area": {
+          "center": {
+            "x": 2525,
+            "y": 2625
+          },
+          "radius": 60
+        }
+      },
+      "fallback": {
+        "center": {
+          "x": 2525,
+          "y": 2625
+        },
+        "radius": 60
+      }
+    },
+    {
+      "id": "E-1",
+      "name": "First Column",
+      "side": "enemy",
+      "position": {
+        "x": 400,
+        "y": 800
+      },
+      "personnel": 24,
+      "morale": 0.75,
+      "doctrine": "recon",
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 24,
+          "ammunition": 4080
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 1,
+          "ammunition": 1200
+        }
+      ],
+      "objective": {
+        "kind": "MoveTo",
+        "area": {
+          "center": {
+            "x": 1400,
+            "y": 1300
+          },
+          "radius": 40
+        }
+      },
+      "fallback": {
+        "center": {
+          "x": 400,
+          "y": 800
+        },
+        "radius": 120
+      },
+      "objectiveSchedule": [
+        {
+          "afterObjective": true,
+          "objective": {
+            "kind": "AmbushArea",
+            "area": {
+              "center": {
+                "x": 1400,
+                "y": 1300
+              },
+              "radius": 40
+            },
+            "openFireMeters": 100
+          }
+        }
+      ]
+    },
+    {
+      "id": "E-2",
+      "name": "Second Column",
+      "side": "enemy",
+      "position": {
+        "x": 4600,
+        "y": 900
+      },
+      "personnel": 24,
+      "morale": 0.75,
+      "doctrine": "recon",
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 24,
+          "ammunition": 4080
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 1,
+          "ammunition": 1200
+        }
+      ],
+      "objective": {
+        "kind": "MoveTo",
+        "area": {
+          "center": {
+            "x": 3700,
+            "y": 1500
+          },
+          "radius": 40
+        }
+      },
+      "fallback": {
+        "center": {
+          "x": 4600,
+          "y": 900
+        },
+        "radius": 120
+      },
+      "objectiveSchedule": [
+        {
+          "afterObjective": true,
+          "objective": {
+            "kind": "AmbushArea",
+            "area": {
+              "center": {
+                "x": 3700,
+                "y": 1500
+              },
+              "radius": 40
+            },
+            "openFireMeters": 100
+          }
+        }
+      ]
+    },
+    {
+      "id": "E-3",
+      "name": "Third Column",
+      "side": "enemy",
+      "position": {
+        "x": 4700,
+        "y": 4300
+      },
+      "personnel": 24,
+      "morale": 0.75,
+      "doctrine": "recon",
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 24,
+          "ammunition": 4080
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 1,
+          "ammunition": 1200
+        }
+      ],
+      "objective": {
+        "kind": "MoveTo",
+        "area": {
+          "center": {
+            "x": 3500,
+            "y": 3600
+          },
+          "radius": 40
+        }
+      },
+      "fallback": {
+        "center": {
+          "x": 4700,
+          "y": 4300
+        },
+        "radius": 120
+      },
+      "objectiveSchedule": [
+        {
+          "afterObjective": true,
+          "objective": {
+            "kind": "AmbushArea",
+            "area": {
+              "center": {
+                "x": 3500,
+                "y": 3600
+              },
+              "radius": 40
+            },
+            "openFireMeters": 100
+          }
+        }
+      ]
+    }
+  ],
+  "display": {
+    "hqEnemyEstimate": 70
+  },
+  "links": [
+    [
+      "F-O",
+      "AIR_OPS"
+    ],
+    [
+      "E-1",
+      "E-2"
+    ],
+    [
+      "E-2",
+      "E-3"
+    ]
+  ],
+  "ceconMessages": [
+    {
+      "atSeconds": 0,
+      "text": "Intelligence reports a force infiltrating the sector. Find where it has gone to ground."
+    }
+  ],
+  "air": {
+    "airbase": {
+      "x": 2000,
+      "y": 30000
+    },
+    "aircraft": [
+      {
+        "id": "RECON-1",
+        "model": "O-1E"
+      },
+      {
+        "id": "RECON-2",
+        "model": "O-1E"
+      }
+    ]
+  }
+}

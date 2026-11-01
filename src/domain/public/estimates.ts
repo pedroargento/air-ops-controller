@@ -29,6 +29,8 @@ export type ContactEstimate = Readonly<{
   activity: ContactActivity;
   confidence: Confidence;
   observedWeapons: readonly WeaponType[];
+  /** Which way a still squad was seen to face, if anyone saw. */
+  facingRad?: number;
 }>;
 
 const STRENGTH_CATEGORIES: readonly (readonly [min: number, max: number])[] = [

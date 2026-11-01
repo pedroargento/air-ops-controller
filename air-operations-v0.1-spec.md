@@ -216,6 +216,10 @@ An observation may reveal only part of a formation. The observer estimates enemy
 
 Contact estimates persist until new information revises them; estimates do not randomly jitter on every render or simulation tick. New information means target movement beyond a configured threshold, a materially better observing position, or a changed activity.
 
+### 5.1.1 Facing
+
+A squad faces the way it is moving, the enemy it is firing at, or, on an `AmbushArea` with `watches`, the ground it covers. Crews sometimes see this on a stationary squad, with some error, and the marker shows it as a short line. Nothing labels an ambush: several still squads facing the same stretch of road is a pattern for the player to read.
+
 ### 5.2 Identification
 
 Detection and identification are separate. A detected contact starts as `unidentified` and may become `friendly` or `hostile` through the observer's own sensors or through reports. Identification depends on the same factors as detection and can take time or fail.
@@ -281,6 +285,14 @@ The player has three radio actions:
 Arbitrary map coordinates are used only for aircraft tasking. The player cannot invent an enemy contact in v0.1. Ground AI may act on a forwarded report but does not become player-controlled.
 
 **Expected support:** The player never types or chooses an arrival time. `CAS inbound, ETA four minutes` is available only while a CAS aircraft has a `SupportArea` mission covering, or within a configured distance of, the recipient's last reported position. The ETA is calculated from that aircraft's mission. If the aircraft is diverted, delayed or returns to base, air operations automatically sends an update, which takes simulated time like any other transmission. An estimate that is never updated lapses after a configured grace period past its ETA.
+
+### 6.4 Points of interest
+
+Right-clicking the map opens a menu of things the player can report there, and a mark goes out by radio to the units chosen. Kill zone is the first kind, and a new kind is one entry in `POI_KINDS`. A mark is the player's opinion: it never reads truth, and it may be wrong.
+
+- A recipient treats a suspected kill zone as a low-confidence enemy position of unknown strength, so it can start a bypass or attack (§4.0.2), and it watches that ground harder.
+- A wrong mark costs real time. An ambush nobody marked still gets sprung.
+- Right-clicking an existing mark can cancel it, which also goes out by radio.
 
 ## 7. Player knowledge and map projection
 

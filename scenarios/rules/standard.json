@@ -554,7 +554,9 @@
     "weaponSeenPerScan": 0.1,
     "hiddenAirConcealment": 0.5,
     "reportCueBoost": 10,
-    "reportCueMeters": 200
+    "reportCueMeters": 200,
+    "facingSeenPerScan": 0.3,
+    "facingNoiseRad": 0.3
   },
   "radio": {
     "prepareSeconds": 15,

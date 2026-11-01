@@ -40,6 +40,7 @@ export function createInitialState(scenario: Scenario, seed: number): SimState {
       nextContactNumber: 0,
       weather: generateWeather(file.weather, terrain.width * terrain.cellSize, file.durationSeconds, rng),
       captureProgressSeconds: 0,
+      locatedShare: null,
       outcome: 'running',
       endedAtTick: null,
     },

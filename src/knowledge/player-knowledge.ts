@@ -1,3 +1,4 @@
+import type { Poi } from '../domain/public/poi';
 import type { WeaponType } from '../domain/public/equipment';
 import type { ContactEstimate, PositionEstimate } from '../domain/public/estimates';
 import { distance, type Vec2 } from '../domain/public/geometry';
@@ -75,6 +76,7 @@ export type GroundFireMark = Readonly<{
 }>;
 
 export type PlayerKnowledge = {
+  pois: Poi[];
   log: RadioMessage[];
   strikes: StrikeMark[];
   groundFire: GroundFireMark[];
@@ -97,6 +99,7 @@ export function emptyPlayerKnowledge(): PlayerKnowledge {
     log: [],
     strikes: [],
     groundFire: [],
+    pois: [],
     friendlyEngagedAt: {},
     contacts: {},
     friendlies: {},
@@ -284,6 +287,7 @@ export function receiveByPlayer(player: PlayerKnowledge, message: RadioMessage, 
     case 'COMMAND_UPDATE':
     case 'ACKNOWLEDGEMENT':
     case 'INTEL_REPORT':
+    case 'POI_REPORT':
     case 'STRIKE_RESULT':
     case 'GROUND_FIRE':
       return;

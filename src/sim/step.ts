@@ -2,6 +2,7 @@ import { decideGround, decidePlatoon } from '../ai/decide-ground';
 import { assignRoles } from '../ai/drills';
 import type { PlayerCommand } from '../domain/public/commands';
 import { airWeapons, supportWeaponCount, totalAmmunition } from '../domain/public/equipment';
+import { atan2 } from '../domain/public/det-math';
 import { distance, moveToward, type Vec2 } from '../domain/public/geometry';
 import {
   emptyKnowledge,
@@ -219,6 +220,7 @@ function applyDecisions(state: SimState, selves: ReadonlyMap<string, UnitSelf>, 
     unit.viaDone = decision.viaDone;
     unit.avoid = decision.avoid;
     unit.posture = postureFor(unit);
+    unit.facingRad = facingOf(unit, platoon, state.truth);
   }
 }
 
@@ -235,6 +237,21 @@ function radioUnits(truth: WorldTruth): readonly RadioUnit[] {
       intent: lead?.intent ?? { kind: 'wait' },
     };
   });
+}
+
+/** Which way a squad looks: where it's going, what it's shooting at, or the ground it covers. */
+function facingOf(unit: GroundUnit, platoon: Platoon, truth: WorldTruth): number {
+  const toward = (point: Vec2): number => atan2(point.y - unit.position.y, point.x - unit.position.x);
+  const destination = destinationOf(unit);
+  if (destination !== null) return toward(destination);
+  const { objective } = platoon;
+  if (objective.kind === 'AmbushArea' && objective.watches !== undefined) return toward(objective.watches);
+  if (unit.intent.kind !== 'engage') return unit.facingRad;
+  const { contactId } = unit.intent;
+  const tracks = Object.entries(truth.tracks[unit.platoonId] ?? {});
+  const targetId = tracks.find(([, track]) => track.contactId === contactId)?.[0];
+  const target = truth.units.find((other) => other.id === targetId);
+  return target === undefined ? unit.facingRad : toward(target.position);
 }
 
 function postureFor(unit: GroundUnit): GroundUnit['posture'] {
@@ -364,6 +381,6 @@ export function step(state: SimState, commands: readonly PlayerCommand[], scenar
   if (tactical) reviewPromises(state, scenario);
 
   state.tick += 1;
-  updateOutcome(truth, file.mission, file.durationSeconds, state.tick);
+  updateOutcome(truth, file.mission, file.durationSeconds, state.tick, state.player);
   return state;
 }

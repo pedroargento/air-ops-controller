@@ -207,6 +207,24 @@ function seenWeapons(
   return [...fired, ...target.equipment.filter((item) => item.quantity > 0).map((item) => item.weapon)];
 }
 
+/** A crew may make out which way a still squad is facing. Once seen, it stays seen. */
+function seenFacing(
+  observer: Observer,
+  target: GroundUnit,
+  range: number,
+  estimate: ContactEstimate,
+  rng: RngState,
+  config: PerceptionConfig,
+  tick: number,
+): number | null {
+  if (observer.medium !== 'air' || estimate.facingRad !== undefined) return null;
+  if (activityOf(target, tick) !== 'stationary') return null;
+  const label = `facing/${observer.id}/${target.id}`;
+  const chance = config.facingSeenPerScan * observer.quality * (1 - range / observer.rangeMeters);
+  if (!nextBool(rng, label, Math.min(1, chance))) return null;
+  return target.facingRad + nextGaussian(rng, label) * config.facingNoiseRad;
+}
+
 function isGenuinelyNew(
   track: Track,
   observer: Observer,
@@ -284,6 +302,8 @@ export function observeTarget(
     current.estimate = { ...current.estimate, observedWeapons };
   }
   tracks[target.id] = current;
+  const facing = seenFacing(observer, target, range, current.estimate, rng, config, tick);
+  if (facing !== null) current.estimate = { ...current.estimate, facingRad: facing };
   return current.estimate;
 }
 
@@ -292,11 +312,12 @@ function reportCue(belief: UnitKnowledge, memory: number, config: PerceptionConf
   const reported = Object.values(belief.reports).filter(
     (report) => report.identification === 'hostile' && tick - report.position.observedAt <= memory,
   );
-  if (reported.length === 0) return () => 1;
-  return (target) =>
-    reported.some((report) => distance(report.position.center, target.position) <= config.reportCueMeters)
-      ? config.reportCueBoost
-      : 1;
+  const marks = Object.values(belief.pois);
+  if (reported.length === 0 && marks.length === 0) return () => 1;
+  const near = (target: GroundUnit): boolean =>
+    reported.some((report) => distance(report.position.center, target.position) <= config.reportCueMeters) ||
+    marks.some((poi) => distance(poi.center, target.position) <= poi.radiusMeters + config.reportCueMeters);
+  return (target) => (near(target) ? config.reportCueBoost : 1);
 }
 
 function groundObserver(

@@ -8,4 +8,6 @@ export type Debrief = Readonly<{
   friendlyStart: number;
   friendlyLeft: number;
   friendlyDestroyed: number;
+  /** Share of the enemy your picture had about right, on a search mission. */
+  locatedShare: number | null;
 }>;

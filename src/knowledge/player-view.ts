@@ -8,6 +8,7 @@ import {
   type StrengthEstimate,
 } from '../domain/public/estimates';
 import { distance, type Vec2 } from '../domain/public/geometry';
+import type { Poi } from '../domain/public/poi';
 import { AIR_OPS, CECON, reportLevel, type RadioMessage, type ReportLevel } from '../domain/public/radio';
 import type { Weather } from '../domain/public/weather';
 import {
@@ -89,6 +90,7 @@ export type PlayerView = Readonly<{
   tick: number;
   contacts: readonly ContactMarker[];
   clusters: readonly ContactCluster[];
+  pois: readonly Poi[];
   /** Who has just been heard on the radio. */
   reporting: readonly ReportingUnit[];
   friendlies: readonly FriendlyMarkerView[];
@@ -291,6 +293,7 @@ export function project(
     tick,
     contacts,
     clusters: clusterContacts(contacts, display),
+    pois: player.pois,
     reporting: recentReporters(player.log, tick, display.reportBlinkSeconds),
     friendlies: sortedEntries(player.friendlies).map(([unitId, marker]) => ({
       unitId,

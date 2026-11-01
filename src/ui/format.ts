@@ -1,3 +1,4 @@
+import { POI_KINDS } from '../domain/public/poi';
 import type { DrillKind } from '../domain/public/ground';
 import type { AircraftTelemetryEntry } from '../domain/public/air';
 import type { GroundFireEffect } from '../knowledge/player-view';
@@ -238,6 +239,11 @@ export function radioLine(message: RadioMessage, cellSize: number): RadioLine {
       };
     case 'DRILL':
       return { text: `At ${grid(message.ownPosition.center)}: ${DRILL_TEXT[message.drill]}.`, coordinates: [message.ownPosition.center] };
+    case 'POI_REPORT': {
+      const { label } = POI_KINDS[message.poi.kind];
+      const text = message.cancelled ? `Cancel ${label.toLowerCase()} at` : `${label} at`;
+      return { text: `${text} ${grid(message.poi.center)}.`, coordinates: [message.poi.center] };
+    }
     case 'SUPPORT_REQUEST':
       return { text: `Requesting air support at ${grid(message.ownPosition.center)}.`, coordinates: [message.ownPosition.center] };
     case 'COMMAND_UPDATE':

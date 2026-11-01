@@ -3,10 +3,12 @@ import { distance } from '../domain/public/geometry';
 import type { Area } from '../domain/public/ground';
 import type { GroundUnit, Outcome, WorldTruth } from '../domain/truth/world';
 import type { MissionConfig } from '../scenario/schema';
+import { emptyPlayerKnowledge, type PlayerKnowledge } from '../knowledge/player-knowledge';
 import { platoonOf } from './platoon';
 
 type HoldMission = Extract<MissionConfig, { kind: 'HoldArea' }>;
 type ReachMission = Extract<MissionConfig, { kind: 'ReachArea' }>;
+type LocateMission = Extract<MissionConfig, { kind: 'LocateForce' }>;
 
 /** Personnel who can still fight: unbroken, not retreating, with ammunition left. */
 export function effectiveStrength(truth: WorldTruth, unit: GroundUnit): number {
@@ -46,7 +48,37 @@ function updateReachArea(truth: WorldTruth, mission: ReachMission, durationSecon
   else finish(truth, personnel >= mission.partialMinPersonnel ? 'partial' : 'failure', tick);
 }
 
-export function updateOutcome(truth: WorldTruth, mission: MissionConfig, durationSeconds: number, tick: number): void {
+/** Share of the enemy's living squads that the player's picture has about right, right now. */
+export function locatedShare(truth: WorldTruth, player: PlayerKnowledge, mission: LocateMission, tick: number): number {
+  const enemy = truth.units.filter((unit) => unit.side === 'enemy' && unit.personnel > 0);
+  if (enemy.length === 0) return 1;
+  const picture = Object.values(player.contacts).filter(
+    ({ contact, status }) =>
+      contact.identification === 'hostile' &&
+      (status === 'active' || status === 'hit') &&
+      tick - contact.position.observedAt <= mission.freshSeconds,
+  );
+  const located = enemy.filter((unit) =>
+    picture.some(({ contact }) => distance(contact.position.center, unit.position) <= mission.locateMeters),
+  );
+  return located.length / enemy.length;
+}
+
+function updateLocate(truth: WorldTruth, player: PlayerKnowledge, mission: LocateMission, durationSeconds: number, tick: number): void {
+  if (tick < durationSeconds) return;
+  const share = locatedShare(truth, player, mission, tick);
+  truth.locatedShare = share;
+  finish(truth, share >= mission.successShare ? 'success' : share >= mission.partialShare ? 'partial' : 'failure', tick);
+}
+
+export function updateOutcome(
+  truth: WorldTruth,
+  mission: MissionConfig,
+  durationSeconds: number,
+  tick: number,
+  player: PlayerKnowledge = emptyPlayerKnowledge(),
+): void {
   if (mission.kind === 'HoldArea') updateHoldArea(truth, mission, durationSeconds, tick);
-  else updateReachArea(truth, mission, durationSeconds, tick);
+  else if (mission.kind === 'ReachArea') updateReachArea(truth, mission, durationSeconds, tick);
+  else updateLocate(truth, player, mission, durationSeconds, tick);
 }

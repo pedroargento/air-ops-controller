@@ -2,6 +2,7 @@ import type { AircraftTelemetry, AircraftTelemetryEntry } from '../domain/public
 import type { Vec2 } from '../domain/public/geometry';
 import { isAntiAir, type WeaponType } from '../domain/public/equipment';
 import { cellAtIndex, elevationAt, type TerrainGrid } from '../domain/public/terrain';
+import { POI_KINDS, type Poi } from '../domain/public/poi';
 import type { ReportLevel } from '../domain/public/radio';
 import { rainVisibilityMeters, systemCenterAt, weatherAt, type Weather } from '../domain/public/weather';
 import { distanceText, markerSize, scaleBarMeters, strengthText, weaponTag } from './format';
@@ -72,6 +73,8 @@ const CONTOUR_COLOR = 'rgba(45,30,10,0.28)';
 const ANTI_AIR_COLOR = '#ff3df0';
 const CLUSTER_MARGIN_METERS = 80;
 const BLINK_PERIOD_TICKS = 4;
+const FACING_LINE_PIXELS = 14;
+const POI_COLOR = '#ffaa3c';
 const REPORT_RING_PIXELS = 15;
 
 export class MapView {
@@ -248,6 +251,7 @@ export class MapView {
       this.drawContact(marker, selected);
     }
     for (const cluster of view.clusters) this.drawCluster(cluster);
+    for (const poi of view.pois) this.drawPoi(poi);
     for (const friendly of view.friendlies) {
       this.drawFriendly(friendly, selection?.kind === 'friendly' && selection.id === friendly.unitId);
     }
@@ -480,6 +484,41 @@ export class MapView {
   }
 
   /** Where the weapons seen on this contact are a real danger to aircraft at their altitude. */
+  /** A short line the way a still squad was seen to face. It is an observation, not a claim. */
+  private drawFacing(marker: ContactMarker, at: Vec2, size: number): void {
+    const { facingRad } = marker.contact;
+    if (facingRad === undefined) return;
+    const { ctx } = this;
+    const reach = (size + FACING_LINE_PIXELS) / this.pixelsPerMeter;
+    const { center } = marker.contact.position;
+    const end = this.toScreen({ x: center.x + Math.cos(facingRad) * reach, y: center.y + Math.sin(facingRad) * reach });
+    ctx.strokeStyle = '#ffd24a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(at.x, at.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.stroke();
+  }
+
+  private drawPoi(poi: Poi): void {
+    const { ctx } = this;
+    const at = this.toScreen(poi.center);
+    const radius = poi.radiusMeters * this.pixelsPerMeter;
+    ctx.strokeStyle = POI_COLOR;
+    ctx.fillStyle = 'rgba(255, 170, 60, 0.12)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 5]);
+    ctx.beginPath();
+    ctx.arc(at.x, at.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = POI_COLOR;
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(POI_KINDS[poi.kind].label, at.x, at.y + radius + 13);
+  }
+
   /** A dashed ring with a count of reports: distinct from a marker, and never a unit symbol. */
   private drawCluster(cluster: ContactCluster): void {
     const { ctx } = this;
@@ -633,6 +672,7 @@ export class MapView {
     if (!hollow) ctx.fill();
     ctx.stroke();
     if (marker.status === 'hit') this.drawHitTick(at, size);
+    this.drawFacing(marker, at, size);
     const weapons = marker.contact.observedWeapons;
     const antiAir = weapons.some(isAntiAir);
     if (antiAir) {
