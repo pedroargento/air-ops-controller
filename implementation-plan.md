@@ -18,8 +18,8 @@ Implements `air-operations-v0.1-spec.md` (revision 11). The spec decides what th
 - **M7.7:** Complete.
 - **M7.8:** Complete. Scout and gunship teamwork (pink teams) would suit a later scenario.
 - **M7.9:** Complete.
-- **M8:** Skipped for now. Squad-level detail didn't earn its cost from the air controller's seat. Aircraft variants come first.
-- **M9:** Not started.
+- **M8:** Replaced by S1. Squad detail didn't earn its cost in v0.1, but battle drills now need it.
+- **M9:** Not started. Reduced to a playtest, with win-rate tuning moved to M13. See "Roadmap after v0.1" below.
 
 Replay works across JavaScript engines, which goes beyond invariant 8. Simulation code uses `src/domain/public/det-math.ts` because built-in `Math.log` and similar functions differ between engines and V8 versions; lint bans them there.
 
@@ -44,7 +44,7 @@ M7 removed an aircraft aura that had inflated every earlier result. Each sightin
 
 Forwarding probably helps now because the aura no longer dominates, so warned patrols and prepared garrisons can show up in the result. That explanation hasn't been tested.
 
-Open items for M9, most important first:
+Open items, most important first. Tuning waits for M13:
 
 - **Hunting air defense doesn't pay.** The `informed` policy wins 61.0%, against 74.0% for threat-blind, because it spends passes on the team. Answering fire by climbing recon cuts hits (0.41 per run against 0.57) with no significant change in wins (71.4%), so altitude is the better reaction for now.
 - **Reactive and informed are both inside their bands,** but reactive (17.4%) is now near the bottom of its band. The best policies reach the mid 70s, so a good human may still find the scenario too easy.
@@ -317,46 +317,197 @@ Implements the helicopter rules in §8.5. The first scenario adds a UH-1B gunshi
 
 Implements §8.6 and the map layers in §9. The weather layer is a forecaster's chart, with storm tracks and a likely path, so a storm's approach can be planned for. Recon coverage age and terrain masking overlays were proposed and are still to do. Weather acts through one visibility figure in meters, set by rain strength and closeness to the cloud base, across ground observers, aircraft sensors, noticing, ground fire at aircraft and strikes. Valley fog is deferred, and so are weather effects on troop movement, flight safety and pilot behavior. One automated policy adjusts altitude to the forecast, and none routes or times missions around storms.
 
-### M8: Squads (skipped for now)
+### M8: Squads (replaced)
 
-Only if the M7.5 playtest shows that the extra detail is worth it. Subordinate elements with `parentId`, grouped map markers that keep spatial differences and hide unidentified capabilities, and commander-level covering fire and maneuver. Needs its own design pass first, including the deferred hierarchy in §2, radio responsibilities and batch run time, because detection cost grows with the square of the unit count.
+Replaced by S1 in the roadmap below. Formations were enough for v0.1, but battle drills need squads to work with.
 
-### M9: Calibration
+### M9: Playtest and close v0.1
 
-- Tune every policy into its acceptance band, then run sensitivity sweeps on the main constants to find fragile balance.
-- Record the communication improvement in percentage points, against the target of about 10.
-- Investigate whether ammunition, reinforcement and time limits can guarantee no no-air win.
-- Playtest pacing at each speed, and check that real decisions arise often enough.
-- Tune the §12 tempo targets alongside the win rates.
-- Document known simplifications and final tuning values.
+Replaced the original calibration milestone. The theater work changes what needs tuning, so win-rate tuning, sensitivity sweeps and §12 tempo work on the outpost wait until they can be redone against the new measures.
 
-**Exit:** All §12 balance and tempo targets are met or deliberately revised, and §14 is satisfied.
+- Play the outpost by hand at each speed and write down what is confusing, slow or dull.
+- Fix usability problems that would carry over to the theater game.
+- Record known simplifications and the current tuning values.
 
-### Next major step: theater operations
+**Exit:** The outpost has been played by hand several times, and the findings are written down. The open items in Status stay open unless they still matter.
 
-The planned direction after v0.1, not yet specified. A larger map covering a slice of a fictional, Afghanistan-like country in the Vietnam era, with several bases holding different aircraft. Today's aircraft models stay, with no drones or satellites. Sites zoom into today's 5 km grid. Play is continuous over days, without a win condition, and ops requests appear at random: SF reconnaissance, medevac, QRF, air support, troops in contact and search and rescue.
+## 5. Roadmap after v0.1
 
-- **Vertical slice first:** Two sites, two bases, and only troops in contact and recon incidents, with mission-level autonomy. It tests whether juggling fights beats running one.
-- **Then:** A theater layer owning time, bases and aircraft, sites created on demand, an incident generator, saving, and periodic reports instead of win conditions.
-- **Longer spans:** Crews with duty limits and rotation, and weather generated as it goes rather than fixed at the start.
-- **Night and flares:** Darkness feeds the visibility figure, and flare aircraft light an area for a few minutes at a time. Flares show the fight to both sides, and they have to be dropped under the cloud, so low cloud brings the flare aircraft into reach of ground fire.
-- **Autonomy:** Orders become a mission with limits, such as an altitude floor, weather minimums and abort rules, and the crew flies it.
-- **Detective work:** Requests are weighed against resources. Reports can overstate a situation, and how far a unit can be trusted is learned over time.
-- **Calibration:** Requests served, response times and losses replace win rates. M9's fine tuning of the outpost should wait for this.
+The direction is a larger map covering a slice of a fictional, Afghanistan-like country in the Vietnam era, about 200 km across as a starting value. It has several bases with different aircraft, and sites that zoom into today's 5 km grid. Play is continuous, with no win condition, and ops requests appear at random. Today's aircraft models stay, with no drones or satellites.
 
-The features below become incident types in this structure.
+Each milestone needs its own spec section before it starts. Scenarios come first: they give playable missions sooner, test the ground AI on new maps, and become incident templates later, so each scenario's objective is written as an incident: a place, a time window, what it needs, and what happens if nobody comes. Timed orders are fine in a scenario, but each ground action is reusable, so an assault works the same for either side, in any scenario, however it was started. A scenario's stated objective is the mission only: threats and what to do about them are for the player to discover through recon. Numbers below are provisional.
 
-### Roadmap after v0.1
+### Scenarios
 
-Each feature needs its own spec section first, and the spec's deferred list still applies to v0.1. They're in build order, because the later ones depend on the earlier ones:
+#### S0: Scenario framework
 
-1. **Supply drop:** An aircraft drops ammunition to a ground unit, which ammunition tracking already supports. It needs no landing, so it comes first. The drop should be able to scatter or land near the enemy, with weather making that worse.
-2. **Landing zones:** Helicopters land, stay on the ground under fire, and take off again. Everything below this point needs it, and it needs rules for choosing a landing zone and for a hot one.
-3. **Medevac:** Lifting casualties out of a unit. Casualties are permanent today, so this needs a rule for what removing wounded gives the unit, such as morale.
-4. **Troop transport and QRF:** Moving a quick reaction force by air to reinforce a position, or to block an attack. It needs a held reserve and a way to add a unit to the battle.
-5. **Downed pilot and search and rescue:** Aircraft can be shot down, which reverses the current rule that a hit never destroys one. The crew survives on the ground, the enemy moves in, and the player has to protect a rescue aircraft with escorts.
+`npm run sim -- --scenario name` and `?scenario=name` in the browser. Objectives, end conditions and UI text come from the scenario instead of assuming the outpost, and terrain can be generated for a new map. Each scenario needs its own scripted policy to measure it.
 
-## 5. Testing
+**Exit:** The outpost's results don't change, and a second small scenario runs in the browser and in batch.
+
+#### S1: Squads and platoons
+
+Replaces M8. The squad becomes the smallest simulated combat unit, and a platoon is a command relationship between squads, so nothing physically splits. Companies wait for the theater. Zoom never changes the simulation.
+
+- **Command:** Platoons hold the objective, assign squad tasks and react to reports. Squads move, observe, use cover, fight and report.
+- **Radio:** Squads share information inside the platoon, and only platoons talk to Air Ops, so the player's radio doesn't grow with the unit count.
+- **Morale:** A platoon has a shared morale effect, so squads don't drift away one at a time.
+- **Strikes:** Heavy ordnance hits every squad in its blast radius. A pass that took a share of one large formation would otherwise lose most of its effect against a squad.
+- **Performance:** The outpost goes from 11 units to about 39, so about 12 times as many detection pairs. Pairs out of range are skipped before any costly work.
+- **Map symbols:** A pure view of `PlayerKnowledge`, built on today's consolidation. It distinguishes a visual cluster of contacts from a known formation. A cluster never claims an organization the player hasn't established, a platoon-sized report never produces invented squads, and zooming in never shows what hasn't been seen. Symbols for known units, formations and clusters look different.
+
+**Exit:** The converted outpost keeps these relationships over 1,000 seeds: no-air stays near zero, informed beats reactive by at least 20 points, and forwarding still helps. A 1,000-seed batch across all policies takes no more than three times as long as today. A test confirms that map symbols never read truth.
+
+#### S2: Ground orders and battle drills
+
+- **Assault:** A reusable drill on any area, for either side, which ends when the platoon's own picture shows the area clear. How it approaches, fights and breaks off comes from doctrine, not the scenario.
+- **Triggers:** A platoon's next objective can start at a time, when its current objective ends, or when a contact is reported. Today's objective schedule becomes the time case.
+- **Reaction forces:** A reserve holds until a linked unit reports contact, then goes to the reported location. It acts on the report rather than the truth, so a late or wrong report sends it late or to the wrong place. Both sides use the same rule.
+- **First drills:** Bypass, which reroutes around a reported enemy. Hasty ambush, which takes a covered position when warned of an approaching enemy and holds fire until close. Support by fire, where one squad pins while others assault. Drills come from doctrine and act on the unit's own picture.
+- **Visibility:** Each drill sends a radio message, so the player can see a forwarded report change what a unit does.
+- **Later drills, as scenarios need them:** Flank, wait for air, and break contact.
+
+**Exit:** The same assault runs unchanged on two maps and for both sides, a QRF responds through reports alone, a misplaced report misdirects it, and each drill shows a measured benefit in batch runs.
+
+#### S3: Aircraft weapons
+
+Armed aircraft carry two weapon classes, each with its own ammunition, replacing today's single blended pass. Unarmed scouts stay unarmed.
+
+- **Guns:** Many bursts, mostly suppression, one squad at a time. They need a good position and a low pass.
+- **Heavy ordnance:** Bombs, rockets and napalm. Few passes, mostly casualties, area effect, tolerant of a rough position, and usable from higher up.
+- **Helicopter door guns:** Can fire around a landing helicopter, for use from S7.
+
+**Exit:** The two classes suit different situations in batch runs, and an aircraft out of heavy ordnance stays useful at a real cost in exposure.
+
+#### S4: Find them, and Convoy
+
+**Find them** is recon only: locate an infiltrating force and be scored on how close the picture was to the truth. **Convoy** has a column moving through a valley, with the player scouting for ambushes and covering it when hit.
+
+**Exit:** In both, better recon gives measurably better results.
+
+#### S5: Compound support
+
+A team already on the move on foot assaults a compound, starting on a timed order. The player's only stated objective is to support the team. The briefing doesn't mention a QRF or anything else in the area: the player finds out by scouting, then decides what to do about it.
+
+Recon's value should show in two ways. Air can attack what it finds, and forwarded reports change what the team does, because they enter the platoon's picture and it can bypass, set an ambush or brace. The player still gives ground units no orders. The scenario scores the team's result, with nothing awarded for stopping the QRF as such. Nothing lands.
+
+**Exit:** Scouting policies beat one that only answers requests, forwarding beats the same recon without it, and fights play out differently across seeds. Policies find the QRF through recon, never from the truth.
+
+#### S6: Supply drop, and Besieged outpost
+
+An aircraft drops ammunition to a ground unit. The drop can scatter or land near the enemy, and weather makes that worse. In the scenario, a low outpost has to be resupplied before a storm closes in.
+
+**Exit:** A well-timed drop changes the result, and a bad one can feed the enemy.
+
+#### S7: Wounded and medevac
+
+- **Casualties:** They divide into killed and wounded by a set share. Wounded leave the fight but stay with the unit, and some die as time passes.
+- **Landing:** Helicopters land, sit exposed on the ground and take off. Includes hot landing zones and limits on load at high altitude.
+- **Loading:** Casualties are numbers, not individuals. They load at a rate per minute on the ground, slowed by fire, up to the aircraft's capacity, so each extra minute saves more people and risks the aircraft.
+- **Results:** Killed, died of wounds, evacuated and time to hospital appear in the debrief. Medevac is added to Compound support.
+
+**Exit:** Faster medevac measurably reduces deaths, and time on the ground has a real cost.
+
+#### S8: Downed crew
+
+The crew starts on the ground, so no shoot-down rule is needed. They evade while the enemy closes in and may set a flak trap, and the player protects a rescue aircraft with escorts.
+
+**Exit:** Escorts and timing change the result, and rushing in can lose the rescue aircraft.
+
+Further scenario ideas: Hunt the flak, Last lift, and Last light once night exists.
+
+### Phase 1: Prove the idea
+
+#### M10: Mission orders
+
+Orders become a mission with limits, such as an altitude floor, weather minimums, a fuel limit and abort rules, and the crew flies it and reports back. Pilots can refuse or break off within those limits. The player can still take direct control. Built on the outpost, so it can be measured against today's game.
+
+**Exit:** An automated policy using only mission orders matches today's direct-control results within 5 points of wins. By hand, the outpost can be run without flying aircraft directly.
+
+#### M11: Sites and theater state
+
+A theater layer owns the clock, bases and aircraft, and each site owns its map, units, weather and player picture. Aircraft travel between sites in transit. No gameplay changes: a one-site theater is the outpost.
+
+**Exit:** A one-site theater gives statistically the same results as the outpost over 1,000 seeds, and replay still matches.
+
+#### M12: Two-site slice
+
+Two hand-made sites and two bases, with scripted troops in contact and recon incidents. The UI adds a site switcher and a radio filtered by site. No other new mechanics.
+
+**Exit, and the decision point for everything below:** By hand, is juggling two fights better than running one? If not, stop and rethink before building Phase 2.
+
+### Phase 2: Continuous play
+
+#### M13: Incidents and shifts
+
+An incident is data: a place, a time window, what it needs, and what happens if nobody comes. A generator creates them at a set rate, and they replace win conditions. A shift ends in a report card, with damage and aircraft availability carrying over. Calibration moves to requests served, response times and losses, with arrival rate as the main dial. The outpost's fine tuning restarts here, against these measures.
+
+**Exit:** An automated policy can run an 8-hour shift, and arrival rate moves service levels predictably. By hand, a shift has quiet stretches and real overload.
+
+#### M14: Reports that can mislead
+
+Units can overstate strength and urgency when under pressure, so a request has to be weighed before aircraft are committed. Checking one costs a recon aircraft and time.
+
+**Exit:** A policy that verifies doubtful requests beats one that believes them all, and one that ignores them.
+
+#### M15: Saving and long sessions
+
+Save and load, snapshots so that replay doesn't grow without limit, and a clock that runs fast through quiet periods and slows when something needs the player.
+
+**Exit:** A multi-day run can be saved, reloaded and continued to the same final hash.
+
+### Phase 3: The region
+
+#### M16: Regional map and generated sites
+
+The 200 km map built from a slice of real elevation data, with invented place names, and sites created on demand from it. The ground AI has to give good fights on any terrain, which this milestone must test. Terrain masking gets the valleys it needs. The theater map zooms into sites.
+
+**Exit:** Over a sample of generated sites, fights fall inside tempo targets as often as the outpost does, and air's value holds up.
+
+#### M17: Bases and theater weather
+
+Several bases with different aircraft, so which base answers a call becomes a decision. Weather is generated as time passes rather than fixed at the start, with a regional forecast chart of larger storm systems above each site's chart.
+
+**Exit:** A policy that chooses bases by distance, aircraft type and weather beats one that always uses the nearest base.
+
+### Phase 4: Airlift
+
+#### M18: Troop transport and QRF
+
+A held reserve moved by air to reinforce a position or block an attack, and inserting and recovering teams. Uses landing from S7 and reaction forces from S2.
+
+**Exit:** An airlifted QRF changes results in shift runs, and using one leaves a real gap elsewhere.
+
+### Phase 5: The long war
+
+#### M19: Crews and rotation
+
+Crews with duty limits, rest and fatigue, assigned to aircraft. Fatigue feeds into sensor quality and strike accuracy, and experience into how well crews use their autonomy. Repairs and aircraft availability become longer-term problems.
+
+**Exit:** Spending all crews early leaves a measurable gap later, so a policy that holds some back does better over several days.
+
+#### M20: Unit reputation
+
+Units build a track record, so the player learns who overstates. Needs the long spans from this phase and the reports from M14.
+
+**Exit:** A policy that uses each unit's history beats one that treats all units the same.
+
+#### M21: Day, night and flares
+
+A day cycle feeding the visibility figure, only some aircraft types working at night, and attacks favoring darkness. Flare aircraft light an area for a few minutes at a time. Flares show the fight to both sides, and they have to be dropped under the cloud, so low cloud brings the flare aircraft into reach of ground fire.
+
+**Exit:** Night shifts play differently from day shifts, and flares change the outcome of night fights.
+
+### Candidates, not scheduled
+
+- **Shooting down aircraft:** Aircraft can be lost in any scenario, reversing the rule that a hit never destroys one, which makes search and rescue an incident type.
+- **Danger close:** Strikes near friendly troops carry a risk the player chooses to accept. Lifts the ban on friendly-fire damage.
+- **Artillery and check fire:** Friendly guns have to stop while aircraft cross their fire path.
+- **Forward air controllers:** Recon marks targets for more accurate strikes, at the cost of staying exposed.
+- **Flak suppression:** A dedicated role against air defense, reusable for rescue escorts.
+- **Weather on the ground:** Effects on troop movement, and valley fog.
+
+## 6. Testing
 
 | Layer | When it runs | Contents |
 |---|---|---|
@@ -367,7 +518,7 @@ Each feature needs its own spec section first, and the spec's deferred list stil
 
 Golden replay hashes change whenever rules or tuning change, so a hash update must be a deliberate part of the change that caused it.
 
-## 6. Risks
+## 7. Risks
 
 | Risk | Mitigation |
 |---|---|
@@ -376,7 +527,7 @@ Golden replay hashes change whenever rules or tuning change, so a hash update mu
 | Ground AI ignores information, so forwarding is pointless | M2 deterministic test, M3 forwarding comparison |
 | Ground AI loops between advancing and retreating | Debug canvas, §4.2 return rule, a run metric counting repeat withdrawals |
 | Truth leaks into player-facing code | Import rules, non-interference test, policies limited to `PlayerView` |
-| Tuning constants multiply and interact | All constants in config, sensitivity sweeps in M9 |
+| Tuning constants multiply and interact | All constants in config, sensitivity sweeps in M13 |
 | Gentler morale lets the garrison hold without air | Re-run the no-air gate during M5, and restore pressure through enemy roles and attrition rather than a morale drain |
 | Behavior choice flickers between updates | Minimum commitment time, a run metric counting behavior changes |
 | Fewer TICs leave the player with too little to do | Tempo report, playtest at each speed |
