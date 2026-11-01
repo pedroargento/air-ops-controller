@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { loadScenarioFile } from '../../src/cli/load-scenario';
 import { strengthCategory } from '../../src/domain/public/estimates';
-import type { UnitId, UnitKnowledge } from '../../src/domain/public/ground';
+import type { UnitKnowledge } from '../../src/domain/public/ground';
 import { cellAt } from '../../src/domain/public/terrain';
-import type { GroundUnit } from '../../src/domain/truth/world';
 import { updatePerception } from '../../src/perception/observe';
 import { createRng } from '../../src/rng/streams';
 import type { Scenario } from '../../src/scenario/load';
 import { createInitialState } from '../../src/sim/state';
+import { singleSquads, squadOf } from '../support/single-squads';
 
-const scenario = loadScenarioFile();
+const scenario = singleSquads(loadScenarioFile());
 const { perception } = scenario.file;
 
 function withoutTerrainEffects(base: Scenario, concealment: number): Scenario {
@@ -24,8 +24,8 @@ function withoutTerrainEffects(base: Scenario, concealment: number): Scenario {
 
 function pair(separationMeters: number, seed = 1) {
   const { truth } = createInitialState(scenario, seed);
-  const observer = truth.units.find((u) => u.id === ('F-A' as UnitId)) as GroundUnit;
-  const target = truth.units.find((u) => u.id === ('E-N1' as UnitId)) as GroundUnit;
+  const observer = squadOf(truth, 'F-A');
+  const target = squadOf(truth, 'E-N1');
   observer.position = { x: 2525, y: 2625 };
   target.position = { x: 2525, y: 2625 - separationMeters };
   target.posture = 'moving';
@@ -41,13 +41,13 @@ function scanUntilDetected(setup: ReturnType<typeof pair>, terrain = open.terrai
   const { truth, observer, knowledge, rng } = setup;
   for (let scan = 0; scan < 200; scan += 1) {
     updatePerception(truth, knowledge, terrain, rng, perception, scan * 5);
-    if (Object.keys(knowledge[observer.id]?.contacts ?? {}).length > 0) return scan;
+    if (Object.keys(knowledge[observer.platoonId]?.contacts ?? {}).length > 0) return scan;
   }
   return null;
 }
 
 const contactsOf = (setup: ReturnType<typeof pair>) =>
-  Object.values(setup.knowledge[setup.observer.id]?.contacts ?? {});
+  Object.values(setup.knowledge[setup.observer.platoonId]?.contacts ?? {});
 
 describe('detection', () => {
   it('gives no contact for an enemy beyond detection range', () => {
@@ -233,7 +233,7 @@ describe('weather and sight', () => {
       const setup = pair(separationMeters, seed);
       raining(rain)(setup);
       updatePerception(setup.truth, setup.knowledge, open.terrain, setup.rng, perception, 5);
-      if (Object.keys(setup.knowledge[setup.observer.id]?.contacts ?? {}).length > 0) seen += 1;
+      if (Object.keys(setup.knowledge[setup.observer.platoonId]?.contacts ?? {}).length > 0) seen += 1;
     }
     return seen;
   }

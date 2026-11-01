@@ -54,6 +54,7 @@ export type BattleSummary = Readonly<{
 export type SummaryConfig = Readonly<{
   objective: Vec2;
   objectiveRadiusMeters: number;
+  areaLabel: string;
   hqEnemyEstimate: number;
   ratioRadiusMeters: number;
   staleSeconds: number;

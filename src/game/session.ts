@@ -1,14 +1,16 @@
 import type { PlayerAction, PlayerCommand } from '../domain/public/commands';
 import type { Debrief } from '../domain/public/debrief';
 import { hashState } from '../domain/public/hash';
-import type { Outcome } from '../domain/truth/world';
+import type { Outcome, Platoon } from '../domain/truth/world';
 import { project, type PlayerView } from '../knowledge/player-view';
 import type { Scenario } from '../scenario/load';
 import { aircraftTelemetry } from '../sim/air';
+import { platoonPersonnel, sortedPlatoons } from '../sim/platoon';
 import { createInitialState, type SimState } from '../sim/state';
 import { step } from '../sim/step';
 
 export type CommandLog = Readonly<{
+  scenario: string;
   seed: number;
   commands: readonly PlayerCommand[];
   ticks: number;
@@ -56,18 +58,21 @@ export class GameSession {
   /** The truth, only once the run is over and there is nothing left to learn from it. */
   debrief(): Debrief | null {
     if (this.outcome === 'running') return null;
-    const units = this.state.truth.units;
+    const { truth } = this.state;
+    const units = truth.units;
+    const platoons = sortedPlatoons(truth);
+    const lost = (platoon: Platoon): boolean => platoonPersonnel(platoon) <= 0;
     const count = (side: 'friendly' | 'enemy', read: (u: (typeof units)[number]) => number): number =>
       units.filter((u) => u.side === side).reduce((sum, u) => sum + read(u), 0);
     return {
       enemyStart: count('enemy', (u) => u.initialPersonnel),
       enemyLeft: count('enemy', (u) => u.personnel),
-      enemyFormations: units.filter((u) => u.side === 'enemy').length,
-      enemyDestroyed: units.filter((u) => u.side === 'enemy' && u.personnel <= 0).length,
-      enemyBroken: units.filter((u) => u.side === 'enemy' && u.personnel > 0 && u.mode === 'broken').length,
+      enemyFormations: platoons.filter((p) => p.side === 'enemy').length,
+      enemyDestroyed: platoons.filter((p) => p.side === 'enemy' && lost(p)).length,
+      enemyBroken: platoons.filter((p) => p.side === 'enemy' && !lost(p) && p.mode === 'broken').length,
       friendlyStart: count('friendly', (u) => u.initialPersonnel),
       friendlyLeft: count('friendly', (u) => u.personnel),
-      friendlyDestroyed: units.filter((u) => u.side === 'friendly' && u.personnel <= 0).length,
+      friendlyDestroyed: platoons.filter((p) => p.side === 'friendly' && lost(p)).length,
     };
   }
 
@@ -77,7 +82,7 @@ export class GameSession {
   }
 
   commandLog(): CommandLog {
-    return { seed: this.seed, commands: [...this.log], ticks: this.stepsTaken };
+    return { scenario: this.scenario.file.id, seed: this.seed, commands: [...this.log], ticks: this.stepsTaken };
   }
 
   stateHash(): string {

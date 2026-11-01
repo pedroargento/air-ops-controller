@@ -20,13 +20,17 @@ import {
   rangeText,
   statusText,
   strengthText,
+  triage,
   weaponsText,
+  type ContactMemory,
   type Names,
+  type TriageParameters,
 } from './format';
 import { AltitudeProfile } from './altitude-profile';
 import { PathProfile } from './path-profile';
 import { summarizeBattle, type BattleSummary, type SummaryConfig } from './battle-summary';
 import { MapView, type Selection, type WeatherLayer } from './map-view';
+import { ToastQueue } from './toasts';
 import { morphHtml } from './morph';
 import { stormMovement, type ForecastError } from './weather-chart';
 
@@ -44,6 +48,7 @@ export type UiConfig = Readonly<{
   maxAltitudeMeters: number;
   defaultAltitudeMeters: number;
   summary: SummaryConfig;
+  triage: TriageParameters;
   durationSeconds: number;
   forecastError: ForecastError;
   speeds: readonly number[];
@@ -115,6 +120,10 @@ export class App {
   private lastAircraftId: string | null = null;
   private readonly split = new Set<string>();
   private sideTab: 'radio' | 'summary' = 'radio';
+  private radioFilter: 'main' | 'all' = 'main';
+  private heardContacts: readonly ContactMemory[] = [];
+  private readonly toasts = new ToastQueue();
+  private lastFrameAt: number | null = null;
   private readonly layers = new Set<'weather' | 'threats'>();
   private forecastLeadSeconds = 0;
   private readonly profile: AltitudeProfile;
@@ -144,7 +153,7 @@ export class App {
     element('forecast-lead').addEventListener('input', (event) => {
       this.forecastLeadSeconds = Number((event.target as HTMLInputElement).value);
     });
-    for (const panel of ['controls', 'aircraft', 'selection', 'requests', 'radio-log', 'side-tabs', 'map-layers', 'forecast']) {
+    for (const panel of ['controls', 'aircraft', 'selection', 'requests', 'radio-log', 'side-tabs', 'map-layers', 'forecast', 'map-toasts']) {
       element(panel).addEventListener('click', (event) => this.onPanelClick(event));
       element(panel).addEventListener('change', (event) => this.onPanelChange(event));
     }
@@ -264,7 +273,7 @@ export class App {
     };
   }
 
-  /** Cloud base where it matters: over the selected aircraft, or else the outpost. */
+  /** Cloud base where it matters: over the selected aircraft, or else the objective. */
   private forecastCeiling(view: PlayerView): number | null {
     if (!this.layers.has('weather') || view.forecast === null) return null;
     const point = this.threatAircraft(view)?.position ?? this.config.summary.objective;
@@ -337,6 +346,9 @@ export class App {
       case 'tab':
         this.sideTab = id === 'summary' ? 'summary' : 'radio';
         return;
+      case 'radio-filter':
+        this.radioFilter = id === 'all' ? 'all' : 'main';
+        return;
       case 'split':
         if (id !== undefined) this.split.add(id);
         this.map.showSplit(this.split);
@@ -355,6 +367,10 @@ export class App {
         return;
       case 'center':
         this.map.centerOn({ x: Number(x), y: Number(y) });
+        return;
+      case 'toast':
+        if (x !== undefined && y !== undefined) this.map.centerOn({ x: Number(x), y: Number(y) });
+        this.toasts.dismiss(Number(id));
         return;
       case 'order':
         if (this.selection?.kind === 'aircraft') {
@@ -464,6 +480,7 @@ export class App {
     this.renderRequests(view);
     this.renderSelection(view);
     this.renderLog(view);
+    this.renderToasts(run);
     this.renderSideTab(view, run);
     this.renderLayers(view);
     element('map-holder').classList.toggle('picking', this.pendingOrder !== null);
@@ -631,11 +648,15 @@ export class App {
   private renderSideTab(view: PlayerView, run: RunState): void {
     const showing = this.sideTab;
     element('radio-log').hidden = showing !== 'radio';
+    element('radio-log').classList.toggle('main-only', this.radioFilter === 'main');
+    const filter = (id: 'main' | 'all', label: string): string =>
+      `<button data-action="radio-filter" data-id="${id}"${this.radioFilter === id ? ' class="active"' : ''}>${label}</button>`;
     element('summary').hidden = showing !== 'summary';
     morphHtml(
       element('side-tabs'),
       `<button data-action="tab" data-id="radio"${showing === 'radio' ? ' class="active"' : ''}>Radio</button>` +
-        `<button data-action="tab" data-id="summary"${showing === 'summary' ? ' class="active"' : ''}>Summary</button>`,
+        `<button data-action="tab" data-id="summary"${showing === 'summary' ? ' class="active"' : ''}>Summary</button>` +
+        (showing === 'radio' ? `<span class="radio-filter">${filter('main', 'Main')}${filter('all', 'All')}</span>` : ''),
     );
     if (showing === 'summary') morphHtml(element('summary'), this.summaryHtml(view, run));
   }
@@ -670,7 +691,7 @@ export class App {
       (sectors === '' ? '' : `<table>${sectors}</table>`) +
       `<p>Air threat: ${threats === '' ? 'none observed' : escapeHtml(threats)}</p>` +
       `<h3>Friendly, last reported</h3><ul>${friendlies}</ul>` +
-      `<h3>At the outpost</h3><p>Within ${this.config.summary.ratioRadiusMeters / 1000} km: enemy ${rangeText(summary.threatened)} ` +
+      `<h3>${escapeHtml(this.config.summary.areaLabel)}</h3><p>Within ${this.config.summary.ratioRadiusMeters / 1000} km: enemy ${rangeText(summary.threatened)} ` +
       `against ${summary.defenders} defenders${ratio === null ? '' : ` (${ratio})`}</p>` +
       `<h3>Air</h3><p>${summary.strikes} strikes · ${summary.aircraftHits} hits taken · ${summary.damagedNow} damaged now</p>` +
       `<p class="hint-quiet">${summary.archived} old reports archived; they remain in the radio log.</p>` +
@@ -683,7 +704,18 @@ export class App {
     for (const message of view.log.slice(this.logged)) {
       const line = radioLine(message, terrain.cellSize);
       const row = document.createElement('div');
-      row.className = `log-row ${message.kind.toLowerCase()}`;
+      const { level, heard } = triage(message, this.heardContacts, this.config.triage);
+      this.heardContacts = heard;
+      row.className = `log-row ${message.kind.toLowerCase()} ${level}`;
+      if (level !== 'routine') {
+        this.toasts.add({
+          senderId: message.senderId,
+          level,
+          sender: displayName(message.senderId, names),
+          text: line.text,
+          point: line.coordinates.at(-1) ?? null,
+        });
+      }
       const links = line.coordinates
         .map(
           (point) =>
@@ -696,6 +728,18 @@ export class App {
       this.log.prepend(row);
     }
     this.logged = view.log.length;
+  }
+
+  /** Timed in real seconds, and held while paused, so a pause leaves time to read them. */
+  private renderToasts(run: RunState): void {
+    const now = performance.now();
+    if (this.lastFrameAt !== null && !run.paused) this.toasts.advance((now - this.lastFrameAt) / 1000);
+    this.lastFrameAt = now;
+    const rows = this.toasts.visible.map(({ id, level, sender, text, point }) => {
+      const at = point === null ? '' : ` data-x="${point.x}" data-y="${point.y}"`;
+      return `<button class="toast ${level}" data-action="toast" data-id="${id}"${at}><b>${escapeHtml(sender)}</b> ${escapeHtml(text)}</button>`;
+    });
+    morphHtml(element('map-toasts'), rows.join(''));
   }
 
   /** Exposed for end-to-end tests and debugging: where the map is looking. */

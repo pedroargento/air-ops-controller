@@ -11,7 +11,8 @@ import {
   type RadioTask,
   type ReportNeed,
 } from '../domain/public/radio';
-import type { GroundUnit } from '../domain/truth/world';
+import type { GroundIntent, GroundMode } from '../domain/public/ground';
+import type { Platoon } from '../domain/truth/world';
 import { emptyKnowledge } from '../domain/public/ground';
 import { receiveByPlayer, type PlayerKnowledge } from '../knowledge/player-knowledge';
 import { receiveByUnit } from '../knowledge/unit-knowledge';
@@ -38,10 +39,19 @@ export type RadioState = {
   promises: Record<string, ExpectedSupport>;
 };
 
-export function createRadioState(units: readonly GroundUnit[]): RadioState {
+/** A platoon's radio works at the pace of its lead squad (§4.0.1). */
+export type RadioUnit = Readonly<{
+  id: string;
+  personnel: number;
+  mode: GroundMode;
+  suppression: number;
+  intent: GroundIntent;
+}>;
+
+export function createRadioState(units: readonly Pick<Platoon, 'id' | 'initialPersonnel'>[]): RadioState {
   const state: RadioState = { units: {}, nextMessageNumber: 0, outbound: [], promises: {} };
   for (const unit of units) {
-    state.units[unit.id] = { memory: initialRadioMemory(unit.personnel), queue: [] };
+    state.units[unit.id] = { memory: initialRadioMemory(unit.initialPersonnel), queue: [] };
   }
   return state;
 }
@@ -80,7 +90,7 @@ export function enqueue(
 
 /** Lets each unit decide what it wants to report, using only its own beliefs. */
 export function planReports(
-  units: readonly GroundUnit[],
+  units: readonly RadioUnit[],
   selves: ReadonlyMap<string, UnitSelf>,
   knowledge: Record<string, UnitKnowledge>,
   radio: RadioState,
@@ -106,7 +116,7 @@ export function planReports(
 }
 
 /** Seconds of radio work completed this tick. Fighting slows it; heavy fire stops it. */
-export function radioRate(unit: GroundUnit, config: RadioConfig): number {
+export function radioRate(unit: RadioUnit, config: RadioConfig): number {
   if (unit.suppression >= config.interruptSuppression) return 0;
   if (unit.mode === 'withdrawing') return config.withdrawingRate;
   return unit.intent.kind === 'engage' ? config.engagedRate : 1;
@@ -115,8 +125,8 @@ export function radioRate(unit: GroundUnit, config: RadioConfig): number {
 export type Delivery = Readonly<{ message: RadioMessage; recipients: readonly string[] }>;
 
 function advanceUnit(
-  unit: GroundUnit,
-  self: UnitSelf,
+  unit: RadioUnit,
+  selfOf: () => UnitSelf | undefined,
   unitRadio: UnitRadio,
   knowledge: UnitKnowledge,
   radio: RadioState,
@@ -150,7 +160,8 @@ function advanceUnit(
   if (task.phase === 'interrupted') {
     radio.nextMessageNumber += 1;
     const id = `M-${radio.nextMessageNumber}` as MessageId;
-    const message = composeReport(task.need, self, knowledge, id, tick, tick);
+    const self = selfOf();
+    const message = self === undefined ? null : composeReport(task.need, self, knowledge, id, tick, tick);
     if (message === null) {
       unitRadio.queue.shift();
       return null;
@@ -185,8 +196,8 @@ export function deliver(
 }
 
 export function advanceRadio(
-  units: readonly GroundUnit[],
-  selves: ReadonlyMap<string, UnitSelf>,
+  units: readonly RadioUnit[],
+  selves: Pick<ReadonlyMap<string, UnitSelf>, 'get'>,
   knowledge: Record<string, UnitKnowledge>,
   radio: RadioState,
   player: PlayerKnowledge,
@@ -196,15 +207,14 @@ export function advanceRadio(
   const deliveries: Delivery[] = [];
   for (const unit of units) {
     const unitRadio = radio.units[unit.id];
-    const self = selves.get(unit.id);
-    if (unitRadio === undefined || self === undefined) continue;
+    if (unitRadio === undefined) continue;
     if (unit.personnel <= 0) {
       unitRadio.queue = [];
       continue;
     }
     const delivery = advanceUnit(
       unit,
-      self,
+      () => selves.get(unit.id),
       unitRadio,
       knowledge[unit.id] ?? emptyKnowledge(),
       radio,

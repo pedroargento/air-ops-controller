@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { ContactEstimate } from '../../src/domain/public/estimates';
-import type { ContactId } from '../../src/domain/public/ground';
 import type { MessageId, RadioMessage } from '../../src/domain/public/radio';
 import type { ContactMarker } from '../../src/knowledge/player-view';
-import { clock, compassDirection, cursorGrid, distanceText, forwardPreview, gridRef, radioLine, scaleBarMeters, strengthText } from '../../src/ui/format';
+import type { ContactId } from '../../src/domain/public/ground';
+import { clock, compassDirection, cursorGrid, distanceText, forwardPreview, gridRef, radioLine, triage, scaleBarMeters, strengthText } from '../../src/ui/format';
 
 const names = { 'F-N': 'Viper 2-1' };
 const contact: ContactEstimate = {
@@ -83,5 +83,50 @@ describe('map overlays', () => {
     expect(distanceText(500)).toBe('500 m');
     expect(distanceText(1000)).toBe('1 km');
     expect(distanceText(2000)).toBe('2 km');
+  });
+});
+
+describe('radio triage', () => {
+  const parameters = { repeatContactSeconds: 300, repeatContactMeters: 300 };
+  const meta = { id: 'M-1' as MessageId, senderId: 'F-A', observedAt: 0, sentAt: 0 };
+  const contactReport = (x: number, receivedAt: number, max = 14): RadioMessage => ({
+    ...meta,
+    receivedAt,
+    kind: 'CONTACT_REPORT',
+    contact: {
+      contactId: 'C-1' as ContactId,
+      provenance: { sourceId: 'F-A', observedAt: 0 },
+      identification: 'hostile',
+      position: { center: { x, y: 0 }, sigmaMeters: 30, headingRad: null, speedMps: null, observedAt: 0 },
+      strength: { kind: 'range', min: 6, max },
+      kind: 'infantry',
+      activity: 'stationary',
+      confidence: 'medium',
+      observedWeapons: [],
+    },
+  });
+
+  it('keeps position reports out of the main view and puts a TIC at the top', () => {
+    const ownPosition = { center: { x: 0, y: 0 }, sigmaMeters: 30, headingRad: null, speedMps: null, observedAt: 0 };
+    const position: RadioMessage = { ...meta, receivedAt: 0, kind: 'POSITION_REPORT', position: ownPosition };
+    expect(triage(position, [], parameters).level).toBe('routine');
+    expect(triage({ ...meta, receivedAt: 0, kind: 'TIC', ownPosition, contact: null }, [], parameters).level).toBe('urgent');
+  });
+
+  it('shows a first sighting, and not a repeat of it', () => {
+    const first = triage(contactReport(0, 100), [], parameters);
+    expect(first.level).toBe('main');
+    expect(triage(contactReport(100, 150), first.heard, parameters).level).toBe('routine');
+  });
+
+  it('shows a repeat that says the enemy is stronger', () => {
+    const first = triage(contactReport(0, 100), [], parameters);
+    expect(triage(contactReport(100, 150, 50), first.heard, parameters).level).toBe('main');
+  });
+
+  it('shows a sighting somewhere else, or after a long silence', () => {
+    const first = triage(contactReport(0, 100), [], parameters);
+    expect(triage(contactReport(1000, 150), first.heard, parameters).level).toBe('main');
+    expect(triage(contactReport(0, 500), first.heard, parameters).level).toBe('main');
   });
 });

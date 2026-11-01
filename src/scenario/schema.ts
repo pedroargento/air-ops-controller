@@ -20,9 +20,28 @@ const objective = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('MoveTo'), area }),
   z.object({ kind: z.literal('PatrolArea'), waypoints: z.array(vec2).min(1) }),
   z.object({ kind: z.literal('WithdrawTo'), area }),
+  z.object({ kind: z.literal('AssaultArea'), area }),
+  z.object({ kind: z.literal('AmbushArea'), area, openFireMeters: z.number().positive() }),
+]);
+
+const scheduledObjective = z.union([
+  z.object({ fromSeconds: z.number().int().min(0), objective }),
+  z.object({ afterObjective: z.literal(true), objective }),
+  z.object({ onContactReport: z.literal(true), radiusMeters: z.number().positive() }),
 ]);
 
 const doctrine = z.object({
+  drills: z.array(z.enum(['nearAmbush', 'farAmbush', 'attack', 'bypass', 'hastyAmbush', 'waitForAir'])),
+  nearAmbushMeters: z.number().positive(),
+  drillSeconds: z.number().positive(),
+  attackStrengthRatio: z.number().positive(),
+  maxDetourFactor: z.number().min(1),
+  supportShare: unit,
+  flankMeters: z.number().positive(),
+  warningMeters: z.number().positive(),
+  corridorMeters: z.number().positive(),
+  clearSeconds: z.number().positive(),
+  rallyMeters: z.number().positive().nullable(),
   speedMps: z.number().positive(),
   detectRangeMeters: z.number().positive(),
   observerQuality: z.number().positive(),
@@ -68,6 +87,10 @@ const weapon = z.object({
 });
 
 const combat = z.object({
+  squadSize: z.number().int().positive(),
+  ambushSurpriseFactor: z.number().min(1),
+  ambushSurpriseSeconds: z.number().positive(),
+  columnSpacingMeters: z.number().positive(),
   weapons: z.object({ SMALL_ARMS: weapon, MACHINE_GUN: weapon, AAA: weapon, MANPADS: weapon }),
   systemLossPerCasualtyFraction: z.number().nonnegative(),
   assessmentNoise: unit,
@@ -86,7 +109,7 @@ const combat = z.object({
   behaviorFireRate: z.object({ observe: unit, probe: unit, harass: unit, assault: unit, disengage: unit }),
   moraleRecoveryPerUpdate: z.number().nonnegative(),
   moraleRecoveryCap: unit,
-  postureCover: z.object({ moving: unit, firing: unit, defending: unit, prone: unit }),
+  postureCover: z.object({ moving: unit, firing: unit, defending: unit, prone: unit, hidden: unit }),
 });
 
 const perception = z.object({
@@ -94,7 +117,10 @@ const perception = z.object({
   movingBoost: z.number().min(1),
   firingBoost: z.number().min(1),
   trackedBoost: z.number().min(1),
-  postureConcealment: z.object({ moving: unit, firing: unit, defending: unit, prone: unit }),
+  postureConcealment: z.object({ moving: unit, firing: unit, defending: unit, prone: unit, hidden: unit }),
+  hiddenAirConcealment: unit,
+  reportCueBoost: z.number().min(1),
+  reportCueMeters: z.number().positive(),
   identifyPerScan: unit,
   weaponSeenPerScan: unit,
   sigmaBaseMeters: z.number().positive(),
@@ -142,6 +168,10 @@ const display = z.object({
   coneBaseHalfAngleRad: z.number().positive(),
   coneWidenRadPerSecond: z.number().nonnegative(),
   freshReportSeconds: z.number().positive(),
+  clusterRadiusMeters: z.number().positive(),
+  reportBlinkSeconds: z.number().positive(),
+  repeatContactSeconds: z.number().positive(),
+  repeatContactMeters: z.number().positive(),
   regionMaxRadiusMeters: z.number().positive(),
   regionFadeSeconds: z.number().positive(),
   effectSeconds: z.number().positive(),
@@ -210,6 +240,7 @@ const air = z.object({
   cueMaxAgeSeconds: z.number().positive(),
   cueDetectionBoost: z.number().min(1),
   blastRadiusMeters: z.number().positive(),
+  strikeSplashMeters: z.number().positive(),
   supportAckDistanceMeters: z.number().positive(),
   supportGraceSeconds: z.number().int().min(0),
   supportEtaSlipSeconds: z.number().int().positive(),
@@ -241,13 +272,32 @@ const weather = z.object({
   forecastTimingErrorSeconds: z.number().nonnegative(),
 });
 
-const capture = z.object({
+// Shaped like a future incident: a place, what it needs, and how it can end. Results
+// and the briefing are player-facing, so they state the mission and never name a threat.
+const missionCommon = {
   area,
-  enemyMinEffective: z.number().nonnegative(),
-  defenderMinEffective: z.number().nonnegative(),
-  holdSeconds: z.number().int().positive(),
-  successMinDefenders: z.number().nonnegative(),
-});
+  briefing: z.string().min(1),
+  areaLabel: z.string().min(1),
+  results: z.object({ success: z.string().min(1), partial: z.string().min(1), failure: z.string().min(1) }),
+};
+
+const mission = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('HoldArea'),
+    ...missionCommon,
+    enemyMinEffective: z.number().nonnegative(),
+    defenderMinEffective: z.number().nonnegative(),
+    holdSeconds: z.number().int().positive(),
+    successMinDefenders: z.number().nonnegative(),
+  }),
+  z.object({
+    kind: z.literal('ReachArea'),
+    ...missionCommon,
+    unitIds: z.array(z.string()).min(1),
+    successMinPersonnel: z.number().positive(),
+    partialMinPersonnel: z.number().positive(),
+  }),
+]);
 
 const groundUnit = z.object({
   id: z.string(),
@@ -269,7 +319,7 @@ const groundUnit = z.object({
   objective,
   fallback: area,
   activeFromSeconds: z.number().int().min(0).default(0),
-  objectiveSchedule: z.array(z.object({ fromSeconds: z.number().int().min(0), objective })).default([]),
+  objectiveSchedule: z.array(scheduledObjective).default([]),
 });
 
 export const scenarioFileSchema = z.object({
@@ -290,7 +340,7 @@ export const scenarioFileSchema = z.object({
   display,
   air,
   weather,
-  capture,
+  mission,
   links: z.array(z.tuple([z.string(), z.string()])),
   ceconMessages: z.array(z.object({ atSeconds: z.number().int().min(0), text: z.string() })).default([]),
   units: z.array(groundUnit).min(1),
@@ -299,7 +349,7 @@ export const scenarioFileSchema = z.object({
 export type ScenarioFile = z.infer<typeof scenarioFileSchema>;
 export type CombatConfig = ScenarioFile['combat'];
 export type WeatherConfig = ScenarioFile['weather'];
-export type CaptureConfig = ScenarioFile['capture'];
+export type MissionConfig = ScenarioFile['mission'];
 export type AirConfig = ScenarioFile['air'];
 export type AircraftModelConfig = z.infer<typeof aircraftModel>;
 export type PerceptionConfig = ScenarioFile['perception'];

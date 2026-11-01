@@ -90,6 +90,49 @@ Contact does not automatically mean sustained engagement. Once a formation knows
 - A chosen behavior holds for a doctrine-configured minimum time, so that a formation doesn't change its mind on every update. Incoming fire can always end it early: a formation may return fire or disengage.
 - A behavior's fire rate scales both its volley and its ammunition use.
 
+### 4.0.1 Squads and platoons
+
+The squad is the smallest simulated combat unit. A `units` entry in a scenario file describes a platoon, and a platoon is a command relationship between squads, so nothing ever physically splits. Zoom never changes the simulation.
+
+- **Forming up:** A platoon divides into squads of about `combat.squadSize`, sharing out its people, weapons and ammunition. Each squad has a fixed slot. A platoon starting on its hold area spreads around it, and any other platoon starts in column towards its objective.
+- **What a squad owns:** Position, personnel, equipment, suppression, posture and its current fight. Combat, strikes and perception work squad by squad.
+- **What a platoon owns:** Objective, fallback, schedule, morale, mode and returns. It takes the §4.2 withdraw and return decisions from totals across its squads, so the whole platoon goes together and squads don't drift away one at a time.
+- **Shared picture:** A platoon has one picture, so what one squad sees, all its squads know. A squad can only fire at what it has a line of sight to.
+- **Radio:** Links, reports, requests and forwarded intelligence all use platoon IDs, so the player's radio doesn't grow with the number of squads. A platoon's radio works at the pace of its lead squad, the first with people left.
+- **Reporting:** Hostile contacts close together are reported as one group with their combined strength, so a platoon of five squads reports one enemy platoon rather than five contacts. Thresholds for a TIC or support request read the same combined strength.
+- **Strikes:** A pass hits every enemy squad near the aiming point, each by how close it is to that point, while the moral effect counts once per platoon.
+- **Aircraft:** Crews see squads one at a time. Each is a separate contact, and the map draws nearby contacts as a cluster (§9).
+
+### 4.0.2 Battle drills
+
+A drill is a platoon's shared answer to a situation, taken from published small-unit drills. Each is plain data in `src/ai/drills.ts`: what starts it, the role of each squad, and what ends it. A doctrine lists the drills a side knows and sets their numbers, and both sides run the same code. A platoon chooses from its own picture, so what it has been told changes which fight happens.
+
+| Drill | Starts when | Squads | Ends when |
+|---|---|---|---|
+| **Near ambush** | Under fire from inside `nearAmbushMeters` | All assault through | The enemy is gone from the picture |
+| **Far ambush** | Under fire from further away | Nearest give support by fire, the rest flank | The enemy is gone |
+| **Attack** | An `AssaultArea` objective, or a known position on the route that the platoon chooses to attack | Nearest give support by fire, the rest flank and assault | The platoon is on the area and its picture shows it clear |
+| **Bypass** | A known position on the route that is too strong or there's no time to attack, or a far ambush from a stronger force | All route around it, returning fire | The position is behind them |
+| **Hasty ambush** | A moving enemy reported coming towards them | All hide and hold fire until close | The enemy is gone |
+| **Wait for air** | A known position on the route, with air support promised | All hold | The support arrives or lapses |
+
+- **Support by fire:** Not a drill of its own, but the role that pins an enemy while others move. The share of squads comes from doctrine.
+- **Choosing at a known position:** The platoon estimates the enemy's strength from all its reports and contacts there. It attacks up to `attackStrengthRatio`, and otherwise bypasses, unless the way around is over `maxDetourFactor` times as long. It also bypasses if there isn't time to attack.
+- **Flanking:** A flanker goes to a point `flankMeters` to one side of the enemy, choosing the side that the enemy can't see and that has more cover, then keeps clear of the enemy on the way there. Routes avoid the enemy's position, not every line of sight.
+- **Handled positions:** A position a platoon has dealt with stays dealt with, so a report it found empty can't stop it twice.
+- **Time limit:** Every drill ends after a doctrine-set time, so a drill can't hold a platoon forever.
+- **Radio:** Starting a drill sends a `DRILL` message, so the player can see a forwarded report change what a unit does.
+
+**Objectives:** `AssaultArea` attacks an area and ends when the platoon's own picture shows it clear. `AmbushArea` hides on an area and holds fire until the enemy is inside `openFireMeters`, or until the platoon is fired on, then holds the area.
+
+**Orders:** A platoon's `objectiveSchedule` can start its next objective at a time, when its current objective ends, or when a contact is reported. A reported contact gives an `AssaultArea` at the reported position. This acts on the report rather than the truth, so a late or wrong report sends the platoon late or to the wrong place.
+
+**Hidden posture:** A unit that isn't moving or firing can hide. It is far harder to see from the ground, and less so from the air, so recon can still find an ambush that a column would walk into.
+
+**What a warning buys:** A sprung ambush fires at `ambushSurpriseFactor` times its normal effect for `ambushSurpriseSeconds`, but not at a platoon already running a drill that a warning gave it. A report also multiplies a unit's chance of spotting anything hidden near the reported position.
+
+**Rallying:** A doctrine with `rallyMeters` pulls back that far from the enemy and carries on, instead of returning to its authored fallback, unless it is holding ground.
+
 ### 4.1 Statistical ground combat
 
 For the MVP, calculate combat effects at the formation level, not per soldier or bullet. A unit's effective fire depends on current personnel, ammunition, range, terrain/cover, suppression, and its current target assessment. Resolve ammunition usage, suppression and casualties at each combat update. Combat remains seeded and stochastic, but all effects for an update are calculated from one shared snapshot and then applied together, so entity order cannot change the outcome.
@@ -380,6 +423,10 @@ Interaction requirements:
 - The map shows height through hillshading and contour lines every 20 m.
 - Hovering the map shows the grid reference and elevation under the cursor, and nothing off the map.
 - Selecting an aircraft shows a terrain profile along its path to its destination, with its altitude and any ridges in the way.
+- The radio shows **Main** by default, with a switch to **All**. Messages are urgent (TIC, support request, ground fire), main (contact, SITREP, drill, strike result, command update) or routine (position, acknowledgement, the player's own forwards). A contact report counts as routine if it repeats a place heard from in the last `repeatContactSeconds` without a stronger estimate. Nothing is lost: **All** and the unit history show every message.
+- Urgent and main messages also **pop over the map**, so the player needn't look away from it: at most four at once, one per sender, for 12 real seconds if urgent and 6 if main, held while paused. Clicking one centers the map on it and dismisses it.
+- A unit or aircraft that has just been heard on the radio **blinks** on the map, red if the message was urgent.
+- Nearby fresh hostile contacts are ringed as a **cluster**, with a count and a combined strength. A cluster is drawn only from the player's own reports. It claims no organization, a report of one large group never becomes invented squads, and a contact nobody has reported is never drawn.
 - Contact markers show the weapons observed: nothing for small arms or none seen, a small `MG` tag for machine guns, and a magenta chevron with an `AAA` or `MP` tag for anti-aircraft weapons. Tags fade with the marker. A plain marker means weapons not observed, not that there are none, and a legend says so.
 - Selecting an anti-aircraft contact shows a threat ring where the chance of a hit stays above a configured risk per minute, at the altitude of the most recently selected aircraft. It reflects the weapons observed and the last reported position, so it is an estimate, not a guarantee of safety outside it.
 - Ground fire leaves a fading mark at the estimated source for a configured time, tagged with the weapon if the crew saw it. Marks close together merge into one, keeping the newest time and any hit or weapon reported. Marks show details on hover and aren't selectable.
@@ -537,6 +584,16 @@ A fictionalized Vietnam-era map, inspired by the operational problems at Plei Me
 **No-air requirement:** The authored scenario must be tuned so there is no viable ground-only route to the primary win condition within its defined constraints. A headless test that finds 0 wins over many seeds is supporting empirical evidence, **not mathematical proof of a 0% probability**. Examine whether ammunition, reinforcement and time constraints can guarantee that outcome, rather than adding an artificial conditional that checks whether aircraft were used.
 
 Successful air strategies must be materially more effective than indiscriminate or late air dispatch. Air support changes combat and observation, not an arbitrary victory score.
+
+### 11.1 Scenario files
+
+The engine doesn't assume the outpost. A scenario is a file naming its map, units, aircraft, time limit and mission, and it can be chosen with `npm run sim -- --scenario name` or `?scenario=name` in the browser.
+
+- **Shared rules:** Doctrines, weapons, perception, radio and aircraft models live in one rules file, so tuning stays in one place. A scenario can replace any single value.
+- **Missions:** Each has an area, a briefing, and result text for success, partial success and failure. Holding an area and getting named units to an area are the first two kinds. A mission is shaped like a future incident: a place, what it needs, and how it can end.
+- **Hidden threats:** A briefing and its results state the mission only. They never name a threat or say what to do about it, which is for the player to discover through recon.
+- **Policies:** Each scenario has its own scripted test policies. Like the player, they read only the `PlayerView`.
+- **Terrain:** Each map has a recipe that writes its layers, so a stored map can be rebuilt exactly. Maps can differ in size, but stay square.
 
 ## 12. Testing and acceptance criteria
 

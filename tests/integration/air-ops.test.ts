@@ -15,13 +15,15 @@ import { project } from '../../src/knowledge/player-view';
 import { reconInformed } from '../../src/policies/air-policies';
 import { aircraftTelemetry } from '../../src/sim/air';
 import { createInitialState, type SimState } from '../../src/sim/state';
+import { platoonOf } from '../../src/sim/platoon';
 import { step } from '../../src/sim/step';
+import { singleSquads, squadOf } from '../support/single-squads';
 
-const scenario = loadScenarioFile();
-const { air, capture, radio: radioConfig } = scenario.file;
+const scenario = singleSquads(loadScenarioFile());
+const { air, mission, radio: radioConfig } = scenario.file;
 const CAS = 'CAS-1' as AircraftId;
 const RECON = 'RECON-1' as AircraftId;
-const outpost = capture.area.center;
+const outpost = mission.area.center;
 
 function aircraft(state: SimState, id: AircraftId): Aircraft {
   const found = state.truth.aircraft.find((a) => a.id === id);
@@ -30,9 +32,7 @@ function aircraft(state: SimState, id: AircraftId): Aircraft {
 }
 
 function unit(state: SimState, id: string): GroundUnit {
-  const found = state.truth.units.find((u) => u.id === id);
-  if (found === undefined) throw new Error(`No unit ${id}`);
-  return found;
+  return squadOf(state.truth, id);
 }
 
 const order = (state: SimState, aircraftId: AircraftId, value: AircraftOrder): PlayerCommand => ({
@@ -48,7 +48,10 @@ function run(state: SimState, ticks: number, commands: readonly PlayerCommand[] 
 }
 
 function isolate(state: SimState, keep: readonly string[]): void {
-  state.truth.units = state.truth.units.filter((u) => keep.includes(u.id));
+  state.truth.units = state.truth.units.filter((u) => keep.includes(u.platoonId));
+  for (const id of Object.keys(state.truth.platoons)) {
+    if (!keep.includes(id)) delete state.truth.platoons[id];
+  }
 }
 
 const support = (center: Vec2, radius = 500): AircraftOrder => ({ kind: 'SupportArea', center, radius });
@@ -184,7 +187,7 @@ describe('reconnaissance', () => {
     const state = createInitialState(scenario, 2);
     isolate(state, ['F-A', 'E-N1']);
     const enemy = unit(state, 'E-N1');
-    enemy.activeFromTick = 100000;
+    platoonOf(state.truth, enemy).activeFromTick = 100000;
     enemy.position = { x: 2525, y: 1850 };
     run(state, 1, [order(state, RECON, { kind: 'ReconArea', center: enemy.position, radius: 500 })]);
     run(state, 700);
@@ -255,7 +258,7 @@ describe('CAS engagement', () => {
     const state = createInitialState(scenario, seed);
     isolate(state, ['F-A', 'E-N1']);
     const enemy = unit(state, 'E-N1');
-    enemy.activeFromTick = 100000;
+    platoonOf(state.truth, enemy).activeFromTick = 100000;
     enemy.position = enemyAt;
     run(state, 1, [order(state, CAS, support(areaCenter))]);
     return { state, enemy, plane: aircraft(state, CAS) };
@@ -466,9 +469,16 @@ describe('altitude and ground fire', () => {
       ...scenario.file,
       combat: {
         ...scenario.file.combat,
-        weapons: { ...scenario.file.combat.weapons, MANPADS: { ...MANPADS, airHitChance: 1 } },
+        weapons: { ...scenario.file.combat.weapons, MANPADS: { ...MANPADS, airHitChance: 1000 } },
       },
-      air: { ...air, groundNoticePerScan: 1 },
+      air: {
+        ...air,
+        groundNoticePerScan: 1,
+        // Every hit counts here: surviving a hit has its own test.
+        models: Object.fromEntries(
+          Object.entries(air.models).map(([name, model]) => [name, { ...model, hitSurvivalChance: 0 }]),
+        ),
+      },
     },
   };
 
@@ -533,6 +543,8 @@ describe('altitude and ground fire', () => {
   it('damage corrects a CAS inbound promise, which takes time to arrive', () => {
     const state = createInitialState(sure, 1);
     isolate(state, ['E-AD', 'F-A']);
+    // Far enough off that the garrison can't take the team out before it fires.
+    unit(state, 'F-A').position = { x: 500, y: 500 };
     updateFriendly(state.player, 'F-A', { center: team, sigmaMeters: 30, headingRad: null, speedMps: null, observedAt: 0 }, 'self-report', 0, 120);
     step(state, [order(state, CAS, support(team))], sure);
     step(state, [{ kind: 'acknowledge', tick: state.tick, unitId: 'F-A', casAircraftId: CAS }], sure);
@@ -840,7 +852,7 @@ describe('terrain and aircraft', () => {
     // It would otherwise walk back to its scenario position, across the ridge.
     const team = unit(state, 'E-AD');
     team.position = { x: 1800, y: 2500 };
-    team.objective = { kind: 'HoldArea', area: { center: team.position, radius: 60 } };
+    platoonOf(state.truth, team).objective = { kind: 'HoldArea', area: { center: team.position, radius: 60 } };
     const commands: PlayerCommand[] = [
       { kind: 'setAltitude', tick: 0, aircraftId: CAS, meters: altitude },
       order(state, CAS, { kind: 'Orbit', point: { x: 2500, y: 2500 }, radius: 100 }),

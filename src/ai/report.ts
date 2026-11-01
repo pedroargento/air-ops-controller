@@ -1,6 +1,6 @@
 import type { ContactEstimate } from '../domain/public/estimates';
 import { distance } from '../domain/public/geometry';
-import type { ContactId, UnitKnowledge, UnitSelf } from '../domain/public/ground';
+import type { UnitKnowledge, UnitSelf } from '../domain/public/ground';
 import type {
   MessageId,
   ObjectiveStatus,
@@ -9,7 +9,7 @@ import type {
   ReportKind,
   ReportNeed,
 } from '../domain/public/radio';
-import { strengthMidpoint } from '../domain/public/estimates';
+import { groupedContact, groupLeads, groupStrength } from './contact-groups';
 import type { RadioConfig } from '../scenario/schema';
 
 export const REPORT_PRIORITY: Readonly<Record<ReportKind, number>> = {
@@ -18,6 +18,7 @@ export const REPORT_PRIORITY: Readonly<Record<ReportKind, number>> = {
   // Ahead of contact reports: a unit in a heavy fight always has another contact to
   // report, and its own casualties would otherwise never get through.
   SITREP: 2,
+  DRILL: 2,
   CONTACT_REPORT: 3,
   POSITION_REPORT: 4,
 };
@@ -37,11 +38,16 @@ export function initialRadioMemory(personnel: number): RadioMemory {
 /** The hostile within reach that the unit believes is strongest, breaking ties by contact ID. */
 function strongestHostile(self: UnitSelf, knowledge: UnitKnowledge, within: number): ContactEstimate | null {
   let best: ContactEstimate | null = null;
+  let bestStrength = 0;
   for (const id of Object.keys(knowledge.contacts).sort()) {
     const contact = knowledge.contacts[id];
     if (contact === undefined || contact.identification !== 'hostile') continue;
     if (distance(self.position, contact.position.center) > within) continue;
-    if (best === null || strengthMidpoint(contact.strength) > strengthMidpoint(best.strength)) best = contact;
+    const strength = groupStrength(knowledge, contact);
+    if (best === null || strength > bestStrength) {
+      best = contact;
+      bestStrength = strength;
+    }
   }
   return best;
 }
@@ -55,11 +61,11 @@ function hostileOnObjective(self: UnitSelf, threat: ContactEstimate): boolean {
 }
 
 /** Whether a fight is serious enough to report as a TIC, from the unit's own beliefs (§6.2.1). */
-function declaresTic(self: UnitSelf, threat: ContactEstimate, config: RadioConfig): boolean {
+function declaresTic(self: UnitSelf, knowledge: UnitKnowledge, threat: ContactEstimate, config: RadioConfig): boolean {
   if (!self.underFire) return false;
   const lost = 1 - self.personnel / self.initialPersonnel;
   return (
-    strengthMidpoint(threat.strength) / self.personnel >= config.ticStrengthRatio ||
+    groupStrength(knowledge, threat) / self.personnel >= config.ticStrengthRatio ||
     lost >= config.ticCasualtyFraction ||
     self.suppression >= self.doctrine.pinnedSuppression ||
     hostileOnObjective(self, threat)
@@ -67,10 +73,10 @@ function declaresTic(self: UnitSelf, threat: ContactEstimate, config: RadioConfi
 }
 
 /** Whether the unit judges that it can't deal with the fight on its own. */
-function needsSupport(self: UnitSelf, threat: ContactEstimate, config: RadioConfig): boolean {
+function needsSupport(self: UnitSelf, knowledge: UnitKnowledge, threat: ContactEstimate, config: RadioConfig): boolean {
   const lost = 1 - self.personnel / self.initialPersonnel;
   return (
-    strengthMidpoint(threat.strength) / self.personnel >= config.supportStrengthRatio ||
+    groupStrength(knowledge, threat) / self.personnel >= config.supportStrengthRatio ||
     lost >= config.supportCasualtyFraction ||
     self.ammunition <= self.initialAmmunition * config.supportAmmunitionFraction ||
     hostileOnObjective(self, threat)
@@ -95,7 +101,7 @@ export function decideReports(
   let next = memory;
 
   const threat = strongestHostile(self, knowledge, config.ticRangeMeters);
-  const inContact = threat !== null && declaresTic(self, threat, config);
+  const inContact = threat !== null && declaresTic(self, knowledge, threat, config);
   const ticDue = next.lastTicAt === null || tick - next.lastTicAt >= config.ticCooldownSeconds;
   if (inContact && ticDue) {
     needs.push({ kind: 'TIC', contactId: threat.contactId });
@@ -108,17 +114,16 @@ export function decideReports(
   const acknowledged =
     next.supportAcknowledgedAt !== null &&
     tick - next.supportAcknowledgedAt < config.supportRequestCooldownSeconds;
-  if (inContact && needsSupport(self, threat, config) && canRequestSupport && requestDue && !acknowledged) {
+  if (inContact && needsSupport(self, knowledge, threat, config) && canRequestSupport && requestDue && !acknowledged) {
     needs.push({ kind: 'SUPPORT_REQUEST', contactId: null });
     next = { ...next, lastSupportRequestAt: tick };
   }
 
-  for (const id of Object.keys(knowledge.contacts).sort()) {
-    const contact = knowledge.contacts[id];
-    if (contact === undefined) continue;
+  for (const contact of groupLeads(knowledge)) {
+    const id = contact.contactId;
     const reportedAt = next.reportedContacts[id];
     if (reportedAt !== undefined && tick - reportedAt < config.contactReportIntervalSeconds) continue;
-    needs.push({ kind: 'CONTACT_REPORT', contactId: id as ContactId, captured: contact });
+    needs.push({ kind: 'CONTACT_REPORT', contactId: id, captured: groupedContact(knowledge, contact) });
     next = { ...next, reportedContacts: { ...next.reportedContacts, [id]: tick } };
   }
 
@@ -170,10 +175,8 @@ export function composeReport(
   sentAt: number,
   receivedAt: number,
 ): RadioMessage | null {
-  const contact =
-    need.contactId === null
-      ? newestContact(need, knowledge)
-      : (knowledge.contacts[need.contactId] ?? need.captured ?? null);
+  const known = need.contactId === null ? newestContact(need, knowledge) : (knowledge.contacts[need.contactId] ?? null);
+  const contact = known === null ? (need.captured ?? null) : groupedContact(knowledge, known);
   const meta = { id, senderId: self.id, sentAt, receivedAt };
   const ownPosition = self.ownPosition;
 
@@ -208,5 +211,9 @@ export function composeReport(
       };
     case 'SUPPORT_REQUEST':
       return { ...meta, kind: 'SUPPORT_REQUEST', observedAt: ownPosition.observedAt, ownPosition };
+    case 'DRILL':
+      return need.drill === undefined
+        ? null
+        : { ...meta, kind: 'DRILL', observedAt: ownPosition.observedAt, ownPosition, drill: need.drill };
   }
 }

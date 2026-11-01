@@ -1,3 +1,4 @@
+import type { DrillKind } from '../domain/public/ground';
 import { totalAmmunition } from '../domain/public/equipment';
 import type { Outcome, WorldTruth } from '../domain/truth/world';
 import { project } from '../knowledge/player-view';
@@ -6,6 +7,7 @@ import type { Scenario } from '../scenario/load';
 import { aircraftTelemetry } from '../sim/air';
 import { strengthInArea } from '../sim/outcome';
 import { createInitialState, type SimState } from '../sim/state';
+import { sortedPlatoons } from '../sim/platoon';
 import { step } from '../sim/step';
 import { TempoTracker, type Tempo } from './tempo';
 
@@ -30,6 +32,7 @@ export type BattleResult = Readonly<{
   firstStrikeTick: number | null;
   aircraftHits: number;
   groundFireReports: number;
+  drills: readonly DrillKind[];
   tempo: Tempo;
 }>;
 
@@ -64,11 +67,12 @@ export function runBattle(
     for (const unit of truth.units) {
       if (unit.lastFiredAtTick === null) continue;
       firstShotTick ??= unit.lastFiredAtTick;
-      if (unit.side === 'enemy') fought.add(unit.id);
+      if (unit.side === 'enemy') fought.add(unit.platoonId);
     }
   }
 
   const friendly = truth.units.filter((u) => u.side === 'friendly');
+  const platoons = sortedPlatoons(truth);
   const strikes = state.player.log.filter((m) => m.kind === 'STRIKE_RESULT');
   const fired = state.player.log.flatMap((m) => (m.kind === 'GROUND_FIRE' ? [m] : []));
   return {
@@ -77,15 +81,15 @@ export function runBattle(
     endedAtTick: truth.endedAtTick ?? state.tick,
     friendlyPersonnel: personnel(truth, 'friendly'),
     enemyPersonnel: personnel(truth, 'enemy'),
-    effectiveDefenders: strengthInArea(truth, 'friendly', scenario.file.capture),
+    effectiveDefenders: strengthInArea(truth, 'friendly', scenario.file.mission),
     friendlyAmmunitionUsed:
       1 -
       friendly.reduce((sum, u) => sum + totalAmmunition(u.equipment), 0) /
         friendly.reduce((sum, u) => sum + u.initialAmmunition, 0),
     firstShotTick,
     enemyUnitsThatFought: fought.size,
-    enemyUnitsTotal: truth.units.filter((u) => u.side === 'enemy').length,
-    repeatReturns: truth.units.reduce((sum, u) => sum + u.returnsUsed, 0),
+    enemyUnitsTotal: platoons.filter((p) => p.side === 'enemy').length,
+    repeatReturns: platoons.reduce((sum, p) => sum + p.returnsUsed, 0),
     sorties,
     strikePasses: strikes.length,
     unusedOrdnance: truth.aircraft.reduce((sum, a) => sum + a.ammunition, 0),
@@ -93,6 +97,7 @@ export function runBattle(
     firstStrikeTick: strikes[0]?.receivedAt ?? null,
     aircraftHits: fired.filter((m) => m.damaged).length,
     groundFireReports: fired.length,
+    drills: state.player.log.flatMap((m) => (m.kind === 'DRILL' ? [m.drill] : [])),
     tempo: tempo.finish(state),
   };
 }

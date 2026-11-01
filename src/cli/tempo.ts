@@ -1,7 +1,7 @@
 import { totalAmmunition } from '../domain/public/equipment';
 import { distance, type Vec2 } from '../domain/public/geometry';
 import type { GroundBehavior, GroundMode } from '../domain/public/ground';
-import type { GroundUnit } from '../domain/truth/world';
+import type { GroundUnit, Platoon } from '../domain/truth/world';
 import type { Scenario } from '../scenario/load';
 import type { SimState } from '../sim/state';
 
@@ -9,6 +9,8 @@ const BOUT_GAP_SECONDS = 120;
 const WARNING_RANGE_METERS = 1500;
 const SUPPRESSED = 0.5;
 const RECOVERED = 0.2;
+
+import { livingSquads, sortedPlatoons } from '../sim/platoon';
 
 export type WithdrawalTrigger = 'casualties' | 'morale' | 'suppression' | 'ammunition' | 'other';
 
@@ -30,12 +32,14 @@ export type Tempo = Readonly<{
   behaviorSeconds: Readonly<Record<GroundBehavior, number>>;
 }>;
 
-function withdrawalTrigger(unit: GroundUnit): WithdrawalTrigger {
-  const { doctrine } = unit;
-  if (totalAmmunition(unit.equipment) <= 0) return 'ammunition';
-  if (unit.suppression >= doctrine.withdrawSuppression) return 'suppression';
-  if (unit.morale <= doctrine.withdrawMorale) return 'morale';
-  if (1 - unit.personnel / unit.initialPersonnel >= doctrine.withdrawCasualties) return 'casualties';
+function withdrawalTrigger(platoon: Platoon, squads: readonly GroundUnit[]): WithdrawalTrigger {
+  const { doctrine } = platoon;
+  const personnel = squads.reduce((sum, unit) => sum + unit.personnel, 0);
+  const suppression = squads.reduce((sum, unit) => sum + unit.suppression * unit.personnel, 0) / Math.max(1, personnel);
+  if (squads.every((unit) => totalAmmunition(unit.equipment) <= 0)) return 'ammunition';
+  if (suppression >= doctrine.withdrawSuppression) return 'suppression';
+  if (platoon.morale <= doctrine.withdrawMorale) return 'morale';
+  if (1 - personnel / platoon.initialPersonnel >= doctrine.withdrawCasualties) return 'casualties';
   return 'other';
 }
 
@@ -77,11 +81,11 @@ export class TempoTracker {
     const sum = (side: GroundUnit['side']): number =>
       state.truth.units.filter((u) => u.side === side).reduce((total, u) => total + u.personnel, 0);
     this.personnel = { friendly: sum('friendly'), enemy: sum('enemy') };
-    this.objective = scenario.file.capture.area.center;
+    this.objective = scenario.file.mission.area.center;
     this.garrison = new Set(
-      state.truth.units
-        .filter((u) => u.side === 'friendly' && u.objective.kind === 'HoldArea')
-        .map((u) => u.id),
+      sortedPlatoons(state.truth)
+        .filter((p) => p.side === 'friendly' && p.objective.kind === 'HoldArea')
+        .map((p) => p.id),
     );
   }
 
@@ -91,27 +95,24 @@ export class TempoTracker {
     let firing = false;
     for (const unit of state.truth.units) {
       if (unit.lastFiredAtTick === tick) firing = true;
-      this.followGarrison(unit, tick);
-      this.followMode(unit);
+      if (this.garrison.has(unit.platoonId) && unit.lastHitAtTick === tick) this.firstGarrisonFireTick ??= tick;
       this.followBehavior(unit, tick);
       this.followSuppression(unit, tick);
+    }
+    for (const platoon of sortedPlatoons(state.truth)) {
+      if (this.garrison.has(platoon.id)) this.lowestGarrisonMorale = Math.min(this.lowestGarrisonMorale, platoon.morale);
+      this.followMode(platoon, livingSquads(platoon));
     }
     if (firing) this.followFire(tick);
     this.firstWarningTick ??= this.warningAt(state, tick);
   }
 
-  private followGarrison(unit: GroundUnit, tick: number): void {
-    if (!this.garrison.has(unit.id)) return;
-    this.lowestGarrisonMorale = Math.min(this.lowestGarrisonMorale, unit.morale);
-    if (unit.lastHitAtTick === tick) this.firstGarrisonFireTick ??= tick;
-  }
-
-  private followMode(unit: GroundUnit): void {
-    const previous = this.modes.get(unit.id);
-    if (previous === 'steady' && unit.mode === 'withdrawing') {
-      this.withdrawals[withdrawalTrigger(unit)] += 1;
+  private followMode(platoon: Platoon, squads: readonly GroundUnit[]): void {
+    const previous = this.modes.get(platoon.id);
+    if (previous === 'steady' && platoon.mode === 'withdrawing') {
+      this.withdrawals[withdrawalTrigger(platoon, squads)] += 1;
     }
-    this.modes.set(unit.id, unit.mode);
+    this.modes.set(platoon.id, platoon.mode);
   }
 
   private followBehavior(unit: GroundUnit, tick: number): void {
@@ -185,7 +186,7 @@ export class TempoTracker {
         ? (this.firstDecisiveAssaultTick as number) - (this.firstWarningTick as number)
         : null,
       withdrawals: this.withdrawals,
-      returns: state.truth.units.reduce((sum, u) => sum + u.returnsUsed, 0),
+      returns: sortedPlatoons(state.truth).reduce((sum, p) => sum + p.returnsUsed, 0),
       behaviorChanges: this.behaviorChanges,
       behaviorSeconds: this.behaviorSeconds,
     };

@@ -1,5 +1,6 @@
 import { hypot } from '../domain/public/det-math';
-import type { Vec2 } from '../domain/public/geometry';
+import { distance, type Vec2 } from '../domain/public/geometry';
+import type { Area } from '../domain/public/ground';
 import { cellAtIndex, cellIndex, type TerrainGrid } from '../domain/public/terrain';
 
 const NEIGHBORS: readonly (readonly [number, number, number])[] = [
@@ -65,11 +66,49 @@ class Frontier {
   }
 }
 
-/** A* over terrain cells. The returned waypoints exclude the start and end at `to`. */
-export function findRoute(grid: TerrainGrid, from: Vec2, to: Vec2): Vec2[] {
+const ROUTE_CACHE_LIMIT = 20000;
+const AVOID_COST_FACTOR = 12;
+
+function insideArea(grid: TerrainGrid, cell: number, { center, radius }: Area): boolean {
+  const x = (cell % grid.width + 0.5) * grid.cellSize - center.x;
+  const y = (Math.floor(cell / grid.width) + 0.5) * grid.cellSize - center.y;
+  return x * x + y * y <= radius * radius;
+}
+
+const routeCaches = new WeakMap<TerrainGrid, Map<number, readonly Vec2[]>>();
+
+/**
+ * A* over terrain cells. The returned waypoints exclude the start and end at `to`.
+ * Routes depend only on the two cells, so squads and repeat runs can share them.
+ */
+export function findRoute(grid: TerrainGrid, from: Vec2, to: Vec2, avoid: Area | null = null): Vec2[] {
   const start = cellIndex(grid, from);
   const goal = cellIndex(grid, to);
   if (start === goal) return [to];
+  if (avoid !== null) return searchRoute(grid, start, goal, to, avoid);
+  const cache = routeCaches.get(grid) ?? new Map<number, readonly Vec2[]>();
+  routeCaches.set(grid, cache);
+  const key = start * grid.width * grid.height + goal;
+  const cached = cache.get(key);
+  if (cached !== undefined) return [...cached.slice(0, -1), to];
+  const route = searchRoute(grid, start, goal, to, null);
+  if (cache.size >= ROUTE_CACHE_LIMIT) cache.clear();
+  cache.set(key, route);
+  return [...route];
+}
+
+/** Length of the route between two points, for comparing ways round. */
+export function routeLength(grid: TerrainGrid, from: Vec2, to: Vec2, avoid: Area | null): number {
+  let total = 0;
+  let previous = from;
+  for (const point of findRoute(grid, from, to, avoid)) {
+    total += distance(previous, point);
+    previous = point;
+  }
+  return total;
+}
+
+function searchRoute(grid: TerrainGrid, start: number, goal: number, to: Vec2, avoid: Area | null): Vec2[] {
 
   const { width, height, cellSize } = grid;
   const costs = new Float64Array(width * height).fill(Number.POSITIVE_INFINITY);
@@ -91,7 +130,8 @@ export function findRoute(grid: TerrainGrid, from: Vec2, to: Vec2): Vec2[] {
       const nextRow = row + dy;
       if (nextColumn < 0 || nextRow < 0 || nextColumn >= width || nextRow >= height) continue;
       const next = nextRow * width + nextColumn;
-      const cost = currentCost + stepLength * cellAtIndex(grid, next).moveCost;
+      const avoided = avoid !== null && insideArea(grid, next, avoid);
+      const cost = currentCost + stepLength * cellAtIndex(grid, next).moveCost * (avoided ? AVOID_COST_FACTOR : 1);
       if (cost >= (costs[next] as number)) continue;
       costs[next] = cost;
       cameFrom[next] = current;

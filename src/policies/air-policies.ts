@@ -245,3 +245,11 @@ export function reconInformed(
     return commands;
   };
 }
+
+/** The same policy with its strike aircraft kept on the ground: what information alone is worth. */
+export function scoutingOnly(policy: Policy): Policy {
+  return (view) => {
+    const strikers = new Set(cas(view).map((aircraft) => aircraft.aircraftId as string));
+    return policy(view).filter((command) => !('aircraftId' in command) || !strikers.has(command.aircraftId));
+  };
+}

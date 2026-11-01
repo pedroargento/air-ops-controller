@@ -12,7 +12,7 @@ import { observeTarget, type Observer } from '../perception/observe';
 import { nextBinomial, nextBool, nextFloat, type RngState } from '../rng/streams';
 import type { Scenario } from '../scenario/load';
 import type { AircraftModelConfig, AirConfig, CombatConfig, DisplayConfig, PerceptionConfig } from '../scenario/schema';
-import { applyEffects } from './combat';
+import { applyEffects, type CombatEffect } from './combat';
 import type { RadioState } from './radio';
 
 export function createAircraft(scenario: Scenario): Aircraft[] {
@@ -289,15 +289,18 @@ function nextId(radio: RadioState): MessageId {
  * The map already shows every sighting, so the log only announces a confirmed hostile
  * where air operations was not already tracking one from the air.
  */
-function isNewSighting(estimate: ContactEstimate, player: PlayerKnowledge, air: AirConfig, tick: number): boolean {
+function isNewSighting(estimate: ContactEstimate, tracked: readonly Vec2[], air: AirConfig): boolean {
   if (estimate.identification !== 'hostile') return false;
-  for (const key of Object.keys(player.contacts).sort()) {
-    const known = player.contacts[key];
-    if (known === undefined || !known.viaAircraft || known.contact.identification !== 'hostile') continue;
-    if (tick - known.contact.position.observedAt > air.cueMaxAgeSeconds) continue;
-    if (distance(known.contact.position.center, estimate.position.center) <= air.sightingDedupeMeters) return false;
-  }
-  return true;
+  return !tracked.some((center) => distance(center, estimate.position.center) <= air.sightingDedupeMeters);
+}
+
+/** Where air operations is already tracking hostiles from the air. */
+function trackedFromAir(player: PlayerKnowledge, air: AirConfig, tick: number): Vec2[] {
+  return Object.values(player.contacts).flatMap(({ contact, viaAircraft }) =>
+    viaAircraft && contact.identification === 'hostile' && tick - contact.position.observedAt <= air.cueMaxAgeSeconds
+      ? [contact.position.center]
+      : [],
+  );
 }
 
 /** Aircraft sightings reach air operations automatically, and only prominent ones reach the log. */
@@ -314,18 +317,21 @@ export function updateAircraftPerception(
   for (const aircraft of truth.aircraft) {
     if (!isAirborne(aircraft)) continue;
     const observer = aircraftObserver(aircraft, air, terrain, truth.weather, cuedBoost(aircraft, player, air, tick), tick);
+    let tracked: Vec2[] | null = null;
     for (const target of truth.units) {
       if (target.personnel <= 0) continue;
       const estimate = observeTarget(truth, observer, target, terrain, rng, perception, tick);
       if (estimate === null) continue;
       aircraft.contacts[estimate.contactId] = estimate;
       if (estimate.identification === 'friendly') {
-        updateFriendly(player, target.id, estimate.position, 'aircraft', tick, perception.contactMemorySeconds);
-        if (estimate.activity === 'engaging') player.friendlyEngagedAt[target.id] = tick;
+        updateFriendly(player, target.platoonId, estimate.position, 'aircraft', tick, perception.contactMemorySeconds);
+        if (estimate.activity === 'engaging') player.friendlyEngagedAt[target.platoonId] = tick;
         continue;
       }
-      const announce = isNewSighting(estimate, player, air, tick);
+      tracked ??= trackedFromAir(player, air, tick);
+      const announce = isNewSighting(estimate, tracked, air);
       updateContact(player, estimate, tick, true);
+      if (estimate.identification === 'hostile') tracked.push(estimate.position.center);
       if (announce) {
         player.log.push({
           id: nextId(radio),
@@ -383,6 +389,9 @@ function assessStrike(
   return { estimatedCasualties: Math.round(casualties * noise), destroyed: target.personnel <= 0 };
 }
 
+/** How far a strike can catch neighbouring squads, in splash radii. */
+const SPLASH_REACH = 2;
+
 function strikePass(
   aircraft: Aircraft,
   contact: ContactEstimate,
@@ -400,28 +409,36 @@ function strikePass(
   aircraft.ammunition -= 1;
   const model = typeOf(aircraft, air);
   aircraft.nextPassTick = tick + model.passIntervalSeconds;
+  const label = `air/${aircraft.id}/${target.id}`;
   const height = Math.max(0, aircraft.altitudeMeters - elevationAt(terrain, target.position));
   const local = weatherAt(truth.weather, target.position, tick);
   const blur = hypot(height * model.strikeMissPerMeterAltitude, local.rain * truth.weather.rainMissMeters);
   const miss = hypot(distance(contact.position.center, target.position), blur);
   const accuracy = exp(-(miss * miss) / (2 * air.blastRadiusMeters * air.blastRadiusMeters));
-  const cover = cellAt(terrain, target.position).airCover;
-  const label = `air/${aircraft.id}/${target.id}`;
-  const casualties = nextBinomial(rng, label, target.personnel, model.casualtyFractionPerPass * (1 - cover) * accuracy);
-  applyEffects(
-    truth,
-    [
-      {
-        targetId: target.id,
-        casualties,
-        suppression: model.suppressionPerPass * accuracy,
-        morale: model.moralePerPass * accuracy,
-      },
-    ],
-    combat,
-    rng,
-    tick,
+  // Squads beside the target are caught too, so spreading out is what reduces a strike (§4.0.1).
+  const caught = truth.units.filter(
+    (unit) =>
+      unit.side === target.side &&
+      unit.personnel > 0 &&
+      distance(target.position, unit.position) <= air.strikeSplashMeters * SPLASH_REACH,
   );
+  const shaken = new Set<string>();
+  const effects = caught.map((unit): CombatEffect => {
+    const gap = distance(target.position, unit.position);
+    const share = accuracy * exp(-(gap * gap) / (2 * air.strikeSplashMeters * air.strikeSplashMeters));
+    const cover = cellAt(terrain, unit.position).airCover;
+    const first = !shaken.has(unit.platoonId);
+    shaken.add(unit.platoonId);
+    return {
+      targetId: unit.id,
+      casualties: nextBinomial(rng, `air/${aircraft.id}/${unit.id}`, unit.personnel, model.casualtyFractionPerPass * (1 - cover) * share),
+      suppression: model.suppressionPerPass * share,
+      // The shock falls once per platoon, however many of its squads were caught.
+      morale: first ? model.moralePerPass * accuracy : 0,
+    };
+  });
+  const casualties = effects.reduce((sum, effect) => sum + effect.casualties, 0);
+  applyEffects(truth, effects, combat, rng, tick);
   const effectObserved = nextBool(rng, label, accuracy);
   const assessment = effectObserved ? assessStrike(casualties, target, combat, rng, label) : null;
   if (assessment !== null) recordStrike(player, contact, assessment, display.plausibleSpeedMps, tick);
@@ -482,7 +499,7 @@ export function updateAircraftNotice(
       if (distance(unit.position, aircraft.position) > air.groundNoticeRangeMeters) continue;
       if (!airSightClear(terrain, truth.weather, unit.position, aircraft.position, aircraft.altitudeMeters, tick)) continue;
       if (nextBool(rng, `notice/${unit.id}/${aircraft.id}`, air.groundNoticePerScan)) {
-        const belief = (knowledge[unit.id] ??= emptyKnowledge());
+        const belief = (knowledge[unit.platoonId] ??= emptyKnowledge());
         // A formation goes to ground when aircraft appear, then gets on with its attack:
         // an orbiting aircraft must not pin it indefinitely just by being there (§8.2).
         const lastCover = belief.hostileAircraftSeenAt;

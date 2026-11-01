@@ -1,9 +1,10 @@
+import type { DrillKind } from '../domain/public/ground';
 import type { AircraftTelemetryEntry } from '../domain/public/air';
 import type { GroundFireEffect } from '../knowledge/player-view';
 import { isAntiAir, type WeaponType } from '../domain/public/equipment';
 import type { ContactEstimate, StrengthEstimate } from '../domain/public/estimates';
-import type { Vec2 } from '../domain/public/geometry';
-import { AIR_OPS, CECON, type RadioMessage, type StrikeAssessment } from '../domain/public/radio';
+import { distance, type Vec2 } from '../domain/public/geometry';
+import { AIR_OPS, CECON, reportLevel, type RadioMessage, type ReportLevel, type StrikeAssessment } from '../domain/public/radio';
 import type { ContactMarker, ContactStatus } from '../knowledge/player-view';
 
 export type Names = Readonly<Record<string, string>>;
@@ -169,11 +170,46 @@ export function rangeText({ low, high }: Readonly<{ low: number; high: number }>
   return low === high ? String(low) : `${low}–${high}`;
 }
 
-/** Enemy per defender, as a range. Null with nobody reported at the outpost. */
+/** Enemy per defender, as a range. Null with nobody reported at the objective. */
 export function forceRatioText(enemy: Readonly<{ low: number; high: number }>, defenders: number): string | null {
   if (defenders <= 0) return null;
   const round = (value: number): number => (value >= 10 ? Math.round(value) : Math.round(value * 10) / 10);
   return `${rangeText({ low: round(enemy.low / defenders), high: round(enemy.high / defenders) })} : 1`;
+}
+
+const DRILL_TEXT: Readonly<Record<DrillKind, string>> = {
+  nearAmbush: 'ambushed, assaulting through',
+  farAmbush: 'under fire, returning fire and flanking',
+  attack: 'attacking a known position',
+  bypass: 'bypassing a known position',
+  hastyAmbush: 'setting a hasty ambush',
+  waitForAir: 'holding short of a known position for air',
+};
+
+export type ContactMemory = Readonly<{ center: Vec2; at: number; strengthMax: number }>;
+
+export type TriageParameters = Readonly<{ repeatContactSeconds: number; repeatContactMeters: number }>;
+
+const strengthMax = (contact: ContactEstimate): number => (contact.strength.kind === 'unknown' ? 0 : contact.strength.max);
+
+/**
+ * Which messages the main radio view shows. A contact report is news the first time, or
+ * if it says the enemy is stronger; otherwise it repeats what the player has already heard.
+ */
+export function triage(
+  message: RadioMessage,
+  heard: readonly ContactMemory[],
+  parameters: TriageParameters,
+): Readonly<{ level: ReportLevel; heard: readonly ContactMemory[] }> {
+  if (message.kind !== 'CONTACT_REPORT') return { level: reportLevel(message), heard };
+  const at = message.receivedAt;
+  const { center } = message.contact.position;
+  const strength = strengthMax(message.contact);
+  const kept = heard.filter((entry) => at - entry.at <= parameters.repeatContactSeconds);
+  const repeat = kept.some(
+    (entry) => distance(entry.center, center) <= parameters.repeatContactMeters && strength <= entry.strengthMax,
+  );
+  return { level: repeat ? 'routine' : 'main', heard: [...kept, { center, at, strengthMax: strength }] };
 }
 
 export type RadioLine = Readonly<{ text: string; coordinates: readonly Vec2[] }>;
@@ -200,6 +236,8 @@ export function radioLine(message: RadioMessage, cellSize: number): RadioLine {
         text: `SITREP from ${grid(message.ownPosition.center)}: ${message.personnel} effectives, ammunition ${Math.round(message.ammunitionFraction * 100)}%, ${message.status}.`,
         coordinates: [message.ownPosition.center],
       };
+    case 'DRILL':
+      return { text: `At ${grid(message.ownPosition.center)}: ${DRILL_TEXT[message.drill]}.`, coordinates: [message.ownPosition.center] };
     case 'SUPPORT_REQUEST':
       return { text: `Requesting air support at ${grid(message.ownPosition.center)}.`, coordinates: [message.ownPosition.center] };
     case 'COMMAND_UPDATE':

@@ -8,8 +8,9 @@ import { project } from '../../src/knowledge/player-view';
 import { aircraftTelemetry } from '../../src/sim/air';
 import { createInitialState, type SimState } from '../../src/sim/state';
 import { step } from '../../src/sim/step';
+import { singleSquads } from '../support/single-squads';
 
-const scenario = loadScenarioFile();
+const scenario = singleSquads(loadScenarioFile());
 const { display } = scenario.file;
 
 function runTo(seed: number, ticks: number): SimState {
@@ -25,8 +26,8 @@ describe('projection boundary', () => {
     for (const unit of state.truth.units) {
       unit.position = { x: 1, y: 1 };
       unit.personnel = 1;
-      unit.morale = 0;
     }
+    for (const platoon of Object.values(state.truth.platoons)) platoon.morale = 0;
     state.truth.tracks = {};
     expect(canonicalJson(project(state.player, [], state.tick, display))).toBe(before);
   });
@@ -58,7 +59,7 @@ describe('autonomous battle', () => {
   it('TICs carry a plausible, imperfect friendly position', () => {
     const tic = bySender('TIC')[0];
     if (tic?.kind !== 'TIC') throw new Error('expected a TIC');
-    const unit = state.truth.units.find((u) => u.id === tic.senderId);
+    const unit = state.truth.units.find((u) => u.platoonId === tic.senderId);
     expect(unit).toBeDefined();
     expect(tic.ownPosition.sigmaMeters).toBeGreaterThan(0);
   });
@@ -101,7 +102,7 @@ describe('autonomous battle', () => {
 describe('radio balance', () => {
   it('keeps aircraft from dominating the log, and keeps ground units talking', () => {
     const state = createInitialState(scenario, 1);
-    const objective = scenario.file.capture.area.center;
+    const objective = scenario.file.mission.area.center;
     const policy = reconInformed(objective, true);
     while (state.truth.outcome === 'running') {
       const view = project(state.player, aircraftTelemetry(state.truth, scenario.file.air), state.tick, display);

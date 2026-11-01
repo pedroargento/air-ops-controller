@@ -1,22 +1,16 @@
 import { isAntiAir, threatRadiusMeters } from './domain/public/equipment';
-import scenarioJson from '../scenarios/outpost-under-pressure.json';
-import classLayer from '../scenarios/outpost-under-pressure/terrain.txt?raw';
-import elevationLayer from '../scenarios/outpost-under-pressure/elevation.txt?raw';
 import { AIR_OPS } from './domain/public/radio';
 import { GameSession } from './game/session';
-import { loadScenario } from './scenario/load';
+import { DEFAULT_SCENARIO_NAME, loadBundledScenario } from './scenario/catalog';
 import { App } from './ui/app';
 
 const SPEEDS = [1, 2, 4, 8] as const;
 const MAX_TICKS_PER_FRAME = 20;
-const RESULT_TEXT: Readonly<Record<string, string>> = {
-  held: 'OUTPOST HELD: mission success',
-  heldBelowStrength: 'OUTPOST HELD, too few defenders: mission failed',
-  captured: 'OUTPOST LOST: mission failed',
-};
 
-const scenario = loadScenario(scenarioJson, classLayer, elevationLayer);
 const search = new URLSearchParams(location.search);
+const scenario = loadBundledScenario(search.get('scenario') ?? DEFAULT_SCENARIO_NAME);
+const { mission } = scenario.file;
+document.title = scenario.file.name;
 const seed = Number(search.get('seed') ?? Math.floor(Math.random() * 1_000_000));
 const session = new GameSession(scenario, seed);
 
@@ -29,7 +23,7 @@ function exportLog(): void {
   const log = { ...session.commandLog(), stateHash: session.stateHash() };
   const link = document.createElement('a');
   link.href = URL.createObjectURL(new Blob([JSON.stringify(log, null, 2)], { type: 'application/json' }));
-  link.download = `airops-log-${seed}.json`;
+  link.download = `airops-log-${scenario.file.id}-${seed}.json`;
   link.click();
 }
 
@@ -41,7 +35,7 @@ const app = new App({
   // Friendly names only: the UI must not learn enemy identities from configuration.
   names: Object.fromEntries(friendlies.map((unit) => [unit.id, unit.name])),
   recipients: [...new Set(linkedToAirOps)].sort(),
-  objective: `Hold the outpost for ${Math.round(scenario.file.durationSeconds / 60)} minutes`,
+  objective: mission.briefing,
   ackDistanceMeters: scenario.file.air.supportAckDistanceMeters,
   sensorRadius: (aircraft) =>
     Object.values(scenario.file.air.models).find((model) => model.displayName === aircraft.model)?.sensorRadiusMeters ?? 0,
@@ -67,9 +61,11 @@ const app = new App({
     positionMeters: scenario.file.weather.forecastPositionErrorMeters,
   },
   // The player's own order of battle and the HQ estimate: nothing here reveals enemy truth.
+  triage: scenario.file.display,
   summary: {
-    objective: scenario.file.capture.area.center,
-    objectiveRadiusMeters: scenario.file.capture.area.radius,
+    objective: mission.area.center,
+    objectiveRadiusMeters: mission.area.radius,
+    areaLabel: mission.areaLabel,
     hqEnemyEstimate: scenario.file.display.hqEnemyEstimate,
     ratioRadiusMeters: scenario.file.display.summaryRatioRadiusMeters,
     staleSeconds: scenario.file.display.summaryStaleSeconds,
@@ -112,7 +108,7 @@ function frame(now: number): void {
     }
     if (ticks === MAX_TICKS_PER_FRAME) accumulator = 0;
   }
-  const result = session.outcome === 'running' ? null : (RESULT_TEXT[session.outcome] ?? session.outcome);
+  const result = session.outcome === 'running' ? null : mission.results[session.outcome];
   app.update(session.view(), { paused, speed, result, debrief: session.debrief() });
   requestAnimationFrame(frame);
 }

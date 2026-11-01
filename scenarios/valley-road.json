@@ -1,0 +1,244 @@
+{
+  "id": "valley-road",
+  "name": "Valley Road",
+  "rules": "standard",
+  "durationSeconds": 7200,
+  "terrain": {
+    "classLayer": "valley-road/terrain.txt",
+    "elevationLayer": "valley-road/elevation.txt"
+  },
+  "mission": {
+    "kind": "ReachArea",
+    "area": {
+      "center": {
+        "x": 2154,
+        "y": 300
+      },
+      "radius": 200
+    },
+    "briefing": "Get the column to the north end of the valley",
+    "areaLabel": "At the destination",
+    "results": {
+      "success": "COLUMN THROUGH: mission success",
+      "partial": "COLUMN THROUGH, heavy losses: mission failed",
+      "failure": "COLUMN STOPPED: mission failed"
+    },
+    "unitIds": [
+      "F-C1",
+      "F-C2"
+    ],
+    "successMinPersonnel": 38,
+    "partialMinPersonnel": 10
+  },
+  "units": [
+    {
+      "id": "F-C1",
+      "name": "Convoy Lead",
+      "side": "friendly",
+      "position": {
+        "x": 2110,
+        "y": 3700
+      },
+      "personnel": 24,
+      "morale": 0.75,
+      "doctrine": "column",
+      "objective": {
+        "kind": "MoveTo",
+        "area": {
+          "center": {
+            "x": 2154,
+            "y": 300
+          },
+          "radius": 200
+        }
+      },
+      "fallback": {
+        "center": {
+          "x": 2110,
+          "y": 3700
+        },
+        "radius": 150
+      },
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 24,
+          "ammunition": 10200.0
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 1,
+          "ammunition": 3000.0
+        }
+      ]
+    },
+    {
+      "id": "F-C2",
+      "name": "Convoy Rear",
+      "side": "friendly",
+      "position": {
+        "x": 2181,
+        "y": 3850
+      },
+      "personnel": 24,
+      "morale": 0.75,
+      "doctrine": "column",
+      "objective": {
+        "kind": "MoveTo",
+        "area": {
+          "center": {
+            "x": 2154,
+            "y": 300
+          },
+          "radius": 200
+        }
+      },
+      "fallback": {
+        "center": {
+          "x": 2110,
+          "y": 3700
+        },
+        "radius": 150
+      },
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 24,
+          "ammunition": 10200.0
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 1,
+          "ammunition": 3000.0
+        }
+      ]
+    },
+    {
+      "id": "E-A1",
+      "name": "East Ambush",
+      "side": "enemy",
+      "position": {
+        "x": 1925,
+        "y": 2325
+      },
+      "personnel": 24,
+      "morale": 0.75,
+      "doctrine": "assault",
+      "objective": {
+        "kind": "AmbushArea",
+        "area": {
+          "center": {
+            "x": 1925,
+            "y": 2325
+          },
+          "radius": 35
+        },
+        "openFireMeters": 150
+      },
+      "fallback": {
+        "center": {
+          "x": 2450,
+          "y": 2000
+        },
+        "radius": 120
+      },
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 24,
+          "ammunition": 6800
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 1,
+          "ammunition": 1200
+        }
+      ]
+    },
+    {
+      "id": "E-A2",
+      "name": "West Ambush",
+      "side": "enemy",
+      "position": {
+        "x": 1975,
+        "y": 1525
+      },
+      "personnel": 24,
+      "morale": 0.75,
+      "doctrine": "assault",
+      "objective": {
+        "kind": "AmbushArea",
+        "area": {
+          "center": {
+            "x": 1975,
+            "y": 1525
+          },
+          "radius": 35
+        },
+        "openFireMeters": 150
+      },
+      "fallback": {
+        "center": {
+          "x": 1450,
+          "y": 1200
+        },
+        "radius": 120
+      },
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 24,
+          "ammunition": 6800
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 1,
+          "ammunition": 1200
+        }
+      ]
+    }
+  ],
+  "display": {
+    "hqEnemyEstimate": 60
+  },
+  "links": [
+    [
+      "F-C1",
+      "AIR_OPS"
+    ],
+    [
+      "F-C2",
+      "AIR_OPS"
+    ],
+    [
+      "F-C1",
+      "F-C2"
+    ],
+    [
+      "E-A1",
+      "E-A2"
+    ]
+  ],
+  "ceconMessages": [
+    {
+      "atSeconds": 0,
+      "text": "Column is moving north through the valley. Enemy activity is expected in the area."
+    }
+  ],
+  "air": {
+    "airbase": {
+      "x": 2000,
+      "y": 30000
+    },
+    "aircraft": [
+      {
+        "id": "RECON-1",
+        "model": "O-1E"
+      },
+      {
+        "id": "CAS-1",
+        "model": "A-1E"
+      }
+    ]
+  }
+}

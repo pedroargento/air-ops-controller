@@ -1,22 +1,20 @@
 // Omniscient debug view. Reads hidden truth by design; never linked from the game page.
 import { totalAmmunition } from '../domain/public/equipment';
-import scenarioJson from '../../scenarios/outpost-under-pressure.json';
-import classLayer from '../../scenarios/outpost-under-pressure/terrain.txt?raw';
-import elevationLayer from '../../scenarios/outpost-under-pressure/elevation.txt?raw';
 import { runBattle } from '../cli/battle';
 import { policies } from '../cli/policy-registry';
 import type { AircraftType } from '../domain/public/air';
 import type { Vec2 } from '../domain/public/geometry';
 import { cellAtIndex } from '../domain/public/terrain';
-import type { GroundUnit } from '../domain/truth/world';
-import { loadScenario } from '../scenario/load';
+import type { GroundUnit, Platoon } from '../domain/truth/world';
+import { DEFAULT_SCENARIO_NAME, loadBundledScenario } from '../scenario/catalog';
 import { aircraftTelemetry } from '../sim/air';
+import { platoonOf } from '../sim/platoon';
 import { advancePlayhead } from './playback';
 
 type UnitFrame = Pick<
   GroundUnit,
-  'id' | 'side' | 'position' | 'personnel' | 'morale' | 'suppression' | 'mode' | 'posture'
-> & { ammunition: number; target: Vec2 | null };
+  'id' | 'side' | 'position' | 'personnel' | 'suppression' | 'posture'
+> & Pick<Platoon, 'morale' | 'mode'> & { ammunition: number; target: Vec2 | null };
 
 type AircraftFrame = Readonly<{
   id: string;
@@ -43,14 +41,14 @@ const TERRAIN_COLORS: Record<string, string> = {
   road: '#a08f6a',
   stream: '#3f6f8f',
 };
-const MODE_COLORS: Record<GroundUnit['mode'], string> = {
+const MODE_COLORS: Record<Platoon['mode'], string> = {
   steady: '#ffffff',
   withdrawing: '#ffd166',
   recovering: '#a0a0ff',
   broken: '#777777',
 };
 
-const scenario = loadScenario(scenarioJson, classLayer, elevationLayer);
+const scenario = loadBundledScenario(new URLSearchParams(location.search).get('scenario') ?? DEFAULT_SCENARIO_NAME);
 const { terrain } = scenario;
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -117,9 +115,9 @@ function recordBattle(seed: number, policyName: string): void {
         position: u.position,
         personnel: u.personnel,
         ammunition: totalAmmunition(u.equipment),
-        morale: u.morale,
+        morale: platoonOf(state.truth, u).morale,
         suppression: u.suppression,
-        mode: u.mode,
+        mode: platoonOf(state.truth, u).mode,
         posture: u.posture,
         target: targetOf(u),
       })),
@@ -172,7 +170,7 @@ function draw(index: number): void {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(terrainImage, 0, 0);
 
-  const area = scenario.file.capture.area;
+  const area = scenario.file.mission.area;
   const center = toScreen(area.center);
   ctx.strokeStyle = '#ffffff';
   ctx.beginPath();

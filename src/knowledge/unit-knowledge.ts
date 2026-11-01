@@ -27,6 +27,7 @@ export function receiveByUnit(knowledge: UnitKnowledge, message: RadioMessage): 
     case 'POSITION_REPORT':
     case 'SITREP':
     case 'SUPPORT_REQUEST':
+    case 'DRILL':
     case 'COMMAND_UPDATE':
     case 'STRIKE_RESULT':
     case 'GROUND_FIRE':

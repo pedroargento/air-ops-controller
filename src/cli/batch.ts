@@ -1,13 +1,26 @@
-// Usage: npx tsx src/cli/batch.ts [--seeds 1000] [--policy name|all] [--json file]
+import type { DrillKind } from '../domain/public/ground';
+// Usage: npx tsx src/cli/batch.ts [--scenario name] [--seeds 1000] [--policy name|all] [--without-drill a,b] [--json file]
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { Policy } from '../policies/air-policies';
 import type { Scenario } from '../scenario/load';
 import type { GroundBehavior } from '../domain/public/ground';
 import { runBattle, type BattleResult } from './battle';
-import { loadScenarioFile } from './load-scenario';
+import { DEFAULT_SCENARIO_NAME, loadScenarioFile } from './load-scenario';
 import { policies } from './policy-registry';
 import type { WithdrawalTrigger } from './tempo';
+
+/** The same scenario with some drills forgotten, to measure what each is worth. */
+function withoutDrills(scenario: Scenario, drills: readonly string[]): Scenario {
+  const forget = <T extends Readonly<{ drills: readonly DrillKind[] }>>(doctrines: Readonly<Record<string, T>>): Record<string, T> =>
+    Object.fromEntries(
+      Object.entries(doctrines).map(([name, doctrine]) => [
+        name,
+        { ...doctrine, drills: doctrine.drills.filter((drill) => !drills.includes(drill)) },
+      ]),
+    );
+  return { ...scenario, doctrines: forget(scenario.doctrines), file: { ...scenario.file, doctrines: forget(scenario.file.doctrines) } };
+}
 
 function option(name: string, fallback: string): string {
   const index = process.argv.indexOf(`--${name}`);
@@ -18,8 +31,8 @@ export type Summary = Readonly<{
   policy: string;
   seeds: number;
   winRate: number;
-  capturedRate: number;
-  belowStrengthRate: number;
+  failureRate: number;
+  partialRate: number;
   meanEndMinutes: number;
   meanFriendlyLeft: number;
   meanEnemyLeft: number;
@@ -42,7 +55,7 @@ export type TempoSummary = Readonly<{
   lowestGarrisonMorale: number;
   firstGarrisonFireMinute: number | null;
   firstDecisiveAssaultMinute: number | null;
-  earliestCaptureMinute: number | null;
+  earliestFailureMinute: number | null;
   warningMinutes: number | null;
   withdrawals: Readonly<Record<WithdrawalTrigger, number>>;
   returnsPerRun: number;
@@ -66,7 +79,7 @@ const toMinutes = (tick: number | null): number | null => (tick === null ? null 
 
 function summarizeTempo(results: readonly BattleResult[]): TempoSummary {
   const tempos = results.map((r) => r.tempo);
-  const captures = results.filter((r) => r.outcome === 'captured').map((r) => r.endedAtTick / 60);
+  const captures = results.filter((r) => r.outcome === 'failure').map((r) => r.endedAtTick / 60);
   const withdrawals = { casualties: 0, morale: 0, suppression: 0, ammunition: 0, other: 0 };
   const seconds = { observe: 0, probe: 0, harass: 0, assault: 0, disengage: 0 };
   for (const tempo of tempos) {
@@ -85,7 +98,7 @@ function summarizeTempo(results: readonly BattleResult[]): TempoSummary {
     lowestGarrisonMorale: median(tempos.map((t) => t.lowestGarrisonMorale)) ?? 0,
     firstGarrisonFireMinute: median(tempos.map((t) => toMinutes(t.firstGarrisonFireTick))),
     firstDecisiveAssaultMinute: median(tempos.map((t) => toMinutes(t.firstDecisiveAssaultTick))),
-    earliestCaptureMinute: captures.length > 0 ? rounded(Math.min(...captures)) : null,
+    earliestFailureMinute: captures.length > 0 ? rounded(Math.min(...captures)) : null,
     warningMinutes: median(tempos.map((t) => toMinutes(t.warningSeconds))),
     withdrawals,
     returnsPerRun: rounded(mean(tempos.map((t) => t.returns))),
@@ -111,9 +124,9 @@ export function summarize(policy: string, results: readonly BattleResult[]): Sum
   return {
     policy,
     seeds: results.length,
-    winRate: rate('held'),
-    capturedRate: rate('captured'),
-    belowStrengthRate: rate('heldBelowStrength'),
+    winRate: rate('success'),
+    failureRate: rate('failure'),
+    partialRate: rate('partial'),
     meanEndMinutes: rounded(mean(results.map((r) => r.endedAtTick / 60))),
     meanFriendlyLeft: rounded(mean(results.map((r) => r.friendlyPersonnel))),
     meanEnemyLeft: rounded(mean(results.map((r) => r.enemyPersonnel))),
@@ -141,7 +154,7 @@ export type PairedDifference = Readonly<{ meanPoints: number; low: number; high:
 export function pairedWinDifference(a: readonly BattleResult[], b: readonly BattleResult[]): PairedDifference {
   const differences = a.map((result, index) => {
     const other = b[index];
-    return (result.outcome === 'held' ? 1 : 0) - (other?.outcome === 'held' ? 1 : 0);
+    return (result.outcome === 'success' ? 1 : 0) - (other?.outcome === 'success' ? 1 : 0);
   });
   const average = mean(differences);
   const variance = mean(differences.map((d) => (d - average) ** 2));
@@ -157,9 +170,13 @@ function main(): void {
   const seeds = Number(option('seeds', '1000'));
   const which = option('policy', 'all');
   const json = option('json', '');
-  const scenario = loadScenarioFile();
+  const scenario = withoutDrills(loadScenarioFile(option('scenario', DEFAULT_SCENARIO_NAME)), process.argv.includes('--without-drill') ? option('without-drill', '').split(',') : []);
   const results: Record<string, readonly BattleResult[]> = {};
-  for (const [name, make] of Object.entries(policies(scenario))) {
+  const available = policies(scenario);
+  if (which !== 'all' && available[which] === undefined) {
+    throw new Error(`No policy "${which}" for ${scenario.file.id}. Available: ${Object.keys(available).join(', ')}`);
+  }
+  for (const [name, make] of Object.entries(available)) {
     if (which === 'all' || which === name) results[name] = runSeeds(scenario, seeds, make);
   }
   const summaries = Object.entries(results).map(([name, r]) => summarize(name, r));

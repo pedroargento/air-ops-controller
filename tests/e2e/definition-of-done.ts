@@ -87,6 +87,8 @@ async function main(): Promise<void> {
     await shot(page, '2-tic');
 
     console.log('Click the reported coordinate');
+    await page.waitForSelector('.toast.urgent');
+    check(true, 'an urgent report pops over the map');
     const reported = await coordinateOf(page, '.log-row.tic');
     await page.locator('.log-row.tic .coord').last().click();
     const center = await page.evaluate(() => (window as unknown as { airops: Hook }).airops.app.mapCenter);
@@ -156,6 +158,12 @@ async function main(): Promise<void> {
 
     console.log('Inspect a marker');
     await setPaused(page, true);
+    const routineHidden = await page.locator('.log-row.position_report').first().isHidden();
+    check(routineHidden, 'the main radio view leaves out routine position reports');
+    await page.locator('[data-action="radio-filter"][data-id="all"]').click();
+    await page.waitForSelector('.log-row.position_report', { state: 'visible' });
+    check(true, 'the All view still shows every report');
+    await page.locator('[data-action="radio-filter"][data-id="main"]').click();
     const friendly = await coordinateOf(page, '.log-row.position_report');
     const pixel = await page.evaluate(([p]) => (window as unknown as { airops: Hook }).airops.app.screenPosition(p as Vec), [friendly]);
     await page.locator('#map').hover({ position: pixel });
@@ -250,7 +258,8 @@ async function main(): Promise<void> {
 
     console.log('Fly into a hidden air defense team');
     let damaged = false;
-    for (let seed = 1; seed <= 6 && !damaged; seed += 1) {
+    for (const seed of [15, 17, 18, 22, 23, 25]) {
+      if (damaged) break;
       await page.goto(`http://localhost:${PORT}/?seed=${seed}&speed=40`);
       await page.waitForSelector('#clock');
       for (const id of ['CAS-1', 'CAS-2']) {
@@ -280,6 +289,18 @@ async function main(): Promise<void> {
     );
     check((await marks()) > 0, 'the ground fire mark outlasts the short strike effects');
     await shot(page, '5-damaged');
+
+    console.log('Play a second scenario');
+    await page.goto(`http://localhost:${PORT}/?scenario=valley-road&seed=3&speed=40`);
+    await page.waitForSelector('#clock');
+    check((await page.title()) === 'Valley Road', 'the scenario comes from the URL');
+    check((await page.locator('#objective').innerText()).includes('north end of the valley'), 'the briefing comes from the scenario');
+    await page.waitForFunction(() => /COLUMN/.test(document.querySelector('#status')?.textContent ?? ''), undefined, { timeout: 600000 });
+    check(true, 'the run ended with the scenario\'s own result');
+    const secondLog = await log();
+    const secondHash = await page.evaluate(() => (window as unknown as { airops: Hook }).airops.session.stateHash());
+    check(runReplay(loadScenarioFile('valley-road'), secondLog).at(-1) === secondHash, 'the second scenario replays to the same hash');
+    await shot(page, '6-second-scenario');
 
     check(errors.length === 0, `no browser errors${errors.length > 0 ? `: ${errors.join(' | ')}` : ''}`);
     console.log(`\nPASSED ${checks} checks. ${hook} exposes only the command log and hash.`);

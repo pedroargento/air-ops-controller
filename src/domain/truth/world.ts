@@ -8,24 +8,59 @@ import type {
   Area,
   ContactId,
   Doctrine,
+  Drill,
   GroundBehavior,
   GroundIntent,
   GroundMode,
   GroundObjective,
   GroundPosture,
+  HandledPosition,
   Side,
+  SquadRole,
   UnitId,
 } from '../public/ground';
 
 // An authored change of standing orders, from the scenario file (§11).
-export type ScheduledObjective = Readonly<{ fromTick: number; objective: GroundObjective }>;
+export type ScheduledObjective =
+  | Readonly<{ kind: 'time'; fromTick: number; objective: GroundObjective }>
+  | Readonly<{ kind: 'objectiveDone'; objective: GroundObjective }>
+  | Readonly<{ kind: 'contactReported'; radiusMeters: number }>;
 
+/** A command relationship between squads (§4.0.1): nothing here has a position. */
+export type Platoon = {
+  id: UnitId;
+  name: string;
+  side: Side;
+  squads: readonly GroundUnit[];
+  initialPersonnel: number;
+  initialAmmunition: number;
+  morale: number;
+  mode: GroundMode;
+  returnsUsed: number;
+  objective: GroundObjective;
+  objectiveSchedule: readonly ScheduledObjective[];
+  /** Positions in `objectiveSchedule` that have already fired. */
+  ordersUsed: readonly number[];
+  fallback: Area;
+  doctrine: Doctrine;
+  activeFromTick: number;
+  drill: Drill | null;
+  ambushSprung: boolean;
+  ambushSprungAt: number | null;
+  handled: readonly HandledPosition[];
+};
+
+/** The smallest simulated combat unit. Orders and morale belong to its platoon. */
 export type GroundUnit = {
   id: UnitId;
+  platoonId: UnitId;
+  slot: Vec2;
   name: string;
   side: Side;
   position: Vec2;
   navOffset: Vec2;
+  /** Metres walked since the navigation error last drifted. */
+  navMeters: number;
   personnel: number;
   initialPersonnel: number;
   equipment: Equipment[];
@@ -33,19 +68,16 @@ export type GroundUnit = {
   firedWeapons: readonly WeaponType[];
   firesAtAircraft: boolean;
   nextAirFireTick: number;
-  morale: number;
   suppression: number;
   posture: GroundPosture;
-  mode: GroundMode;
   behavior: GroundBehavior | null;
   behaviorSinceTick: number;
-  returnsUsed: number;
   patrolIndex: number;
-  objective: GroundObjective;
-  objectiveSchedule: readonly ScheduledObjective[];
-  fallback: Area;
   doctrine: Doctrine;
-  activeFromTick: number;
+  role: SquadRole | null;
+  viaDone: boolean;
+  avoid: Area | null;
+  routeAvoid: Area | null;
   intent: GroundIntent;
   route: Vec2[];
   routeDestination: Vec2 | null;
@@ -86,9 +118,10 @@ export type Aircraft = {
   contacts: Record<string, ContactEstimate>;
 };
 
-export type Outcome = 'running' | 'held' | 'heldBelowStrength' | 'captured';
+export type Outcome = 'running' | 'success' | 'partial' | 'failure';
 
 export type WorldTruth = {
+  platoons: Record<string, Platoon>;
   units: GroundUnit[];
   aircraft: Aircraft[];
   tracks: Record<string, Record<string, Track>>;

@@ -2,8 +2,9 @@ import type { AircraftTelemetry, AircraftTelemetryEntry } from '../domain/public
 import type { Vec2 } from '../domain/public/geometry';
 import { isAntiAir, type WeaponType } from '../domain/public/equipment';
 import { cellAtIndex, elevationAt, type TerrainGrid } from '../domain/public/terrain';
+import type { ReportLevel } from '../domain/public/radio';
 import { rainVisibilityMeters, systemCenterAt, weatherAt, type Weather } from '../domain/public/weather';
-import { distanceText, markerSize, scaleBarMeters, weaponTag } from './format';
+import { distanceText, markerSize, scaleBarMeters, strengthText, weaponTag } from './format';
 import { contourEdges, hillshade, shadedColor } from './terrain-shading';
 import {
   ceilingField,
@@ -18,6 +19,7 @@ import {
   type StormTrack,
 } from './weather-chart';
 import type {
+  ContactCluster,
   ContactMarker,
   FriendlyMarkerView,
   PlayerView,
@@ -68,6 +70,9 @@ const WEATHER_CELL_METERS = 100;
 const TERRAIN_PIXELS_PER_CELL = 4;
 const CONTOUR_COLOR = 'rgba(45,30,10,0.28)';
 const ANTI_AIR_COLOR = '#ff3df0';
+const CLUSTER_MARGIN_METERS = 80;
+const BLINK_PERIOD_TICKS = 4;
+const REPORT_RING_PIXELS = 15;
 
 export class MapView {
   private readonly ctx: CanvasRenderingContext2D;
@@ -242,6 +247,7 @@ export class MapView {
       if (selected) this.drawThreatRing(marker, threatAltitudeMeters);
       this.drawContact(marker, selected);
     }
+    for (const cluster of view.clusters) this.drawCluster(cluster);
     for (const friendly of view.friendlies) {
       this.drawFriendly(friendly, selection?.kind === 'friendly' && selection.id === friendly.unitId);
     }
@@ -250,6 +256,11 @@ export class MapView {
     }
     for (const friendly of view.friendlies) {
       if (friendly.engaging) this.drawFireRing(friendly.position.center, view.tick);
+    }
+    for (const reporter of view.reporting) {
+      const friendly = view.friendlies.find((entry) => entry.unitId === reporter.senderId);
+      const point = friendly?.position.center ?? view.aircraft.find((a) => a.aircraftId === reporter.senderId)?.position;
+      if (point !== undefined) this.drawReporting(point, reporter.level, view.tick);
     }
     for (const flag of view.ticFlags) {
       if (flag.ageSeconds <= 300) this.drawTic(flag.position.center);
@@ -469,6 +480,24 @@ export class MapView {
   }
 
   /** Where the weapons seen on this contact are a real danger to aircraft at their altitude. */
+  /** A dashed ring with a count of reports: distinct from a marker, and never a unit symbol. */
+  private drawCluster(cluster: ContactCluster): void {
+    const { ctx } = this;
+    const at = this.toScreen(cluster.center);
+    const radius = (cluster.radiusMeters + CLUSTER_MARGIN_METERS) * this.pixelsPerMeter;
+    ctx.strokeStyle = '#ff6b5a';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath();
+    ctx.arc(at.x, at.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#ff6b5a';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${cluster.reports} reports, ${strengthText(cluster.strength)}`, at.x, at.y - radius - 4);
+  }
+
   private drawThreatRing(marker: ContactMarker, altitudeMeters: number): void {
     const { ctx } = this;
     const height = Math.max(0, altitudeMeters - elevationAt(this.terrain, marker.contact.position.center));
@@ -659,6 +688,20 @@ export class MapView {
     else ctx.fillRect(at.x - width / 2, at.y - height / 2, width, height);
     ctx.strokeRect(at.x - width / 2, at.y - height / 2, width, height);
     ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  }
+
+  /** Blinks, so the eye finds who just spoke. Urgent senders blink red. */
+  private drawReporting(point: Vec2, level: ReportLevel, tick: number): void {
+    if (tick % BLINK_PERIOD_TICKS >= BLINK_PERIOD_TICKS / 2) return;
+    const { ctx } = this;
+    const at = this.toScreen(point);
+    ctx.strokeStyle = level === 'urgent' ? '#ff4d4d' : '#ffffff';
+    ctx.globalAlpha = level === 'routine' ? 0.5 : 1;
+    ctx.lineWidth = level === 'urgent' ? 3 : 2;
+    ctx.beginPath();
+    ctx.arc(at.x, at.y, REPORT_RING_PIXELS, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.globalAlpha = 1;
   }
 

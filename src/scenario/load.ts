@@ -69,6 +69,15 @@ function validateLinks(file: ScenarioFile): void {
 }
 
 /** Pure: callers supply the file contents, so this works in Node and the browser. */
+function validateMission({ mission, units }: ScenarioFile): void {
+  if (mission.kind !== 'ReachArea') return;
+  for (const id of mission.unitIds) {
+    const unit = units.find((candidate) => candidate.id === id);
+    if (unit === undefined) throw new Error(`Mission references unknown unit ${id}`);
+    if (unit.side !== 'friendly') throw new Error(`Mission unit ${id} is not friendly`);
+  }
+}
+
 export function loadScenario(raw: unknown, classText: string, elevationText: string): Scenario {
   const file = scenarioFileSchema.parse(raw);
   for (const unit of file.units) {
@@ -79,6 +88,7 @@ export function loadScenario(raw: unknown, classText: string, elevationText: str
   const ids = new Set(file.units.map((unit) => unit.id));
   if (ids.size !== file.units.length) throw new Error('Duplicate unit IDs in scenario');
   validateLinks(file);
+  validateMission(file);
   return {
     file,
     terrain: parseTerrain(file.terrain, classText, elevationText),

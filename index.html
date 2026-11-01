@@ -58,6 +58,15 @@
       #side-tabs { margin: 0 0 6px; }
       #side-tabs .active { outline: 1px solid #9fb0a8; }
       #path-profile { position: absolute; left: 12px; right: 12px; bottom: 48px; width: calc(100% - 24px); height: 70px; pointer-events: none; }
+      #map-toasts {
+        position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: min(460px, calc(100% - 220px));
+        display: flex; flex-direction: column; gap: 6px; pointer-events: none;
+      }
+      .toast {
+        pointer-events: auto; text-align: left; font-size: 13px; line-height: 1.3; color: #eef3f0; padding: 7px 10px;
+        background: rgba(18, 24, 27, 0.92); border: 1px solid #3a464b; border-left: 4px solid #9fb0a8; border-radius: 4px; cursor: pointer;
+      }
+      .toast.urgent { border-left-color: #ff6b5a; background: rgba(60, 22, 20, 0.94); }
       #map-layers { position: absolute; left: 12px; top: 10px; margin: 0; }
       #map-layers .active { outline: 1px solid #fff; }
       #forecast {
@@ -87,6 +96,10 @@
       .log-row { padding: 4px 0; border-bottom: 1px solid #2a3236; font-size: 12px; }
       .log-row .time { font-family: monospace; color: #9fb0a8; }
       .log-row .kind { font-size: 10px; color: #9fb0a8; }
+      #radio-log.main-only .log-row.routine { display: none; }
+      .log-row.urgent { border-left: 3px solid #ff6b5a; padding-left: 5px; }
+      .log-row.routine { opacity: 0.65; }
+      .radio-filter { margin-left: auto; display: inline-flex; gap: 4px; }
       .log-row.tic { background: rgba(255, 210, 74, 0.12); }
       .log-row.support_request { background: rgba(255, 107, 90, 0.12); }
       .coord { padding: 0 4px; font: 11px monospace; color: #8fd0ff; }
@@ -99,6 +112,7 @@
       <div id="tooltip"></div>
       <div id="cursor-grid"></div>
       <div id="map-layers" class="buttons"></div>
+      <div id="map-toasts"></div>
       <div id="forecast" hidden>
         <input id="forecast-lead" type="range" min="0" max="4500" step="300" value="0" />
         <span id="forecast-label"></span>

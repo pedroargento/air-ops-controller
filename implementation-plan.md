@@ -335,7 +335,9 @@ Replaced the original calibration milestone. The theater work changes what needs
 
 The direction is a larger map covering a slice of a fictional, Afghanistan-like country in the Vietnam era, about 200 km across as a starting value. It has several bases with different aircraft, and sites that zoom into today's 5 km grid. Play is continuous, with no win condition, and ops requests appear at random. Today's aircraft models stay, with no drones or satellites.
 
-Each milestone needs its own spec section before it starts. Scenarios come first: they give playable missions sooner, test the ground AI on new maps, and become incident templates later, so each scenario's objective is written as an incident: a place, a time window, what it needs, and what happens if nobody comes. Timed orders are fine in a scenario, but each ground action is reusable, so an assault works the same for either side, in any scenario, however it was started. A scenario's stated objective is the mission only: threats and what to do about them are for the player to discover through recon. Numbers below are provisional.
+Each milestone needs its own spec section before it starts. **Status:** S0 and S1 are complete, and S2 is complete apart from the per-drill benefit.
+
+Scenarios come first: they give playable missions sooner, test the ground AI on new maps, and become incident templates later, so each scenario's objective is written as an incident: a place, a time window, what it needs, and what happens if nobody comes. Timed orders are fine in a scenario, but each ground action is reusable, so an assault works the same for either side, in any scenario, however it was started. A scenario's stated objective is the mission only: threats and what to do about them are for the player to discover through recon. Numbers below are provisional.
 
 ### Scenarios
 
@@ -344,6 +346,8 @@ Each milestone needs its own spec section before it starts. Scenarios come first
 `npm run sim -- --scenario name` and `?scenario=name` in the browser. Objectives, end conditions and UI text come from the scenario instead of assuming the outpost, and terrain can be generated for a new map. Each scenario needs its own scripted policy to measure it.
 
 **Exit:** The outpost's results don't change, and a second small scenario runs in the browser and in batch.
+
+**Result:** Met. The outpost's 1,000-seed results are identical to the previous commit, its terrain regenerates byte for byte, and the replay hash is unchanged. Shared rules moved to `scenarios/rules/standard.json`. The second scenario, Valley Road, is an early version of S4's Convoy: over 200 seeds, scouting the route gets the column through 54% of the time, against 4% without recon. Forwarding makes it worse (60.5% without it), because warned units stop and run out of time, which is what S2's drills have to fix.
 
 #### S1: Squads and platoons
 
@@ -358,16 +362,29 @@ Replaces M8. The squad becomes the smallest simulated combat unit, and a platoon
 
 **Exit:** The converted outpost keeps these relationships over 1,000 seeds: no-air stays near zero, informed beats reactive by at least 20 points, and forwarding still helps. A 1,000-seed batch across all policies takes no more than three times as long as today. A test confirms that map symbols never read truth.
 
+**Result:** Met, except that no-air sits at 4.4% rather than S0's 0.3%. A scenario's `units` are now platoons, which divide into squads of about 12, and the outpost goes from 11 units to 33. Platoons keep their IDs for radio, orders and the player's view, so squads are invisible outside the sim except as separate aircraft sightings, which the map rings as clusters. Over 1,000 seeds: none 4.4%, reactive 52.7%, immediate 38.4%, informed 73.7%, without forwarding 57.4%, so informed leads reactive by 21 points and forwarding adds 16. Batch time is 2.8 times S0. Reactive is just above the spec's 15–50% band. Small-arms and machine-gun fire went up (suppression 1.3 times, damage 1.15 times) because attackers lost force when divided, and strikes gained `strikeSplashMeters`. The outpost's strikes are weaker per pass, so Valley Road's ambushes moved to tighter positions: 33% through with recon, 1% without. Forwarding now changes nothing there, because an air report describes one squad and a warned platoon no longer reacts. S2 has to fix this.
+
 #### S2: Ground orders and battle drills
 
 - **Assault:** A reusable drill on any area, for either side, which ends when the platoon's own picture shows the area clear. How it approaches, fights and breaks off comes from doctrine, not the scenario.
 - **Triggers:** A platoon's next objective can start at a time, when its current objective ends, or when a contact is reported. Today's objective schedule becomes the time case.
 - **Reaction forces:** A reserve holds until a linked unit reports contact, then goes to the reported location. It acts on the report rather than the truth, so a late or wrong report sends it late or to the wrong place. Both sides use the same rule.
-- **First drills:** Bypass, which reroutes around a reported enemy. Hasty ambush, which takes a covered position when warned of an approaching enemy and holds fire until close. Support by fire, where one squad pins while others assault. Drills come from doctrine and act on the unit's own picture.
+- **Drill format:** A drill is data: a trigger read from the platoon's own picture, squad roles, phases and an end condition. Rules follow published small-unit drills, such as the battle drills in FM 7-8, and doctrine sets the parameters per side.
+- **First drills:**
+    - **React to near ambush:** Fired on from inside a doctrine distance, the squads in the kill zone assault through at once, since staying or running is worse.
+    - **React to far ambush:** Fired on from beyond that distance, squads take cover and return fire, then an uncommitted squad flanks or the platoon breaks contact.
+    - **Deliberate attack:** A known enemy position on the route gets a platoon decision to bypass, attack or wait, from estimated strength, time left and expected support. An attack leaves one squad in support by fire while others approach by a covered route.
+    - **Bypass:** Reroutes around a reported enemy.
+    - **Hasty ambush:** Takes a covered position when warned of an approaching enemy and holds fire until close.
+    - **Support by fire:** One squad pins while others assault.
+- **Concealed ambush:** A new hidden posture, with no fire and no movement, so an ambusher can stay unseen until close. Today's best posture only conceals 0.3, which probably isn't enough for an ambush to survive a column's approach. Measure this first, since the near ambush depends on it.
+- **Knowledge decides the drill:** The same ambush plays differently depending on what the column knows, which is how a forwarded report pays off. Near and far ambush are what happens without a warning, and deliberate attack, bypass and hasty ambush are what a warning allows.
 - **Visibility:** Each drill sends a radio message, so the player can see a forwarded report change what a unit does.
-- **Later drills, as scenarios need them:** Flank, wait for air, and break contact.
+- **Later drills, as scenarios need them:** Standalone flank and break contact, as well as requesting air for a deliberate attack.
 
-**Exit:** The same assault runs unchanged on two maps and for both sides, a QRF responds through reports alone, a misplaced report misdirects it, and each drill shows a measured benefit in batch runs.
+**Exit:** The same assault runs unchanged on two maps and for both sides, a QRF responds through reports alone, a misplaced report misdirects it, each drill shows a measured benefit in batch runs, and on Valley Road forwarding beats not forwarding.
+
+**Result:** Partly met. The same assault runs on two maps for both sides, a QRF acts on reports alone, a wrong report misdirects it, and forwarding now helps on Valley Road: over 1,000 seeds, 74.1% against 65.8% with CAS and 33.0% against 20.0% with scouting alone, with none at 25.2% and reactive at 24.4%. The per-drill exit is not met. Forgetting each drill over 500 seeds shows attack worth 21 points without air and 13 with it, and near ambush 5 and 4. Bypass, hasty ambush and wait for air show nothing on this map, and far ambush makes things worse by 4 to 6 points. `npx tsx src/cli/batch.ts --without-drill <name>` repeats the measurement. The outpost's attackers keep `assault`, which has no drills, so its balance holds: none 7.6%, reactive 54.2%, informed 76.1%, without forwarding 59.5%. Valley Road grew to 2 hours, with 24-man ambushes beside the road and a new `column` doctrine. Three additions came out of testing: a sprung ambush is 12 times as deadly for 45 seconds to a platoon nobody warned, a report helps a unit spot what's hidden near it, and a platoon on the move rallies nearby rather than marching back to its start. Drills run only for platoons with `MoveTo` or `AssaultArea`, so patrols and holding units are unchanged.
 
 #### S3: Aircraft weapons
 
@@ -382,6 +399,8 @@ Armed aircraft carry two weapon classes, each with its own ammunition, replacing
 #### S4: Find them, and Convoy
 
 **Find them** is recon only: locate an infiltrating force and be scored on how close the picture was to the truth. **Convoy** has a column moving through a valley, with the player scouting for ambushes and covering it when hit.
+
+**Ambush recognition** arrives with Convoy. The sim never labels anything an ambush. Crews report only what they can see: stationary squads, their weapons, and which way they face, which is a new observation. The player reads the pattern and marks a suspected kill zone, which is forwarded as an area with a new command. It enters the platoon's picture as a low-confidence enemy position, so it can trigger a bypass or deliberate attack. A wrong mark costs real time, and an ambush the player missed still gets sprung. This brings in the player-authored assessments and area markers that v0.1 ruled out.
 
 **Exit:** In both, better recon gives measurably better results.
 

@@ -56,8 +56,11 @@ function detectionChance(
   tracked: boolean,
   tick: number,
 ): number {
-  const concealment =
-    1 - (1 - concealmentAt(observer, target, terrain)) * (1 - config.postureConcealment[target.posture]);
+  const posture =
+    observer.medium === 'air' && target.posture === 'hidden'
+      ? config.hiddenAirConcealment
+      : config.postureConcealment[target.posture];
+  const concealment = 1 - (1 - concealmentAt(observer, target, terrain)) * (1 - posture);
   const activity = activityOf(target, tick);
   const activityBoost =
     activity === 'engaging' ? config.firingBoost : activity === 'moving' ? config.movingBoost : 1;
@@ -284,9 +287,27 @@ export function observeTarget(
   return current.estimate;
 }
 
-function groundObserver(unit: GroundUnit, weather: Weather, tick: number): Observer {
+/** Being told where to look is what a report gives a unit: it finds what it would have missed. */
+function reportCue(belief: UnitKnowledge, memory: number, config: PerceptionConfig, tick: number): (target: GroundUnit) => number {
+  const reported = Object.values(belief.reports).filter(
+    (report) => report.identification === 'hostile' && tick - report.position.observedAt <= memory,
+  );
+  if (reported.length === 0) return () => 1;
+  return (target) =>
+    reported.some((report) => distance(report.position.center, target.position) <= config.reportCueMeters)
+      ? config.reportCueBoost
+      : 1;
+}
+
+function groundObserver(
+  unit: GroundUnit,
+  weather: Weather,
+  detectionBoost: (target: GroundUnit) => number,
+  tick: number,
+): Observer {
+  // Every squad feeds the platoon's one picture (§4.0.1).
   return {
-    id: unit.id,
+    id: unit.platoonId,
     side: unit.side,
     position: unit.position,
     medium: 'ground',
@@ -300,7 +321,7 @@ function groundObserver(unit: GroundUnit, weather: Weather, tick: number): Obser
       ),
     rangeMeters: unit.doctrine.detectRangeMeters,
     suppression: unit.suppression,
-    detectionBoost: () => 1,
+    detectionBoost,
   };
 }
 
@@ -313,16 +334,25 @@ export function updatePerception(
   tick: number,
 ): void {
   for (const unit of truth.units) {
-    const belief = (knowledge[unit.id] ??= emptyKnowledge());
+    const belief = (knowledge[unit.platoonId] ??= emptyKnowledge());
     if (unit.personnel <= 0) continue;
-    const observer = groundObserver(unit, truth.weather, tick);
+    let observer: Observer | null = null;
+    const reach = unit.doctrine.detectRangeMeters;
     for (const target of truth.units) {
       if (target.side === unit.side || target.personnel <= 0) continue;
+      // Most pairs are far apart, so skip them before any costly work.
+      const dx = target.position.x - unit.position.x;
+      const dy = target.position.y - unit.position.y;
+      if (dx * dx + dy * dy > reach * reach) continue;
+      observer ??= groundObserver(unit, truth.weather, reportCue(belief, unit.doctrine.reportMemorySeconds, config, tick), tick);
       const estimate = observeTarget(truth, observer, target, terrain, rng, config, tick);
       if (estimate !== null) belief.contacts[estimate.contactId] = estimate;
     }
     for (const [id, contact] of Object.entries(belief.contacts)) {
       if (tick - contact.position.observedAt > config.contactMemorySeconds) delete belief.contacts[id];
+    }
+    for (const [key, report] of Object.entries(belief.reports)) {
+      if (tick - report.position.observedAt > unit.doctrine.reportMemorySeconds) delete belief.reports[key];
     }
   }
 }

@@ -14,6 +14,9 @@ import { project } from '../../src/knowledge/player-view';
 import { markerOpacity, reachableRegion, regionOpacity } from '../../src/knowledge/reachability';
 
 const display = {
+  freshReportSeconds: 120,
+  clusterRadiusMeters: 200,
+  reportBlinkSeconds: 20,
   opacityFloor: 0.25,
   fadeSeconds: 900,
   plausibleSpeedMps: 1,
@@ -357,5 +360,54 @@ describe('PlayerView', () => {
     const player = emptyPlayerKnowledge();
     updateContact(player, contact('C-1', 'F-A', 0), 20, false);
     expect(project(player, [], 1100, display).contacts[0]?.opacity).toBe(0.25);
+  });
+});
+
+describe('clusters', () => {
+  const held = (...contacts: readonly ContactEstimate[]) => {
+    const player = emptyPlayerKnowledge();
+    for (const entry of contacts) updateContact(player, entry, 0, true);
+    return project(player, [], 10, display);
+  };
+
+  it('rings nearby hostile reports, with a count and combined strength', () => {
+    const view = held(contact('C-1', 'CAS-1', 0, 100), contact('C-2', 'RECON-1', 0, 250));
+    expect(view.clusters).toHaveLength(1);
+    expect(view.clusters[0]?.reports).toBe(2);
+    expect(view.clusters[0]?.strength).toEqual({ kind: 'range', min: 51, max: 150 });
+  });
+
+  it('leaves a lone report alone: one large report never becomes invented squads', () => {
+    expect(held(contact('C-1', 'CAS-1', 0)).clusters).toEqual([]);
+  });
+
+  it('keeps distant reports apart', () => {
+    expect(held(contact('C-1', 'CAS-1', 0, 100), contact('C-2', 'CAS-1', 0, 2000)).clusters).toEqual([]);
+  });
+
+  it('holds nothing about organization', () => {
+    const [cluster] = held(contact('C-1', 'CAS-1', 0, 100), contact('C-2', 'RECON-1', 0, 250)).clusters;
+    expect(Object.keys(cluster ?? {}).sort()).toEqual(['center', 'keys', 'radiusMeters', 'reports', 'strength']);
+  });
+});
+
+describe('who is reporting', () => {
+  const position = { center: { x: 0, y: 0 }, sigmaMeters: 30, headingRad: null, speedMps: null, observedAt: 0 };
+  const said = (senderId: string, receivedAt: number, kind: 'TIC' | 'POSITION_REPORT'): RadioMessage =>
+    kind === 'TIC'
+      ? { ...meta, senderId, receivedAt, kind, ownPosition: position, contact: null }
+      : { ...meta, senderId, receivedAt, kind, position };
+
+  it('names senders just heard, and forgets them soon after', () => {
+    const player = emptyPlayerKnowledge();
+    player.log.push(said('F-A', 100, 'POSITION_REPORT'));
+    expect(project(player, [], 110, display).reporting).toEqual([{ senderId: 'F-A', level: 'routine' }]);
+    expect(project(player, [], 130, display).reporting).toEqual([]);
+  });
+
+  it('keeps the urgent level when a routine message follows it', () => {
+    const player = emptyPlayerKnowledge();
+    player.log.push(said('F-A', 100, 'POSITION_REPORT'), said('F-A', 104, 'TIC'), said('F-A', 106, 'POSITION_REPORT'));
+    expect(project(player, [], 110, display).reporting).toEqual([{ senderId: 'F-A', level: 'urgent' }]);
   });
 });

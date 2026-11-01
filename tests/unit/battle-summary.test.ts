@@ -10,6 +10,7 @@ const objective = { x: 2500, y: 2500 };
 const config: SummaryConfig = {
   objective,
   objectiveRadiusMeters: 250,
+  areaLabel: 'At the outpost',
   hqEnemyEstimate: 300,
   ratioRadiusMeters: 1000,
   staleSeconds: 600,
@@ -17,6 +18,9 @@ const config: SummaryConfig = {
   plausibleSpeedMps: 1,
 };
 const display = {
+  freshReportSeconds: 120,
+  clusterRadiusMeters: 200,
+  reportBlinkSeconds: 20,
   opacityFloor: 0.25,
   fadeSeconds: 900,
   plausibleSpeedMps: 1,

@@ -1,17 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { composeReport, decideReports, initialRadioMemory } from '../../src/ai/report';
-import { loadScenarioFile } from '../../src/cli/load-scenario';
+import { DEFAULT_SCENARIO_NAME, loadScenarioFile, readScenarioFile, readTerrainLayer } from '../../src/cli/load-scenario';
 import type { ContactEstimate } from '../../src/domain/public/estimates';
 import { emptyKnowledge, type ContactId, type UnitKnowledge, type UnitSelf } from '../../src/domain/public/ground';
 import { AIR_OPS, CECON, type MessageId, type ReportNeed } from '../../src/domain/public/radio';
-import type { GroundUnit } from '../../src/domain/truth/world';
 import { emptyPlayerKnowledge } from '../../src/knowledge/player-knowledge';
 import { loadScenario } from '../../src/scenario/load';
-import { advanceRadio, createRadioState, enqueue, linkedNodes, radioRate } from '../../src/sim/radio';
+import { advanceRadio, createRadioState, enqueue, linkedNodes, radioRate, type RadioUnit } from '../../src/sim/radio';
 import { createInitialState } from '../../src/sim/state';
-import { readFileSync } from 'node:fs';
+import { singleSquads, squadOf } from '../support/single-squads';
 
-const scenario = loadScenarioFile();
+import { platoonOf } from '../../src/sim/platoon';
+
+const scenario = singleSquads(loadScenarioFile());
 const { radio: config } = scenario.file;
 const TOTAL_SECONDS = config.prepareSeconds + config.transmitSeconds;
 
@@ -29,20 +30,31 @@ const contact: ContactEstimate = {
 
 function setup() {
   const state = createInitialState(scenario, 1);
-  const unit = state.truth.units.find((u) => u.id === 'F-A') as GroundUnit;
+  const squad = squadOf(state.truth, 'F-A');
+  const platoon = platoonOf(state.truth, squad);
   const self: UnitSelf = {
-    id: unit.id,
-    side: unit.side,
-    position: unit.position,
+    id: platoon.id,
+    side: squad.side,
+    position: squad.position,
+    slot: { x: 0, y: 0 },
+    squads: 1,
+    drill: null,
+    role: null,
+    viaDone: false,
+    ambushSprung: false,
+    handled: [],
+    routeAhead: [],
+    secondsLeft: 3600,
+    platoonPersonnel: squad.personnel,
     ownPosition: { center: { x: 512, y: 488 }, sigmaMeters: 40, headingRad: null, speedMps: null, observedAt: 0 },
-    personnel: unit.personnel,
-    initialPersonnel: unit.initialPersonnel,
-    ammunition: unit.initialAmmunition,
-    initialAmmunition: unit.initialAmmunition,
-    equipment: unit.equipment,
+    personnel: squad.personnel,
+    initialPersonnel: squad.initialPersonnel,
+    ammunition: squad.initialAmmunition,
+    initialAmmunition: squad.initialAmmunition,
+    equipment: squad.equipment,
     supportWeapons: 1,
     airWeapons: [],
-    morale: unit.morale,
+    morale: platoon.morale,
     suppression: 0,
     underFire: false,
     mode: 'steady',
@@ -51,15 +63,22 @@ function setup() {
     groundCover: 0,
     returnsUsed: 0,
     patrolIndex: 0,
-    objective: unit.objective,
-    fallback: unit.fallback,
-    doctrine: unit.doctrine,
+    objective: platoon.objective,
+    fallback: platoon.fallback,
+    doctrine: squad.doctrine,
   };
-  const knowledge: Record<string, UnitKnowledge> = { [unit.id]: emptyKnowledge() };
-  const radio = createRadioState(state.truth.units);
+  const unit: { -readonly [K in keyof RadioUnit]: RadioUnit[K] } = {
+    id: platoon.id,
+    personnel: squad.personnel,
+    mode: 'steady',
+    suppression: 0,
+    intent: { kind: 'wait' },
+  };
+  const knowledge: Record<string, UnitKnowledge> = { [platoon.id]: emptyKnowledge() };
+  const radio = createRadioState(Object.values(state.truth.platoons));
   const player = emptyPlayerKnowledge();
-  const selves = new Map([[unit.id as string, self]]);
-  const unitRadio = radio.units[unit.id];
+  const selves = new Map([[platoon.id as string, self]]);
+  const unitRadio = radio.units[platoon.id];
   if (unitRadio === undefined) throw new Error('missing radio');
   return { unit, self, knowledge, radio, player, selves, unitRadio };
 }
@@ -281,13 +300,9 @@ describe('communication links', () => {
   });
 
   it('rejects a scenario that links across sides', () => {
-    const raw = JSON.parse(readFileSync('scenarios/outpost-under-pressure.json', 'utf8')) as {
-      links: string[][];
-      terrain: { classLayer: string; elevationLayer: string };
-    };
-    const layer = (name: string) => readFileSync(`scenarios/${name}`, 'utf8');
+    const raw = readScenarioFile(DEFAULT_SCENARIO_NAME);
     const load = (links: string[][]) =>
-      loadScenario({ ...raw, links }, layer(raw.terrain.classLayer), layer(raw.terrain.elevationLayer));
+      loadScenario({ ...raw, links }, readTerrainLayer(raw.terrain.classLayer), readTerrainLayer(raw.terrain.elevationLayer));
     expect(() => load([['E-N1', AIR_OPS]])).toThrow(/crosses sides/);
     expect(() => load([['F-A', 'E-N1']])).toThrow(/crosses sides/);
     expect(() => load([['F-A', 'NOBODY']])).toThrow(/unknown node/);

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { decideGround, type BehaviorFireRates } from '../../src/ai/decide-ground';
+import { decideGround, decidePlatoon, type BehaviorFireRates } from '../../src/ai/decide-ground';
 import type { ContactEstimate, Identification } from '../../src/domain/public/estimates';
+import { distance } from '../../src/domain/public/geometry';
 import {
   emptyKnowledge,
   type ContactId,
   type Doctrine,
+  type DrillMap,
   type UnitId,
   type UnitKnowledge,
   type UnitSelf,
@@ -41,6 +43,17 @@ const doctrine: Doctrine = {
   pauseSeconds: 180,
   pressureMoraleFloor: 0.3,
   airFireThreshold: 0.02,
+  drills: [],
+  nearAmbushMeters: 120,
+  drillSeconds: 600,
+  attackStrengthRatio: 1.5,
+  maxDetourFactor: 2,
+  supportShare: 0.34,
+  flankMeters: 200,
+  warningMeters: 700,
+  corridorMeters: 180,
+  clearSeconds: 60,
+  rallyMeters: null,
 };
 
 const rates: BehaviorFireRates = { observe: 0.5, probe: 0.6, harass: 0.35, assault: 1, disengage: 0.5 };
@@ -49,6 +62,15 @@ const self = (overrides: Partial<UnitSelf> = {}): UnitSelf => ({
   id: 'U' as UnitId,
   side: 'enemy',
   position: { x: 0, y: 0 },
+  slot: { x: 0, y: 0 },
+  squads: 1,
+  drill: null,
+  role: null,
+  viaDone: false,
+  ambushSprung: false,
+  handled: [],
+  routeAhead: [],
+  secondsLeft: 3600,
   ownPosition: { center: { x: 5, y: 5 }, sigmaMeters: 40, headingRad: null, speedMps: null, observedAt: 0 },
   underFire: false,
   personnel: 40,
@@ -70,6 +92,7 @@ const self = (overrides: Partial<UnitSelf> = {}): UnitSelf => ({
   fallback: { center: { x: -500, y: 0 }, radius: 100 },
   doctrine,
   ...overrides,
+  platoonPersonnel: overrides.personnel ?? 40,
 });
 
 const estimate = (
@@ -98,8 +121,13 @@ const report = (x: number, men: number): UnitKnowledge => ({
   reports: { 'OTHER/C-9': estimate(x, 'C-9', 'hostile', men) },
 });
 const nothing: UnitKnowledge = emptyKnowledge();
-const decide = (unit: UnitSelf, knowledge: UnitKnowledge, tick = 0) =>
-  decideGround(unit, knowledge, tick, rates);
+const flatMap: DrillMap = { routeMeters: (from, to) => distance(from, to), sees: () => true, cover: () => 0 };
+
+/** One squad as its whole platoon: the platoon's decision first, as in the sim. */
+const decide = (unit: UnitSelf, knowledge: UnitKnowledge, tick = 0) => {
+  const platoon = decidePlatoon(unit, knowledge, tick, flatMap);
+  return { ...platoon, ...decideGround({ ...unit, ...platoon }, knowledge, tick, rates) };
+};
 
 describe('decideGround', () => {
   it('applies the same rules to both sides', () => {

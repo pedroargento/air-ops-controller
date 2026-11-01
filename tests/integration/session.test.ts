@@ -3,9 +3,10 @@ import { loadScenarioFile } from '../../src/cli/load-scenario';
 import { runReplay } from '../../src/cli/replay';
 import type { AircraftId } from '../../src/domain/public/air';
 import { GameSession } from '../../src/game/session';
+import { singleSquads } from '../support/single-squads';
 
-const scenario = loadScenarioFile();
-const center = scenario.file.capture.area.center;
+const scenario = singleSquads(loadScenarioFile());
+const center = scenario.file.mission.area.center;
 const order = {
   kind: 'aircraftOrder',
   aircraftId: 'CAS-1' as AircraftId,

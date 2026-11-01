@@ -1,8 +1,14 @@
 import type { AircraftTelemetry } from '../domain/public/air';
 import type { WeaponType } from '../domain/public/equipment';
-import type { ContactEstimate, PositionEstimate } from '../domain/public/estimates';
+import {
+  strengthCategory,
+  strengthMidpoint,
+  type ContactEstimate,
+  type PositionEstimate,
+  type StrengthEstimate,
+} from '../domain/public/estimates';
 import { distance, type Vec2 } from '../domain/public/geometry';
-import type { RadioMessage } from '../domain/public/radio';
+import { AIR_OPS, CECON, reportLevel, type RadioMessage, type ReportLevel } from '../domain/public/radio';
 import type { Weather } from '../domain/public/weather';
 import {
   couldBeSameContact,
@@ -22,6 +28,18 @@ import {
 } from './reachability';
 
 export type { ContactStatus, ReachableRegion, UnitStatusReport };
+
+/** A sender that has just been heard, so the map can show who is talking. */
+export type ReportingUnit = Readonly<{ senderId: string; level: ReportLevel }>;
+
+/** Reports drawn as one group. It counts reports, and says nothing about organization. */
+export type ContactCluster = Readonly<{
+  center: Vec2;
+  radiusMeters: number;
+  reports: number;
+  strength: StrengthEstimate;
+  keys: readonly string[];
+}>;
 
 export type ContactMarker = Readonly<{
   key: string;
@@ -70,6 +88,9 @@ export type GroundFireEffect = Readonly<{
 export type PlayerView = Readonly<{
   tick: number;
   contacts: readonly ContactMarker[];
+  clusters: readonly ContactCluster[];
+  /** Who has just been heard on the radio. */
+  reporting: readonly ReportingUnit[];
   friendlies: readonly FriendlyMarkerView[];
   ticFlags: readonly Readonly<{ unitId: string; position: PositionEstimate; ageSeconds: number }>[];
   supportRequests: readonly Readonly<{ unitId: string; position: PositionEstimate; acknowledged: boolean }>[];
@@ -126,6 +147,9 @@ type ViewParameters = DisplayParameters &
     notFoundShowSeconds: number;
     friendlySilentSeconds: number;
     consolidateMaxAgeSeconds: number;
+    freshReportSeconds: number;
+    clusterRadiusMeters: number;
+    reportBlinkSeconds: number;
   }>;
 
 export function couldBeSameReport(a: ContactMarker, b: ContactMarker, plausibleSpeedMps: number): boolean {
@@ -179,6 +203,66 @@ function consolidate(markers: readonly ContactMarker[], display: ViewParameters)
   return markers.filter((m) => !absorbed.has(m.key)).map((m) => groups.get(m.key) ?? m);
 }
 
+/**
+ * Nearby fresh hostile markers, drawn together. Built from markers alone, so it counts
+ * reports, not units: it claims no organization and contains nothing nobody reported.
+ */
+function clusterContacts(markers: readonly ContactMarker[], display: ViewParameters): readonly ContactCluster[] {
+  const eligible = markers.filter(
+    (marker) =>
+      marker.contact.identification === 'hostile' &&
+      marker.ageSeconds <= display.freshReportSeconds &&
+      (marker.status === 'active' || marker.status === 'hit'),
+  );
+  const parent = new Map(eligible.map((marker) => [marker.key, marker.key]));
+  const find = (key: string): string => {
+    const up = parent.get(key) ?? key;
+    return up === key ? key : find(up);
+  };
+  for (const [index, a] of eligible.entries()) {
+    for (const b of eligible.slice(index + 1)) {
+      if (distance(a.contact.position.center, b.contact.position.center) > display.clusterRadiusMeters) continue;
+      const [low, high] = [find(a.key), find(b.key)].sort() as [string, string];
+      parent.set(high, low);
+    }
+  }
+  const groups = new Map<string, ContactMarker[]>();
+  for (const marker of eligible) {
+    const root = find(marker.key);
+    groups.set(root, [...(groups.get(root) ?? []), marker]);
+  }
+  return [...groups.values()]
+    .filter((group) => group.length > 1)
+    .map((group) => {
+      const centers = group.map((marker) => marker.contact.position.center);
+      const center = {
+        x: centers.reduce((sum, point) => sum + point.x, 0) / centers.length,
+        y: centers.reduce((sum, point) => sum + point.y, 0) / centers.length,
+      };
+      return {
+        center,
+        radiusMeters: Math.max(...centers.map((point) => distance(center, point))),
+        reports: group.length,
+        strength: strengthCategory(group.reduce((sum, marker) => sum + strengthMidpoint(marker.contact.strength), 0)),
+        keys: group.map((marker) => marker.key),
+      };
+    });
+}
+
+/** Reads the newest end of the log only, so it stays cheap however long the log gets. */
+function recentReporters(log: readonly RadioMessage[], tick: number, seconds: number): readonly ReportingUnit[] {
+  const reporters = new Map<string, ReportLevel>();
+  for (let index = log.length - 1; index >= 0; index -= 1) {
+    const message = log[index] as RadioMessage;
+    if (tick - message.receivedAt > seconds) break;
+    if (message.senderId === CECON || message.senderId === AIR_OPS) continue;
+    if (reporters.get(message.senderId) !== 'urgent') reporters.set(message.senderId, reportLevel(message));
+  }
+  return [...reporters.entries()]
+    .map(([senderId, level]) => ({ senderId, level }))
+    .sort((a, b) => (a.senderId < b.senderId ? -1 : 1));
+}
+
 /** The only route from knowledge to the UI. It cannot see truth: none is passed in. */
 export function project(
   player: PlayerKnowledge,
@@ -202,9 +286,12 @@ export function project(
     estimatedLosses: entry.estimatedLosses,
     members: [],
   }));
+  const contacts = consolidate(markers, display);
   return {
     tick,
-    contacts: consolidate(markers, display),
+    contacts,
+    clusters: clusterContacts(contacts, display),
+    reporting: recentReporters(player.log, tick, display.reportBlinkSeconds),
     friendlies: sortedEntries(player.friendlies).map(([unitId, marker]) => ({
       unitId,
       position: marker.position,
