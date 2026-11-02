@@ -11,7 +11,7 @@ const commands: readonly PlayerCommand[] = [
     kind: 'aircraftOrder',
     tick: 1800,
     aircraftId: 'CAS-1' as AircraftId,
-    order: { kind: 'SupportArea', center: scenario.file.mission.area.center, radius: 500 },
+    order: { kind: 'Watch', center: scenario.file.mission.area.center, radius: 500 },
   },
 ];
 
@@ -27,7 +27,7 @@ describe('replay', () => {
   // Changes whenever rules or tuning change; update it deliberately with that change.
   it('matches the golden hash', () => {
     const hashes = runReplay(scenario, { seed: 1, commands: [], ticks: 3000 });
-    expect(hashes.at(-1)).toBe('a94f20a0');
+    expect(hashes.at(-1)).toBe('1a35f6a2');
   }, 30000);
 
   it('diverges when a command differs', () => {

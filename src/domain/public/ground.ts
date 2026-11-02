@@ -2,7 +2,7 @@ import type { AirWeapon, Equipment } from './equipment';
 import type { ContactEstimate, PositionEstimate } from './estimates';
 import type { Vec2 } from './geometry';
 import type { Poi } from './poi';
-import type { ExpectedSupport } from './radio';
+import type { ExpectedSupport, Suppression } from './radio';
 
 export type Side = 'friendly' | 'enemy';
 export type UnitId = string & { readonly __brand: 'UnitId' };
@@ -18,10 +18,15 @@ export type GroundObjective =
   | Readonly<{ kind: 'AssaultArea'; area: Area }>
   | Readonly<{ kind: 'AmbushArea'; area: Area; openFireMeters: number; watches?: Vec2 | undefined }>;
 
+/** Objectives that keep a platoon on its ground. */
+export function holdsGround(objective: GroundObjective): objective is Extract<GroundObjective, { kind: 'HoldArea' | 'AmbushArea' }> {
+  return objective.kind === 'HoldArea' || objective.kind === 'AmbushArea';
+}
+
 export type GroundPosture = 'moving' | 'firing' | 'defending' | 'prone' | 'hidden';
 
 /** A platoon's shared answer to a situation (§4.0.2). */
-export type DrillKind = 'nearAmbush' | 'farAmbush' | 'attack' | 'bypass' | 'hastyAmbush' | 'waitForAir';
+export type DrillKind = 'nearAmbush' | 'farAmbush' | 'attack' | 'bypass' | 'hastyAmbush' | 'waitForAir' | 'pushThrough';
 
 /** What one squad does in a drill. */
 export type SquadRole = 'assault' | 'support' | 'maneuver' | 'cover' | 'bypass' | 'ambush' | 'hold';
@@ -35,6 +40,8 @@ export type Drill = Readonly<{
   via: Vec2 | null;
   /** The enemy's position, for routes to keep clear of. */
   avoid: Area | null;
+  /** Started on a warning, so the platoon isn't caught by surprise. */
+  warned: boolean;
 }>;
 
 /** What a platoon can ask of the map. Answers come from terrain, never from truth. */
@@ -94,6 +101,16 @@ export type Doctrine = Readonly<{
   clearSeconds: number;
   /** How far a platoon on the move pulls back to rally. Null falls back to its authored area. */
   rallyMeters: number | null;
+  airWaitSeconds: number;
+  groupRadiusMeters: number;
+  arrivedMeters: number;
+  sidestepMeters: number;
+  breakContactMeters: number;
+  assaultAmmunitionFraction: number;
+  noSupportWeaponsAssaultFactor: number;
+  objectiveMarginMeters: number;
+  attackRadiusMeters: number;
+  headingTowardsCos: number;
 }>;
 
 /** What a formation knows about itself. Contains nothing about other units. */
@@ -115,6 +132,8 @@ export type UnitSelf = Readonly<{
   /** Where the unit's own route goes next. */
   routeAhead: readonly Vec2[];
   secondsLeft: number;
+  /** Whether it can call Air Ops itself. */
+  canCallAir: boolean;
   ownPosition: PositionEstimate;
   personnel: number;
   initialPersonnel: number;
@@ -138,7 +157,8 @@ export type UnitSelf = Readonly<{
 }>;
 
 /** A position the platoon has dealt with. */
-export type HandledPosition = Readonly<{ center: Vec2; tick: number }>;
+/** A position the platoon has dealt with, or asked air about without an answer. */
+export type HandledPosition = Readonly<{ center: Vec2; tick: number; askedAir?: boolean }>;
 
 export type NoticedAircraft = Readonly<{ position: Vec2; altitudeMeters: number; seenAt: number }>;
 
@@ -149,20 +169,23 @@ export type UnitKnowledge = {
   reports: Record<string, ContactEstimate>;
   // Places the player has marked, keyed by mark.
   pois: Record<string, Poi>;
+  /** Suppression missions announced on the net, by aircraft. */
+  suppressions: Record<string, Suppression>;
   expectedSupport: ExpectedSupport | null;
+  supportRefusedAt: number | null;
   hostileAircraftSeenAt: number | null;
   noticedAircraft: NoticedAircraft | null;
 };
 
 export function emptyKnowledge(): UnitKnowledge {
-  return { contacts: {}, reports: {}, pois: {}, expectedSupport: null, hostileAircraftSeenAt: null, noticedAircraft: null };
+  return { contacts: {}, reports: {}, pois: {}, suppressions: {}, expectedSupport: null, supportRefusedAt: null, hostileAircraftSeenAt: null, noticedAircraft: null };
 }
 
 export type GroundIntent =
   | Readonly<{ kind: 'wait' }>
   | Readonly<{ kind: 'hold'; posture: GroundPosture }>
   | Readonly<{ kind: 'move'; destination: Vec2 }>
-  | Readonly<{ kind: 'engage'; contactId: ContactId; closeTo: Vec2 | null; fireRate: number; prepared: boolean }>;
+  | Readonly<{ kind: 'engage'; aim: Vec2; closeTo: Vec2 | null; fireRate: number; prepared: boolean }>;
 
 export type GroundDecision = Readonly<{
   intent: GroundIntent;

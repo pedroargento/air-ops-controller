@@ -1,5 +1,7 @@
+import { applySettings, settingsFromArgs } from './settings';
 import type { DrillKind } from '../domain/public/ground';
-// Usage: npx tsx src/cli/batch.ts [--scenario name] [--seeds 1000] [--policy name|all] [--without-drill a,b] [--json file]
+// Usage: npx tsx src/cli/batch.ts [--scenario name] [--seeds 1000] [--policy name|all] [--without-drill a,b]
+//        [--set path=value ...] [--json file]   e.g. --set combat.suppressionDecayPerUpdate=0.04 --set 'doctrines.*.pinnedSuppression=0.7'
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { Policy } from '../policies/air-policies';
@@ -170,7 +172,7 @@ function main(): void {
   const seeds = Number(option('seeds', '1000'));
   const which = option('policy', 'all');
   const json = option('json', '');
-  const scenario = withoutDrills(loadScenarioFile(option('scenario', DEFAULT_SCENARIO_NAME)), process.argv.includes('--without-drill') ? option('without-drill', '').split(',') : []);
+  const scenario = applySettings(withoutDrills(loadScenarioFile(option('scenario', DEFAULT_SCENARIO_NAME)), process.argv.includes('--without-drill') ? option('without-drill', '').split(',') : []), settingsFromArgs(process.argv));
   const results: Record<string, readonly BattleResult[]> = {};
   const available = policies(scenario);
   if (which !== 'all' && available[which] === undefined) {

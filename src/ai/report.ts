@@ -1,6 +1,6 @@
 import type { ContactEstimate } from '../domain/public/estimates';
 import { distance } from '../domain/public/geometry';
-import type { UnitKnowledge, UnitSelf } from '../domain/public/ground';
+import { holdsGround, type DrillKind, type UnitKnowledge, type UnitSelf } from '../domain/public/ground';
 import type {
   MessageId,
   ObjectiveStatus,
@@ -12,8 +12,11 @@ import type {
 import { groupedContact, groupLeads, groupStrength } from './contact-groups';
 import type { RadioConfig } from '../scenario/schema';
 
+const MOVING_DRILLS: ReadonlySet<DrillKind> = new Set(['bypass', 'pushThrough', 'attack', 'farAmbush']);
+
 export const REPORT_PRIORITY: Readonly<Record<ReportKind, number>> = {
   TIC: 0,
+  CHECK_FIRE: 0,
   SUPPORT_REQUEST: 1,
   // Ahead of contact reports: a unit in a heavy fight always has another contact to
   // report, and its own casualties would otherwise never get through.
@@ -28,6 +31,7 @@ export function initialRadioMemory(personnel: number): RadioMemory {
     lastPositionAt: null,
     lastTicAt: null,
     lastSupportRequestAt: null,
+    lastDangerCloseAt: null,
     lastSitrepPersonnel: personnel,
     lastSitrepAt: null,
     reportedContacts: {},
@@ -43,7 +47,7 @@ function strongestHostile(self: UnitSelf, knowledge: UnitKnowledge, within: numb
     const contact = knowledge.contacts[id];
     if (contact === undefined || contact.identification !== 'hostile') continue;
     if (distance(self.position, contact.position.center) > within) continue;
-    const strength = groupStrength(knowledge, contact);
+    const strength = groupStrength(knowledge, contact, self.doctrine.groupRadiusMeters);
     if (best === null || strength > bestStrength) {
       best = contact;
       bestStrength = strength;
@@ -52,10 +56,16 @@ function strongestHostile(self: UnitSelf, knowledge: UnitKnowledge, within: numb
   return best;
 }
 
+function enemyInside(self: UnitSelf, knowledge: UnitKnowledge, meters: number): boolean {
+  return Object.values(knowledge.contacts).some(
+    (contact) => contact.identification === 'hostile' && distance(self.position, contact.position.center) <= meters,
+  );
+}
+
 function hostileOnObjective(self: UnitSelf, threat: ContactEstimate): boolean {
   const { objective } = self;
   return (
-    objective.kind === 'HoldArea' &&
+    holdsGround(objective) &&
     distance(threat.position.center, objective.area.center) <= objective.area.radius + self.doctrine.standoffMeters
   );
 }
@@ -65,7 +75,7 @@ function declaresTic(self: UnitSelf, knowledge: UnitKnowledge, threat: ContactEs
   if (!self.underFire) return false;
   const lost = 1 - self.personnel / self.initialPersonnel;
   return (
-    groupStrength(knowledge, threat) / self.personnel >= config.ticStrengthRatio ||
+    groupStrength(knowledge, threat, self.doctrine.groupRadiusMeters) / self.personnel >= config.ticStrengthRatio ||
     lost >= config.ticCasualtyFraction ||
     self.suppression >= self.doctrine.pinnedSuppression ||
     hostileOnObjective(self, threat)
@@ -76,7 +86,7 @@ function declaresTic(self: UnitSelf, knowledge: UnitKnowledge, threat: ContactEs
 function needsSupport(self: UnitSelf, knowledge: UnitKnowledge, threat: ContactEstimate, config: RadioConfig): boolean {
   const lost = 1 - self.personnel / self.initialPersonnel;
   return (
-    groupStrength(knowledge, threat) / self.personnel >= config.supportStrengthRatio ||
+    groupStrength(knowledge, threat, self.doctrine.groupRadiusMeters) / self.personnel >= config.supportStrengthRatio ||
     lost >= config.supportCasualtyFraction ||
     self.ammunition <= self.initialAmmunition * config.supportAmmunitionFraction ||
     hostileOnObjective(self, threat)
@@ -114,16 +124,28 @@ export function decideReports(
   const acknowledged =
     next.supportAcknowledgedAt !== null &&
     tick - next.supportAcknowledgedAt < config.supportRequestCooldownSeconds;
-  if (inContact && needsSupport(self, knowledge, threat, config) && canRequestSupport && requestDue && !acknowledged) {
-    needs.push({ kind: 'SUPPORT_REQUEST', contactId: null });
+  // Enemy this close changes the request, so it can go out again even if the last one was answered.
+  const close = inContact && canRequestSupport && enemyInside(self, knowledge, config.dangerCloseMeters);
+  const closeDue = close && (next.lastDangerCloseAt === null || tick - next.lastDangerCloseAt >= config.supportRequestCooldownSeconds);
+  // Guns keep heads down while a platoon moves; close in, they're also all that's safe.
+  const moving = self.drill !== null && MOVING_DRILLS.has(self.drill.kind);
+  if (closeDue) {
+    needs.push({ kind: 'SUPPORT_REQUEST', contactId: null, dangerClose: true, wants: 'guns' });
+    next = { ...next, lastSupportRequestAt: tick, lastDangerCloseAt: tick };
+  } else if (inContact && needsSupport(self, knowledge, threat, config) && canRequestSupport && requestDue && !acknowledged) {
+    needs.push({ kind: 'SUPPORT_REQUEST', contactId: null, wants: moving ? 'guns' : 'both' });
+    next = { ...next, lastSupportRequestAt: tick };
+  } else if (self.drill?.kind === 'waitForAir' && canRequestSupport && requestDue && !acknowledged) {
+    // Holding short of a position for air: guns on it, so the platoon can pass.
+    needs.push({ kind: 'SUPPORT_REQUEST', contactId: null, wants: 'guns', target: self.drill.target });
     next = { ...next, lastSupportRequestAt: tick };
   }
 
-  for (const contact of groupLeads(knowledge)) {
+  for (const contact of groupLeads(knowledge, self.doctrine.groupRadiusMeters)) {
     const id = contact.contactId;
     const reportedAt = next.reportedContacts[id];
     if (reportedAt !== undefined && tick - reportedAt < config.contactReportIntervalSeconds) continue;
-    needs.push({ kind: 'CONTACT_REPORT', contactId: id, captured: groupedContact(knowledge, contact) });
+    needs.push({ kind: 'CONTACT_REPORT', contactId: id, captured: groupedContact(knowledge, contact, self.doctrine.groupRadiusMeters) });
     next = { ...next, reportedContacts: { ...next.reportedContacts, [id]: tick } };
   }
 
@@ -160,7 +182,7 @@ function newestContact(need: ReportNeed, knowledge: UnitKnowledge): ContactEstim
 function objectiveStatus(self: UnitSelf): ObjectiveStatus {
   if (self.mode === 'broken') return 'combat-ineffective';
   if (self.mode === 'withdrawing' || self.mode === 'recovering') return 'withdrawing';
-  return self.objective.kind === 'HoldArea' ? 'holding' : 'advancing';
+  return holdsGround(self.objective) ? 'holding' : 'advancing';
 }
 
 /**
@@ -176,7 +198,7 @@ export function composeReport(
   receivedAt: number,
 ): RadioMessage | null {
   const known = need.contactId === null ? newestContact(need, knowledge) : (knowledge.contacts[need.contactId] ?? null);
-  const contact = known === null ? (need.captured ?? null) : groupedContact(knowledge, known);
+  const contact = known === null ? (need.captured ?? null) : groupedContact(knowledge, known, self.doctrine.groupRadiusMeters);
   const meta = { id, senderId: self.id, sentAt, receivedAt };
   const ownPosition = self.ownPosition;
 
@@ -210,7 +232,17 @@ export function composeReport(
         status: objectiveStatus(self),
       };
     case 'SUPPORT_REQUEST':
-      return { ...meta, kind: 'SUPPORT_REQUEST', observedAt: ownPosition.observedAt, ownPosition };
+      return {
+        ...meta,
+        kind: 'SUPPORT_REQUEST',
+        observedAt: ownPosition.observedAt,
+        ownPosition,
+        dangerClose: need.dangerClose === true,
+        wants: need.wants ?? 'both',
+        target: need.target ?? null,
+      };
+    case 'CHECK_FIRE':
+      return { ...meta, kind: 'CHECK_FIRE', observedAt: ownPosition.observedAt, ownPosition };
     case 'DRILL':
       return need.drill === undefined
         ? null

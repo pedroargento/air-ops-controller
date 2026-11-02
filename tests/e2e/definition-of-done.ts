@@ -73,11 +73,11 @@ async function main(): Promise<void> {
 
     console.log('Task recon before contact');
     await page.locator('[data-action="select-aircraft"][data-id="RECON-1"]').click();
-    await page.locator('[data-action="order"][data-kind="ReconArea"]').click();
+    await page.locator('[data-action="order"][data-kind="Watch"]').click();
     await page.locator('#order-radius').fill('1500');
     const objective = { x: 2525, y: 2625 };
     await clickWorld(page, objective);
-    await page.waitForFunction(() => document.querySelector('[data-id="RECON-1"]')?.textContent?.includes('ReconArea'));
+    await page.waitForFunction(() => document.querySelector('[data-id="RECON-1"]')?.textContent?.includes('Watch'));
     check(true, 'recon accepted its order from a map click');
 
     console.log('Receive a TIC from an autonomous formation');
@@ -131,13 +131,19 @@ async function main(): Promise<void> {
 
     console.log('Task CAS through the map');
     await page.locator('[data-action="select-aircraft"][data-id="CAS-1"]').click();
-    await page.locator('[data-action="order"][data-kind="SupportArea"]').click();
+    await page.locator('[data-action="order"][data-kind="Watch"]').click();
     await clickWorld(page, point);
     await setPaused(page, false);
-    await page.waitForFunction(() => document.querySelector('[data-id="CAS-1"]')?.textContent?.includes('SupportArea'));
+    await page.waitForFunction(() => document.querySelector('[data-id="CAS-1"]')?.textContent?.includes('Watch'));
     check(true, 'CAS accepted its support mission');
 
     const log = () => page.evaluate(() => (window as unknown as { airops: Hook }).airops.session.commandLog());
+    await page.locator('[data-action="weapons"][data-id="hold"]').click();
+    await page.waitForFunction(() => document.querySelector('[data-action="weapons"][data-id="hold"]')?.classList.contains('active'));
+    await page.locator('[data-action="weapons"][data-id="both"]').click();
+    await page.waitForFunction(() => document.querySelector('[data-action="weapons"][data-id="both"]')?.classList.contains('active'));
+    const weaponsSet = (await log()).commands.filter((command) => command.kind === 'setWeapons').length;
+    check(weaponsSet === 2, 'weapons control is set on the aircraft, Hold and back to Both');
     const kinds = (await log()).commands.map((command) => command.kind);
     check(kinds.includes('forwardContact'), 'the forward command reached the simulation');
 
@@ -167,6 +173,8 @@ async function main(): Promise<void> {
     check(reportedMarks.length === 1, 'a right-click reports a suspected kill zone by radio');
     await page.locator('#map').click({ button: 'right', position: { x: 400, y: 300 } });
     check(await page.locator('[data-action="cancel-poi"]').isVisible(), 'the mark can be cancelled from the same menu');
+    const fire = await page.locator('[data-action="menu-fire"][data-kind="Suppress"]').count();
+    check(fire > 0 && (await page.locator('[data-action="menu-fire"][data-kind="Strike"]').count()) === fire, 'the same menu offers Suppress and Strike for each strike aircraft');
     await page.locator('[data-action="close-menu"]').click();
     const routineHidden = await page.locator('.log-row.position_report').first().isHidden();
     check(routineHidden, 'the main radio view leaves out routine position reports');
@@ -201,26 +209,52 @@ async function main(): Promise<void> {
           (window as unknown as { airops: { view: () => PlayerView } }).airops.view().aircraft.find((a) => a.aircraftId === aircraftId)?.targetAltitudeMeters,
         id,
       );
-    const before = await targetOf('RECON-1');
-    const columnPixel = await page.evaluate(
-      () => (window as unknown as { airops: { app: { profileColumn: (id: string) => number | null } } }).airops.app.profileColumn('RECON-1'),
-    );
-    if (columnPixel === null) throw new Error('recon is not on the profile');
+    // Any aircraft already on the profile will do: which ones are depends on how the fight went.
+    const onProfile = () =>
+      page.evaluate(() => {
+        const { view, app } = (window as unknown as { airops: { view: () => PlayerView; app: { profileColumn: (id: string) => number | null } } }).airops;
+        return view().aircraft.find((a) => a.altitudeMeters > 0 && app.profileColumn(a.aircraftId) !== null)?.aircraftId;
+      });
+    if ((await onProfile()) === undefined) {
+      const ready = await page.evaluate(
+        () => (window as unknown as { airops: { view: () => PlayerView } }).airops.view().aircraft.find((a) => a.status === 'ready')?.aircraftId,
+      );
+      if (ready === undefined) throw new Error('nothing can fly');
+      await page.locator(`[data-action="select-aircraft"][data-id="${ready}"]`).click();
+      await page.locator('[data-action="order"][data-kind="Watch"]').click();
+      await clickWorld(page, { x: 2500, y: 2500 });
+    }
+    await page.waitForFunction(() => {
+      const { view, app } = (window as unknown as { airops: { view: () => PlayerView; app: { profileColumn: (id: string) => number | null } } }).airops;
+      return view().aircraft.some((a) => a.altitudeMeters > 100 && app.profileColumn(a.aircraftId) !== null);
+    });
+    await setPaused(page, true);
+    await page.waitForTimeout(100);
+    const spot = await page.evaluate(() => {
+      const { view, app } = (window as unknown as { airops: { view: () => PlayerView; app: { profileColumn: (id: string) => number | null } } }).airops;
+      const found = view().aircraft.find((a) => app.profileColumn(a.aircraftId) !== null);
+      return found === undefined ? null : { id: found.aircraftId, pixel: app.profileColumn(found.aircraftId), all: view().aircraft.map((a) => a.status) };
+    });
+    if (spot === null || spot.pixel === null) throw new Error('the aircraft is not on the profile');
+    const flier = spot.id;
+    const columnPixel = spot.pixel;
+    const before = await targetOf(flier);
     const column = box.x + columnPixel;
     await page.mouse.move(column, box.y + box.height * 0.7);
     await page.mouse.down();
     await page.mouse.move(column, box.y + box.height * 0.3, { steps: 4 });
     await page.mouse.up();
+    await setPaused(page, false);
     await page.waitForFunction(
-      (old) =>
-        (window as unknown as { airops: { view: () => PlayerView } }).airops.view().aircraft.find((a) => a.aircraftId === 'RECON-1')?.targetAltitudeMeters !== old,
-      before,
+      ([old, id]) =>
+        (window as unknown as { airops: { view: () => PlayerView } }).airops.view().aircraft.find((a) => a.aircraftId === id)?.targetAltitudeMeters !== old,
+      [before, flier] as const,
     );
-    const after = await targetOf('RECON-1');
+    const after = await targetOf(flier);
     check((after ?? 0) > (before ?? 0) && (after ?? 0) % 100 === 0, `dragging the profile set a target of ${after} m`);
     const sentNow = (await log()).commands.map((command) => command.kind);
     check(sentNow.includes('setAltitude'), 'the altitude order is in the replayable command log');
-    await page.locator('[data-action="select-aircraft"][data-id="RECON-1"]').click();
+    await page.locator(`[data-action="select-aircraft"][data-id="${flier}"]`).click();
     await page.waitForFunction(() => document.querySelector<HTMLCanvasElement>('#path-profile')?.hidden === false);
     check(true, 'selecting an aircraft shows the terrain along its path');
     await shot(page, '3c-profile');
@@ -274,7 +308,7 @@ async function main(): Promise<void> {
       await page.waitForSelector('#clock');
       for (const id of ['CAS-1', 'CAS-2']) {
         await page.locator(`[data-action="select-aircraft"][data-id="${id}"]`).click();
-        await page.locator('[data-action="order"][data-kind="SupportArea"]').click();
+        await page.locator('[data-action="order"][data-kind="Watch"]').click();
         await clickWorld(page, { x: 2700, y: 2250 });
       }
       damaged = await page

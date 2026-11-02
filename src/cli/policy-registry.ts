@@ -1,14 +1,10 @@
 import type { Vec2 } from '../domain/public/geometry';
-import { immediateCas, noAir, reactiveCas, markingKillZones, reconInformed, scoutingOnly, sweepingRecon, type Policy } from '../policies/air-policies';
+import { answeringDangerClose, answeringRequests, atRisk, lingeringOnGuns, immediateCas, noAir, reactiveCas, markingKillZones, reconInformed, scoutingOnly, suppressingKillZones, coveringLead, sweepingRecon, type Policy } from '../policies/air-policies';
 import type { Scenario } from '../scenario/load';
-
-const RECON_CLIMB_AFTER_FIRE_METERS = 1500;
-// Below every hill, so pilots hug the terrain at their minimum clearance.
-const CAS_TRANSIT_METERS = 100;
 
 type PolicySet = Readonly<Record<string, () => Policy>>;
 
-const BASELINE: PolicySet = { none: () => noAir, reactive: reactiveCas };
+const BASELINE: PolicySet = { none: () => noAir, reactive: () => reactiveCas() };
 
 function outpostPolicies(scenario: Scenario): PolicySet {
   const objective = scenario.file.mission.area.center;
@@ -17,10 +13,9 @@ function outpostPolicies(scenario: Scenario): PolicySet {
     immediate: immediateCas,
     informed: () => reconInformed(objective, true),
     informedNoForward: () => reconInformed(objective, false),
-    informedBlind: () => reconInformed(objective, true, undefined, false),
-    informedClimb: () => reconInformed(objective, true, undefined, false, RECON_CLIMB_AFTER_FIRE_METERS),
-    informedWeather: () => reconInformed(objective, true, undefined, false, null, null, true),
-    informedPopUp: () => reconInformed(objective, true, undefined, false, RECON_CLIMB_AFTER_FIRE_METERS, CAS_TRANSIT_METERS),
+    informedLinger: () => lingeringOnGuns(reconInformed(objective, true)),
+    informedCautious: () => atRisk(reconInformed(objective, true), 'cautious'),
+    informedPressOn: () => atRisk(reconInformed(objective, true), 'pressOn'),
   };
 }
 
@@ -38,6 +33,10 @@ function valleyRoadPolicies(scenario: Scenario): PolicySet {
     routeRecon: () => reconInformed(route, true),
     routeReconNoForward: () => reconInformed(route, false),
     routeReconMark: () => markingKillZones(reconInformed(route, true)),
+    routeReconSuppress: () => suppressingKillZones(markingKillZones(reconInformed(route, true))),
+    routeReconCover: () => coveringLead(reconInformed(route, true), scenario.file.mission.area.center),
+    reactiveSuppress: () => reactiveCas(600),
+    routeReconAnswer: () => answeringRequests(reconInformed(route, true)),
     scoutOnlyMark: () => markingKillZones(scoutingOnly(reconInformed(route, true))),
     scoutOnly: () => scoutingOnly(reconInformed(route, true)),
     scoutOnlyNoForward: () => scoutingOnly(reconInformed(route, false)),
@@ -55,10 +54,19 @@ function findThemPolicies(scenario: Scenario): PolicySet {
     { x: quarter, y: 3 * quarter },
   ];
   return {
-    none: BASELINE.none,
+    none: () => noAir,
     oneOrbit: () => sweepingRecon([center], 1500, 600),
     sweep: () => sweepingRecon(sectors, 1200, 420),
-  } as PolicySet;
+  };
+}
+
+/** Danger close is a standing rule here: denied by default, with an approving variant to compare. */
+function withDangerClose(set: PolicySet): PolicySet {
+  const entries = Object.entries(set).flatMap(([name, make]): [string, () => Policy][] => [
+    [name, () => answeringDangerClose(make(), false)],
+    ...(name === 'none' ? [] : [[`${name}Approve`, () => answeringDangerClose(make(), true)] as [string, () => Policy]]),
+  ]);
+  return Object.fromEntries(entries);
 }
 
 const SCENARIO_POLICIES: Readonly<Record<string, (scenario: Scenario) => PolicySet>> = {
@@ -69,5 +77,5 @@ const SCENARIO_POLICIES: Readonly<Record<string, (scenario: Scenario) => PolicyS
 
 // Shared by the batch runner and the debug page, so it must stay free of Node imports.
 export function policies(scenario: Scenario): PolicySet {
-  return SCENARIO_POLICIES[scenario.file.id]?.(scenario) ?? BASELINE;
+  return withDangerClose(SCENARIO_POLICIES[scenario.file.id]?.(scenario) ?? BASELINE);
 }

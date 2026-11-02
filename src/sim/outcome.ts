@@ -3,7 +3,7 @@ import { distance } from '../domain/public/geometry';
 import type { Area } from '../domain/public/ground';
 import type { GroundUnit, Outcome, WorldTruth } from '../domain/truth/world';
 import type { MissionConfig } from '../scenario/schema';
-import { emptyPlayerKnowledge, type PlayerKnowledge } from '../knowledge/player-knowledge';
+import type { PlayerKnowledge } from '../knowledge/player-knowledge';
 import { platoonOf } from './platoon';
 
 type HoldMission = Extract<MissionConfig, { kind: 'HoldArea' }>;
@@ -76,7 +76,7 @@ export function updateOutcome(
   mission: MissionConfig,
   durationSeconds: number,
   tick: number,
-  player: PlayerKnowledge = emptyPlayerKnowledge(),
+  player: PlayerKnowledge,
 ): void {
   if (mission.kind === 'HoldArea') updateHoldArea(truth, mission, durationSeconds, tick);
   else if (mission.kind === 'ReachArea') updateReachArea(truth, mission, durationSeconds, tick);

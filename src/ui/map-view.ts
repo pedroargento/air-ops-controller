@@ -483,7 +483,6 @@ export class MapView {
     ctx.globalAlpha = 1;
   }
 
-  /** Where the weapons seen on this contact are a real danger to aircraft at their altitude. */
   /** A short line the way a still squad was seen to face. It is an observation, not a claim. */
   private drawFacing(marker: ContactMarker, at: Vec2, size: number): void {
     const { facingRad } = marker.contact;
@@ -537,6 +536,7 @@ export class MapView {
     ctx.fillText(`${cluster.reports} reports, ${strengthText(cluster.strength)}`, at.x, at.y - radius - 4);
   }
 
+  /** Where the weapons seen on this contact are a real danger to aircraft at their altitude. */
   private drawThreatRing(marker: ContactMarker, altitudeMeters: number): void {
     const { ctx } = this;
     const height = Math.max(0, altitudeMeters - elevationAt(this.terrain, marker.contact.position.center));
@@ -763,8 +763,7 @@ export class MapView {
 
   private destinationOf(aircraft: AircraftTelemetryEntry): Vec2 | null {
     const { order } = aircraft;
-    if (order === null || order.kind === 'ReturnToBase') return null;
-    return order.kind === 'MoveTo' || order.kind === 'Orbit' ? order.point : order.center;
+    return order === null || order.kind === 'ReturnToBase' ? null : order.center;
   }
 
   /** A body with a rotor bar, so a helicopter reads differently from any swept-wing shape. */

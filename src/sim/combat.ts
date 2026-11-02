@@ -1,11 +1,11 @@
 import { totalAmmunition, usableWeapons, type WeaponFire } from '../domain/public/equipment';
-import { distance } from '../domain/public/geometry';
-import type { ContactId, DrillKind, UnitKnowledge } from '../domain/public/ground';
+import { exp } from '../domain/public/det-math';
+import { distance, type Vec2 } from '../domain/public/geometry';
 import { cellAt, hasGroundLos, type TerrainGrid } from '../domain/public/terrain';
 import type { GroundUnit, Platoon, WorldTruth } from '../domain/truth/world';
 import { nextBinomial, type RngState } from '../rng/streams';
 import type { CombatConfig } from '../scenario/schema';
-import { livingSquads, platoonOf, sortedPlatoons } from './platoon';
+import { livingSquads, platoonOf, platoonPersonnel, sortedPlatoons } from './platoon';
 
 export type CombatEffect = Readonly<{
   targetId: string;
@@ -14,59 +14,51 @@ export type CombatEffect = Readonly<{
   morale: number;
 }>;
 
-type FireSolution = Readonly<{
-  firer: GroundUnit;
-  target: GroundUnit;
-  surprise: number;
-  range: number;
-  assessmentSigma: number;
-  fire: readonly WeaponFire[];
-}>;
+type Hit = Readonly<{ target: GroundUnit; range: number; share: number; surprise: number }>;
 
-function unitForContact(truth: WorldTruth, observer: GroundUnit, contactId: ContactId): GroundUnit | null {
-  const tracks = truth.tracks[observer.platoonId] ?? {};
-  for (const targetId of Object.keys(tracks).sort()) {
-    if (tracks[targetId]?.contactId === contactId) {
-      return truth.units.find((unit) => unit.id === targetId) ?? null;
-    }
-  }
-  return null;
-}
-
-const WARNED_DRILLS: ReadonlySet<DrillKind> = new Set(['attack', 'bypass', 'hastyAmbush', 'waitForAir']);
+/** A volley at a place. It may hit several squads there, or nobody at all. */
+type FireSolution = Readonly<{ firer: GroundUnit; fire: readonly WeaponFire[]; hits: readonly Hit[] }>;
 
 /** A sprung ambush is deadly for a moment, but only to a platoon nobody warned (§4.0.2). */
 function surpriseFactor(truth: WorldTruth, firer: GroundUnit, target: GroundUnit, config: CombatConfig, tick: number): number {
   const sprungAt = platoonOf(truth, firer).ambushSprungAt;
   if (sprungAt === null || tick - sprungAt > config.ambushSurpriseSeconds) return 1;
-  const drill = platoonOf(truth, target).drill;
-  return drill !== null && WARNED_DRILLS.has(drill.kind) ? 1 : config.ambushSurpriseFactor;
+  return platoonOf(truth, target).drill?.warned === true ? 1 : config.ambushSurpriseFactor;
 }
 
-function fireSolutions(
-  truth: WorldTruth,
-  knowledge: Readonly<Record<string, UnitKnowledge>>,
-  terrain: TerrainGrid,
-  config: CombatConfig,
-  tick: number,
-): readonly FireSolution[] {
+/** Fire lands on the ground, so it finds whoever is there, shared out by how close each is. */
+function hitsAround(truth: WorldTruth, firer: GroundUnit, aim: Vec2, terrain: TerrainGrid, config: CombatConfig, tick: number): readonly Hit[] {
+  const spread = config.fireSpreadMeters;
+  const near = truth.units.flatMap((target) => {
+    if (target.side === firer.side || target.personnel <= 0) return [];
+    const gap = distance(target.position, aim);
+    if (gap > spread * config.fireReach || !hasGroundLos(terrain, firer.position, target.position)) return [];
+    return [{ target, weight: exp(-(gap * gap) / (2 * spread * spread)) }];
+  });
+  const total = Math.max(1, near.reduce((sum, { weight }) => sum + weight, 0));
+  return near.map(({ target, weight }) => ({
+    target,
+    range: distance(firer.position, target.position),
+    share: weight / total,
+    surprise: surpriseFactor(truth, firer, target, config, tick),
+  }));
+}
+
+function fireSolutions(truth: WorldTruth, terrain: TerrainGrid, config: CombatConfig, tick: number): readonly FireSolution[] {
   const solutions: FireSolution[] = [];
   for (const firer of truth.units) {
     if (firer.intent.kind !== 'engage' || firer.personnel <= 0) continue;
-    const { contactId } = firer.intent;
-    const target = unitForContact(truth, firer, contactId);
-    if (target === null || target.personnel <= 0) continue;
-    const range = distance(firer.position, target.position);
+    const { aim } = firer.intent;
+    const range = distance(firer.position, aim);
     if (range > firer.doctrine.engageRangeMeters) continue;
-    // The platoon's picture says where the enemy is; only a squad with a view can shoot.
-    if (!hasGroundLos(terrain, firer.position, target.position)) continue;
+    // Only a squad with a view of the place can shoot at it.
+    if (!hasGroundLos(terrain, firer.position, aim)) continue;
     const fire = usableWeapons(firer.equipment, firer.personnel, config.weapons).filter(({ weapon }) => {
       const definition = config.weapons[weapon];
       return definition.targetDomains.includes('GROUND') && range <= definition.rangeMeters;
     });
     if (fire.length === 0) continue;
-    const assessmentSigma = knowledge[firer.platoonId]?.contacts[contactId]?.position.sigmaMeters ?? 0;
-    solutions.push({ firer, target, range, assessmentSigma, fire, surprise: surpriseFactor(truth, firer, target, config, tick) });
+    solutions.push({ firer, fire, hits: hitsAround(truth, firer, aim, terrain, config, tick) });
   }
   return solutions;
 }
@@ -77,16 +69,16 @@ export function effectiveCover(unit: GroundUnit, terrain: TerrainGrid, config: C
 }
 
 function volleyEffect(
-  { firer, target, range, assessmentSigma, fire, surprise }: FireSolution,
+  firer: GroundUnit,
+  fire: readonly WeaponFire[],
+  { target, range, share, surprise }: Hit,
   terrain: TerrainGrid,
   config: CombatConfig,
   rng: RngState,
 ): CombatEffect {
   const moving = firer.posture === 'moving' ? 1 - config.movingFirePenalty : 1;
   const fireRate = firer.intent.kind === 'engage' ? firer.intent.fireRate : 1;
-  // A poorer estimate of where the target is makes fire less effective (§4.1).
-  const assessment = 1 / (1 + assessmentSigma / config.assessmentSigmaMeters);
-  const shared = surprise * fireRate * moving * assessment * (1 - firer.suppression * config.suppressionFirePenalty);
+  const shared = share * surprise * fireRate * moving * (1 - firer.suppression * config.suppressionFirePenalty);
   let damage = 0;
   let suppression = 0;
   for (const { weapon, count } of fire) {
@@ -196,22 +188,22 @@ function recover(platoon: Platoon, config: CombatConfig, tick: number): void {
   );
   if (!quiet) return;
   const rate = platoon.mode === 'recovering' ? config.moraleRecoveryPerUpdate : config.moraleRecoveryOutOfContactPerUpdate;
-  const personnel = squads.reduce((sum, unit) => sum + unit.personnel, 0);
-  const cap = moraleCap(platoon, personnel, config);
+  const cap = moraleCap(platoon, platoonPersonnel(platoon), config);
   if (platoon.morale < cap) platoon.morale = Math.min(cap, platoon.morale + rate);
 }
 
 /** One combat update: every effect is computed from the same snapshot, then applied. */
 export function resolveCombat(
   truth: WorldTruth,
-  knowledge: Readonly<Record<string, UnitKnowledge>>,
   terrain: TerrainGrid,
   config: CombatConfig,
   rng: RngState,
   tick: number,
 ): void {
-  const solutions = fireSolutions(truth, knowledge, terrain, config, tick);
-  const effects = solutions.map((solution) => volleyEffect(solution, terrain, config, rng));
+  const solutions = fireSolutions(truth, terrain, config, tick);
+  const effects = solutions.flatMap(({ firer, fire, hits }) =>
+    hits.map((hit) => volleyEffect(firer, fire, hit, terrain, config, rng)),
+  );
   for (const solution of solutions) {
     solution.firer.lastFiredAtTick = tick;
     spendAmmunition(solution, config);

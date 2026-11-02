@@ -1,3 +1,11 @@
+export const DEFAULT_SCENARIO_NAME = 'outpost-under-pressure';
+
+/** A scenario file as read, before its rules are merged in. */
+export type RawScenario = Readonly<Record<string, unknown>> & {
+  rules: string;
+  terrain: Readonly<{ classLayer: string; elevationLayer: string }>;
+};
+
 type Layer = Readonly<Record<string, unknown>>;
 
 const isObject = (value: unknown): value is Layer =>

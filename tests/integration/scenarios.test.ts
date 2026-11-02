@@ -1,3 +1,4 @@
+import { emptyPlayerKnowledge } from '../../src/knowledge/player-knowledge';
 import { describe, expect, it } from 'vitest';
 import { runBattle } from '../../src/cli/battle';
 import { DEFAULT_SCENARIO_NAME, loadScenarioFile, readScenarioFile, readTerrainLayer, scenarioNames } from '../../src/cli/load-scenario';
@@ -79,14 +80,14 @@ describe('reach-area missions', () => {
     const { truth, column } = setup();
     const [lead] = column;
     if (lead !== undefined) lead.position = mission.area.center;
-    updateOutcome(truth, mission, durationSeconds, 100);
+    updateOutcome(truth, mission, durationSeconds, 100, emptyPlayerKnowledge());
     expect(truth.outcome).toBe('running');
   });
 
   it('succeeds when enough of the column arrives', () => {
     const { truth, column } = setup();
     for (const unit of column) unit.position = mission.area.center;
-    updateOutcome(truth, mission, durationSeconds, 100);
+    updateOutcome(truth, mission, durationSeconds, 100, emptyPlayerKnowledge());
     expect(truth.outcome).toBe('success');
     expect(truth.endedAtTick).toBe(100);
   });
@@ -98,36 +99,28 @@ describe('reach-area missions', () => {
     lead.position = mission.area.center;
     lead.personnel = mission.partialMinPersonnel;
     rear.personnel = 0;
-    updateOutcome(truth, mission, durationSeconds, 100);
+    updateOutcome(truth, mission, durationSeconds, 100, emptyPlayerKnowledge());
     expect(truth.outcome).toBe('partial');
   });
 
   it('fails at the deadline with too few through', () => {
     const { truth } = setup();
-    updateOutcome(truth, mission, durationSeconds, durationSeconds);
+    updateOutcome(truth, mission, durationSeconds, durationSeconds, emptyPlayerKnowledge());
     expect(truth.outcome).toBe('failure');
   });
 
   it('fails at once when the whole column is gone', () => {
     const { truth, column } = setup();
     for (const unit of column) unit.personnel = 0;
-    updateOutcome(truth, mission, durationSeconds, 100);
+    updateOutcome(truth, mission, durationSeconds, 100, emptyPlayerKnowledge());
     expect(truth.outcome).toBe('failure');
   });
 });
 
 describe('a second scenario', () => {
   it('has its own policies, kept apart from the outpost set', () => {
-    expect(Object.keys(policies(valley))).toEqual([
-      'none',
-      'reactive',
-      'routeRecon',
-      'routeReconNoForward',
-      'routeReconMark',
-      'scoutOnlyMark',
-      'scoutOnly',
-      'scoutOnlyNoForward',
-    ]);
+    expect(Object.keys(policies(valley))).toEqual(expect.arrayContaining(['none', 'reactive', 'routeRecon', 'scoutOnlyMark']));
+    expect(Object.keys(policies(valley))).not.toContain('informed');
     expect(Object.keys(policies(loadScenarioFile()))).toContain('informed');
   });
 

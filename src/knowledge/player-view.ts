@@ -1,3 +1,4 @@
+import type { SupportWeapons } from '../domain/public/air';
 import type { AircraftTelemetry } from '../domain/public/air';
 import type { WeaponType } from '../domain/public/equipment';
 import {
@@ -39,7 +40,6 @@ export type ContactCluster = Readonly<{
   radiusMeters: number;
   reports: number;
   strength: StrengthEstimate;
-  keys: readonly string[];
 }>;
 
 export type ContactMarker = Readonly<{
@@ -95,7 +95,7 @@ export type PlayerView = Readonly<{
   reporting: readonly ReportingUnit[];
   friendlies: readonly FriendlyMarkerView[];
   ticFlags: readonly Readonly<{ unitId: string; position: PositionEstimate; ageSeconds: number }>[];
-  supportRequests: readonly Readonly<{ unitId: string; position: PositionEstimate; acknowledged: boolean }>[];
+  supportRequests: readonly Readonly<{ unitId: string; position: PositionEstimate; acknowledged: boolean; dangerClose: boolean; wants: SupportWeapons; target: Vec2 | null }>[];
   log: readonly RadioMessage[];
   aircraft: AircraftTelemetry;
   strikes: readonly StrikeEffect[];
@@ -221,8 +221,10 @@ function clusterContacts(markers: readonly ContactMarker[], display: ViewParamet
     const up = parent.get(key) ?? key;
     return up === key ? key : find(up);
   };
-  for (const [index, a] of eligible.entries()) {
-    for (const b of eligible.slice(index + 1)) {
+  for (let i = 0; i < eligible.length; i += 1) {
+    for (let j = i + 1; j < eligible.length; j += 1) {
+      const a = eligible[i] as ContactMarker;
+      const b = eligible[j] as ContactMarker;
       if (distance(a.contact.position.center, b.contact.position.center) > display.clusterRadiusMeters) continue;
       const [low, high] = [find(a.key), find(b.key)].sort() as [string, string];
       parent.set(high, low);
@@ -231,7 +233,9 @@ function clusterContacts(markers: readonly ContactMarker[], display: ViewParamet
   const groups = new Map<string, ContactMarker[]>();
   for (const marker of eligible) {
     const root = find(marker.key);
-    groups.set(root, [...(groups.get(root) ?? []), marker]);
+    const group = groups.get(root);
+    if (group === undefined) groups.set(root, [marker]);
+    else group.push(marker);
   }
   return [...groups.values()]
     .filter((group) => group.length > 1)
@@ -246,10 +250,11 @@ function clusterContacts(markers: readonly ContactMarker[], display: ViewParamet
         radiusMeters: Math.max(...centers.map((point) => distance(center, point))),
         reports: group.length,
         strength: strengthCategory(group.reduce((sum, marker) => sum + strengthMidpoint(marker.contact.strength), 0)),
-        keys: group.map((marker) => marker.key),
       };
     });
 }
+
+const LEVEL_RANK: Readonly<Record<ReportLevel, number>> = { routine: 0, main: 1, urgent: 2 };
 
 /** Reads the newest end of the log only, so it stays cheap however long the log gets. */
 function recentReporters(log: readonly RadioMessage[], tick: number, seconds: number): readonly ReportingUnit[] {
@@ -258,7 +263,9 @@ function recentReporters(log: readonly RadioMessage[], tick: number, seconds: nu
     const message = log[index] as RadioMessage;
     if (tick - message.receivedAt > seconds) break;
     if (message.senderId === CECON || message.senderId === AIR_OPS) continue;
-    if (reporters.get(message.senderId) !== 'urgent') reporters.set(message.senderId, reportLevel(message));
+    const level = reportLevel(message);
+    const held = reporters.get(message.senderId);
+    if (held === undefined || LEVEL_RANK[level] > LEVEL_RANK[held]) reporters.set(message.senderId, level);
   }
   return [...reporters.entries()]
     .map(([senderId, level]) => ({ senderId, level }))
@@ -316,6 +323,9 @@ export function project(
       unitId,
       position: request.position,
       acknowledged: request.acknowledged,
+      dangerClose: request.dangerClose,
+      wants: request.wants,
+      target: request.target,
     })),
     log: player.log,
     aircraft: telemetry,

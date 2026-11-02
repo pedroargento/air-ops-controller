@@ -68,7 +68,6 @@ function validateLinks(file: ScenarioFile): void {
   }
 }
 
-/** Pure: callers supply the file contents, so this works in Node and the browser. */
 function validateMission({ mission, units }: ScenarioFile): void {
   if (mission.kind !== 'ReachArea') return;
   for (const id of mission.unitIds) {
@@ -78,6 +77,7 @@ function validateMission({ mission, units }: ScenarioFile): void {
   }
 }
 
+/** Pure: callers supply the file contents, so this works in Node and the browser. */
 export function loadScenario(raw: unknown, classText: string, elevationText: string): Scenario {
   const file = scenarioFileSchema.parse(raw);
   for (const unit of file.units) {

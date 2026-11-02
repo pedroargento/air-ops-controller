@@ -100,7 +100,7 @@ The squad is the smallest simulated combat unit. A `units` entry in a scenario f
 - **Shared picture:** A platoon has one picture, so what one squad sees, all its squads know. A squad can only fire at what it has a line of sight to.
 - **Radio:** Links, reports, requests and forwarded intelligence all use platoon IDs, so the player's radio doesn't grow with the number of squads. A platoon's radio works at the pace of its lead squad, the first with people left.
 - **Reporting:** Hostile contacts close together are reported as one group with their combined strength, so a platoon of five squads reports one enemy platoon rather than five contacts. Thresholds for a TIC or support request read the same combined strength.
-- **Strikes:** A pass hits every enemy squad near the aiming point, each by how close it is to that point, while the moral effect counts once per platoon.
+- **Strikes:** A crew aims at its estimate and takes a new look after each pass. A pass hits every enemy squad near the aiming point, each by how close it is to that point, while the moral effect counts once per platoon.
 - **Aircraft:** Crews see squads one at a time. Each is a separate contact, and the map draws nearby contacts as a cluster (§9).
 
 ### 4.0.2 Battle drills
@@ -114,11 +114,13 @@ A drill is a platoon's shared answer to a situation, taken from published small-
 | **Attack** | An `AssaultArea` objective, or a known position on the route that the platoon chooses to attack | Nearest give support by fire, the rest flank and assault | The platoon is on the area and its picture shows it clear |
 | **Bypass** | A known position on the route that is too strong or there's no time to attack, or a far ambush from a stronger force | All route around it, returning fire | The position is behind them |
 | **Hasty ambush** | A moving enemy reported coming towards them | All hide and hold fire until close | The enemy is gone |
-| **Wait for air** | A known position on the route, with air support promised | All hold | The support arrives or lapses |
+| **Wait for air** | A known position on the route, when the platoon can call Air Ops: it asks for guns on the position | All hold | Support arrives, then **push through**, or nobody answers in `airWaitSeconds` |
+| **Push through** | Air has arrived over a position the platoon waited at, or air operations has announced that the position ahead, or the one firing on it, is being suppressed now | All move on past it on their route, returning fire. Under an announced suppression they keep going even when fired on from close, rather than assaulting into the fire | The position is behind them |
 
 - **Support by fire:** Not a drill of its own, but the role that pins an enemy while others move. The share of squads comes from doctrine.
 - **Choosing at a known position:** The platoon estimates the enemy's strength from all its reports and contacts there. It attacks up to `attackStrengthRatio`, and otherwise bypasses, unless the way around is over `maxDetourFactor` times as long. It also bypasses if there isn't time to attack.
 - **Flanking:** A flanker goes to a point `flankMeters` to one side of the enemy, choosing the side that the enemy can't see and that has more cover, then keeps clear of the enemy on the way there. Routes avoid the enemy's position, not every line of sight.
+- **Positions, not units:** A drill works on positions as the platoon sees them, never on a unit. Squads move to an estimated position and fire at a point on the ground, and fire hits whoever is actually near that point, within `fireSpreadMeters`. A bad estimate can miss, a position can be suppressed with nobody in view, and firing on an empty position wastes ammunition.
 - **Handled positions:** A position a platoon has dealt with stays dealt with, so a report it found empty can't stop it twice.
 - **Time limit:** Every drill ends after a doctrine-set time, so a drill can't hold a platoon forever.
 - **Radio:** Starting a drill sends a `DRILL` message, so the player can see a forwarded report change what a unit does.
@@ -284,7 +286,7 @@ The player has three radio actions:
 
 Arbitrary map coordinates are used only for aircraft tasking. The player cannot invent an enemy contact in v0.1. Ground AI may act on a forwarded report but does not become player-controlled.
 
-**Expected support:** The player never types or chooses an arrival time. `CAS inbound, ETA four minutes` is available only while a CAS aircraft has a `SupportArea` mission covering, or within a configured distance of, the recipient's last reported position. The ETA is calculated from that aircraft's mission. If the aircraft is diverted, delayed or returns to base, air operations automatically sends an update, which takes simulated time like any other transmission. An estimate that is never updated lapses after a configured grace period past its ETA.
+**Expected support:** The player never types or chooses an arrival time. `CAS inbound, ETA four minutes` is available only while a CAS aircraft is watching or covering with weapons free, or suppressing or striking, an area covering, or within a configured distance of, the recipient's last reported position. The ETA is calculated from that aircraft's mission. If the aircraft is diverted, delayed or returns to base, air operations automatically sends an update, which takes simulated time like any other transmission. An estimate that is never updated lapses after a configured grace period past its ETA.
 
 ### 6.4 Points of interest
 
@@ -332,23 +334,43 @@ Aircraft have ID, type, true and player-visible position, altitude, base, speed,
 
 Every aircraft is a real model, defined by data, and its role (recon or CAS) decides which orders it takes. Performance follows published figures where they matter to the game; see §8.5.
 
-Player orders:
+Player orders. Every task has a center and a radius, and the aircraft orbits the center no tighter than it can fly:
 
-- `MoveTo(point)`
-- `Orbit(point, radius)`
-- `ReconArea(center, radius)`
-- `SupportArea(center, radius)`
+- `Watch(center, radius)`: be over the area. Recon searches it (§8.0). A strike aircraft circles and engages hostiles it finds there, as far as its weapons control allows.
+- `Cover(platoon, radius)`: watch the ground ahead of a friendly platoon. The center follows the platoon's position on the controller's map, pushed `coverAheadMeters` along its reported heading.
+- `Suppress(center, radius, until)`: gun runs on the area until the given time, with no target needed (§8.1.2). Strike aircraft only.
+- `Strike(center, radius)`: one heavy pass on the center, then watch it. Strike aircraft only.
 - `ReturnToBase`
-- `SetAltitude(meters)`, separate from the mission, so an aircraft keeps its altitude across missions
+- `SetAltitude(meters)` and `SetRisk(level)`, separate from the task, so they outlast it
+- `SetWeapons(hold | bombs | guns | both)`: weapons control for the targets a crew picks itself, also separate from the task. Both is the default.
+
+There used to be `MoveTo`, `Orbit`, `ReconArea` and `SupportArea`. They differed only in whether recon searched and whether a strike aircraft could fire, so they're now one Watch task plus weapons control: Orbit for a strike aircraft is Watch on Hold, and Support area is Watch with weapons free.
+
+The map's right-click menu offers Suppress and Strike on the clicked place for each strike aircraft that can take an order, beside the points of interest. A friendly platoon's panel offers Cover with each strike aircraft.
 
 Orders update missions; movement consumes simulated time and fuel. Aircraft can be retasked in flight, and aircraft launching from base incur a defined takeoff delay. Reconnaissance observes within a simplified footprint using air LOS and air concealment. Aircraft observations update the player's map automatically. Only a confirmed hostile that isn't already tracked from the air nearby generates a radio message, because the map already shows every sighting. Ground formations receive aircraft observations only when the player transmits them.
+
+### 8.0 Crew autonomy
+
+The controller decides what, where and how much risk, and the crew decides how. `decideCrew` runs every few seconds and reads only the crew's own contacts, the ground fire it has met, the forecast and the controller's map. It never reads truth.
+
+- **Altitude:** The crew chooses its own: its working height, below cloud and within sight of the ground, low in transit for strike aircraft, and higher once recon has been shot at. Setting an altitude by hand overrides this until the controller hands it back.
+- **Risk limit:** Set per aircraft, and it outlasts a mission. **Cautious** stays above every weapon it knows of and breaks off at any ground fire. **Normal** breaks off when hit or fired on by air defense. **Press on** never breaks off and will attack where it was shot at.
+- **Breaking off:** The crew flies away from where it thinks the fire came from for `breakSeconds`, then returns to work.
+- **Target choice:** Known air defense comes first. Otherwise a crew stays off places it was recently fired on, unless told to press on.
+- **Attack runs:** A pass is a run: the crew flies at its aiming point, releases at `releaseMeters`, or the closer `gunReleaseMeters` for guns, then pulls off. It can be fired on the whole way in.
+- **Weapons control:** Set per aircraft: **Hold**, **Bombs**, **Guns** or **Both**. It governs only the targets a crew picks itself under Watch or Cover. On Hold the crew picks none. Suppress and Strike are the controller's own call, so they fire whatever it says.
+- **Keeping a position down:** On Guns, the crew spaces its bursts out over the time it can stay on station. Its job there is to keep heads down, not to kill.
+- **Weapons:** Heavy ordnance does the most and goes first. Guns are many bursts that hit a small area and need a low run, which exposes the aircraft. They're used where friends are too close for heavy ordnance but outside `gunDangerCloseMeters`, and when heavy ordnance has run out.
+- **Search:** Recon told to Watch flies a pattern over the area until it finds something, then stays to watch it, doubtful contacts first. A helicopter holds its position instead.
+- **Never on its own:** A crew doesn't leave its area, forward a report, answer a ground unit or release inside danger close.
 
 ### 8.1 CAS engagement
 
 CAS has three stages:
 
 1. **Search:** The aircraft attempts to acquire a target within its assigned area using its own sensors. Its cue can come from player orders, existing intelligence or reconnaissance reports. A good reconnaissance cue can shorten the search, but it never makes a target visible automatically. If a report is stale or inaccurate, the aircraft may find nothing.
-2. **Identify:** Identification may remain unknown or take time, but a confirmed classification is never wrong in v0.1.
+2. **Identify:** Identification may remain unknown or take time, and a crew can mistake friendly troops for hostile (§8.1.1). It never makes the opposite mistake.
 3. **Engage:** An aircraft can attack only a contact it has identified as hostile. Unidentified contacts are never attacked.
 
 Arriving at a reported TIC coordinate does not guarantee acquisition. Attacks are discrete passes. Each successful pass consumes ammunition and causes probabilistic suppression and casualties, modified by air cover and weapon characteristics, and can interrupt what the enemy formation was doing. Results flow through the shared ground-combat state rather than a scripted `support = success` flag. The player's click on a marker does not itself damage anything.
@@ -356,6 +378,28 @@ Arriving at a reported TIC coordinate does not guarantee acquisition. Attacks ar
 Contact position error and CAS search radius are tuned together, so that reconnaissance can make the difference between acquiring and missing a target.
 
 The combat resolver prevents friendly-fire damage in v0.1. Aircraft report observed strike results automatically, never omniscient casualty counts.
+
+### 8.1.1 Friendly fire and danger close
+
+Strikes hit whoever is near the aiming point, on either side. Ground fire doesn't: a platoon's own fire on friends isn't simulated.
+
+- **The rule:** A crew won't release heavy ordnance within `dangerCloseMeters`, or guns within `gunDangerCloseMeters`, of a friendly marker on the controller's map unless that unit has clearance. It holds, says so on the radio, and looks for another target. The check reads the map, so a stale marker is how a strike reaches friends who aren't where the map says.
+- **What a unit asks for:** A support request names the weapons wanted and, if the unit knows one, a target. A unit asks for guns when it has to move past the enemy or the enemy is close, and for both otherwise. The controller may give something else.
+- **Asking:** Only the ground unit can ask, because its commander is the one accepting the risk. A support request says danger close when the unit's own picture puts the enemy inside `radio.dangerCloseMeters`, and it can ask even after an earlier request was answered.
+- **Clearing:** The controller approves or denies. Approval lasts `dangerCloseClearanceSeconds` and covers that unit only.
+- **Mistaken identity:** A crew sometimes takes friendly troops for hostile, at `misidentifyChance`, more often at long range. The contact looks like any other, so the map check is the safeguard.
+- **Check fire:** A unit hit by its own side's strike calls it in as urgent.
+- **The map:** The controller's map is the reference for all of this. Aircraft sightings of friendly units update their markers directly, and only enemy reports are consolidated.
+
+### 8.1.2 Fire missions: Suppress and Strike
+
+Both fire on a place the controller chose, not on something the crew identified, so they need no target and can hit nothing. Each pass is resolved like any other, against whoever is truly near the aim.
+
+- **Suppress:** Gun runs until the window closes or the guns are empty, then the aircraft watches the area. The crew spreads its bursts to last the window, never faster than its gun runs allow. It walks its fire across the area, out to `suppressSpreadShare` of the radius, and picks the next point in the walk that is clear of friendly platoons on the map. With no seen enemy to justify the risk, it keeps friends out of the whole reach of a gun pass, `gunSplashMeters × splashReach`, not just `gunDangerCloseMeters`, and holds if nowhere is clear. A platoon is one point on the map but its squads spread around it, which is why the margin matters.
+- **Strike:** One heavy pass on the center, then the aircraft watches it. It keeps to `dangerCloseMeters`.
+- **Risk:** Both follow the risk limit: unless told to press on, a crew stays off a place where it was seriously fired on.
+- **Telling the ground:** When the controller orders a suppression, air operations announces it to every platoon it can reach, with the place and the times: from the aircraft's ETA until the end of the window. Giving the aircraft another task calls it off, which is also announced. Platoons know only what they were told, not whether the aircraft is really there. A platoon whose route runs past an announced suppression, or that is fired on from inside one, pushes through (§4.0.2).
+- **Results:** The crew reports each pass as fire on an area, with the effect it saw. Nothing is credited to a contact.
 
 ### 8.2 Fuel, turnaround and aircraft presence
 
@@ -557,6 +601,8 @@ The radio union is a sketch, not the complete schema; each final message type ne
 Define tie-breaking (entity ID order) so repeated runs are reproducible. Fork RNG streams by stable label. Do not let entity iteration order accidentally change visibility or combat outcomes.
 
 ### 10.4 Information boundaries
+
+**Deciding uses estimates, resolving uses truth.** Everything that chooses what to do reads only a unit's or crew's own picture: where to move, where to shoot, whether to shoot, which drill to run, what to report. Truth is read only to work out what happens: who a shot hits, who sees what, and what an estimate comes out as. Forwarded reports carry the crew's estimate unchanged, errors included.
 
 | Layer | Contents |
 |---|---|

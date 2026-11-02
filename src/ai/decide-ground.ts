@@ -1,26 +1,28 @@
 import { hypot } from '../domain/public/det-math';
 import { airHitChance } from '../domain/public/equipment';
 import { strengthMidpoint, type ContactEstimate } from '../domain/public/estimates';
+import { holdsGround } from '../domain/public/ground';
 import { groupStrength } from './contact-groups';
 import { ambushSprung, nextDrill } from './drills';
 import { distance, type Vec2 } from '../domain/public/geometry';
 import type {
   Area,
+  Drill,
   DrillMap,
   GroundBehavior,
   GroundDecision,
   GroundIntent,
   GroundMode,
   PlatoonDecision,
+  SquadRole,
   UnitKnowledge,
   UnitSelf,
 } from '../domain/public/ground';
 
 const ENGAGE_MEMORY_TICKS = 20;
-const REPOSITION_ARRIVED_METERS = 25;
-const BREAK_CONTACT_METERS = 300;
-const LOW_AMMUNITION_FRACTION = 0.25;
-const NO_SUPPORT_WEAPONS_ASSAULT_FACTOR = 0.6;
+
+/** Roles that fire on a position even with nobody seen there. */
+const SUPPRESSES: ReadonlySet<SquadRole> = new Set(['support']);
 const AIRCRAFT_MEMORY_TICKS = 10;
 
 /** Fire rate per behavior, supplied by the scenario so that it stays tunable. */
@@ -33,14 +35,16 @@ export function decideGround(
   knowledge: UnitKnowledge,
   tick: number,
   rates: BehaviorFireRates,
+  map: DrillMap,
 ): GroundDecision {
   const { mode } = self;
+  const lying = self.objective.kind === 'AmbushArea' && !self.ambushSprung;
   const patrolIndex = nextPatrolIndex(self);
   const decision = (intent: GroundIntent, behavior: GroundBehavior | null, avoid: Area | null = null, viaDone = false): GroundDecision => ({
     intent,
     behavior,
     behaviorSinceTick: behavior === self.behavior ? self.behaviorSinceTick : tick,
-    firesAtAircraft: mode !== 'broken' && firesAtAircraft(self, knowledge, tick),
+    firesAtAircraft: mode !== 'broken' && !lying && firesAtAircraft(self, knowledge, tick),
     patrolIndex,
     viaDone,
     avoid,
@@ -57,11 +61,10 @@ export function decideGround(
   if (mode === 'broken') return decision({ kind: 'hold', posture: 'defending' }, 'disengage');
 
   if (self.drill !== null && self.role !== null) {
-    const { intent, viaDone } = runDrill(self, target, rates);
+    const { intent, viaDone } = runDrill(self, self.drill, self.role, target, rates, map);
     return decision(intent, intent.kind === 'engage' ? 'assault' : null, drillAvoid(self, viaDone), viaDone);
   }
-  const lying = self.objective.kind === 'AmbushArea' && !self.ambushSprung;
-  if (lying) return decision(lieInWait(self, self.objective.area), null);
+  if (self.objective.kind === 'AmbushArea' && lying) return decision(lieInWait(self, self.objective.area), null);
 
   if (target !== null && self.ammunition > 0) {
     const behavior = chooseBehavior(self, knowledge, target, tick);
@@ -93,8 +96,9 @@ function takingAirCover(self: UnitSelf, knowledge: UnitKnowledge, tick: number):
   return seenAt !== null && tick - seenAt < self.doctrine.airCoverSeconds;
 }
 
-const holdsGround = (self: UnitSelf): boolean =>
-  self.objective.kind === 'HoldArea' || self.objective.kind === 'AmbushArea';
+
+const canAnswerPosition = ({ objective, doctrine }: UnitSelf): boolean =>
+  objective.kind !== 'WithdrawTo' && (doctrine.drills.includes('attack') || doctrine.drills.includes('bypass'));
 
 function casualtyFraction(self: UnitSelf): number {
   return 1 - self.personnel / self.initialPersonnel;
@@ -136,7 +140,7 @@ export function decidePlatoon(platoon: UnitSelf, knowledge: UnitKnowledge, tick:
 /** A platoon on the move pulls back only as far as it must, then carries on. */
 function rallyPoint(self: UnitSelf, knowledge: UnitKnowledge, tick: number): Area {
   const { rallyMeters } = self.doctrine;
-  if (rallyMeters === null || self.objective.kind === 'HoldArea') return self.fallback;
+  if (rallyMeters === null || holdsGround(self.objective)) return self.fallback;
   const threat = chooseTarget(self, knowledge, tick);
   if (threat === null) return self.fallback;
   const center = pointAway(self.position, threat.position.center, rallyMeters);
@@ -204,7 +208,7 @@ function rangeTo(self: UnitSelf, target: ContactEstimate): number {
 
 /** Enemy strength over own, from what the unit sees and what it has been told. */
 function perceivedRatio(self: UnitSelf, knowledge: UnitKnowledge, target: ContactEstimate, tick: number): number {
-  const seen = groupStrength(knowledge, target);
+  const seen = groupStrength(knowledge, target, self.doctrine.groupRadiusMeters);
   const reported = reportedThreat(self, knowledge, target.position.center, self.doctrine.alertRadiusMeters, tick);
   const told = reported === null ? 0 : strengthMidpoint(reported.strength);
   return Math.max(seen, told) / Math.max(1, self.platoonPersonnel);
@@ -214,7 +218,7 @@ function perceivedRatio(self: UnitSelf, knowledge: UnitKnowledge, target: Contac
 function mustDefend(self: UnitSelf, target: ContactEstimate): boolean {
   const reaches = ({ center, radius }: Area): boolean =>
     distance(target.position.center, center) <= radius + self.doctrine.standoffMeters;
-  if (holdsGround(self) && 'area' in self.objective && reaches(self.objective.area)) return true;
+  if (holdsGround(self.objective) && reaches(self.objective.area)) return true;
   return inArea(self.position, self.fallback) && reaches(self.fallback);
 }
 
@@ -226,11 +230,11 @@ function scoreBehaviors(
 ): readonly (readonly [GroundBehavior, number])[] {
   const { doctrine } = self;
   const ratio = perceivedRatio(self, knowledge, target, tick);
-  const ammunition = Math.min(1, self.ammunition / (self.initialAmmunition * LOW_AMMUNITION_FRACTION));
+  const ammunition = Math.min(1, self.ammunition / (self.initialAmmunition * self.doctrine.assaultAmmunitionFraction));
   const support = expectsSupport(knowledge, tick) ? 1 + doctrine.supportHoldBonus : 1;
   const uncertain = target.strength.kind === 'unknown' || target.confidence === 'low' ? 1 : 0.4;
   // A unit weighs what it can actually do: without heavy weapons it is a poor assault element.
-  const firepower = self.supportWeapons > 0 ? 1 : NO_SUPPORT_WEAPONS_ASSAULT_FACTOR;
+  const firepower = self.supportWeapons > 0 ? 1 : self.doctrine.noSupportWeaponsAssaultFactor;
   return [
     ['assault', doctrine.assaultBias * self.morale * ammunition * support * firepower * Math.min(1.5, 1 / ratio)],
     ['harass', doctrine.harassBias * ammunition * (1 + self.groundCover)],
@@ -267,7 +271,7 @@ function chooseBehavior(
 /** A holding unit told what is coming has had time to prepare its positions. */
 function isForewarned(self: UnitSelf, knowledge: UnitKnowledge, tick: number): boolean {
   const { objective, doctrine } = self;
-  if (objective.kind !== 'HoldArea' && objective.kind !== 'AmbushArea') return false;
+  if (!holdsGround(objective)) return false;
   return reportedThreat(self, knowledge, objective.area.center, doctrine.alertRadiusMeters, tick) !== null;
 }
 
@@ -279,7 +283,7 @@ function returnFire(
 ): GroundIntent | null {
   if (target === null || !self.underFire || self.ammunition <= 0) return null;
   if (rangeTo(self, target) > self.doctrine.engageRangeMeters) return null;
-  return { kind: 'engage', contactId: target.contactId, closeTo: moveTo, fireRate: rates.disengage, prepared: false };
+  return { kind: 'engage', aim: target.position.center, closeTo: moveTo, fireRate: rates.disengage, prepared: false };
 }
 
 function actOn(
@@ -296,7 +300,7 @@ function actOn(
   const pinned = self.suppression >= pinnedSuppression || takingAirCover(self, knowledge, tick);
   const engageAt = (closeTo: Vec2 | null, fireRate: number): GroundIntent => ({
     kind: 'engage',
-    contactId: target.contactId,
+    aim: target.position.center,
     closeTo: pinned ? null : closeTo,
     fireRate,
     prepared: isForewarned(self, knowledge, tick),
@@ -311,13 +315,13 @@ function actOn(
     case 'harass':
       return engageAt(range > engageRangeMeters ? target.position.center : null, rates[behavior]);
     case 'observe': {
-      const tooClose = range < standoffMeters && !holdsGround(self);
-      const away = pointAway(self.position, target.position.center, BREAK_CONTACT_METERS);
+      const tooClose = range < standoffMeters && !holdsGround(self.objective);
+      const away = pointAway(self.position, target.position.center, self.doctrine.breakContactMeters);
       if (self.underFire && range <= engageRangeMeters) {
         return engageAt(tooClose ? away : null, rates.observe);
       }
       if (tooClose) return { kind: 'move', destination: away };
-      if (holdsGround(self)) return pursueObjective(self, knowledge, patrolIndex, tick);
+      if (holdsGround(self.objective)) return pursueObjective(self, knowledge, patrolIndex, tick);
       return { kind: 'hold', posture: 'prone' };
     }
     case 'disengage':
@@ -378,20 +382,20 @@ function holdArea(self: UnitSelf, knowledge: UnitKnowledge, area: Area, tick: nu
   const threat = reportedThreat(self, knowledge, area.center, self.doctrine.alertRadiusMeters, tick);
   if (threat !== null) {
     const facing = slotted(self, pointToward(area.center, threat.position.center, area.radius * 0.7), area.radius * 0.3);
-    if (distance(self.position, facing) > REPOSITION_ARRIVED_METERS) return { kind: 'move', destination: facing };
+    if (distance(self.position, facing) > self.doctrine.arrivedMeters) return { kind: 'move', destination: facing };
     return { kind: 'hold', posture: 'defending' };
   }
   const post = slotted(self, area.center, area.radius);
-  return distance(self.position, post) <= REPOSITION_ARRIVED_METERS
+  return distance(self.position, post) <= self.doctrine.arrivedMeters
     ? { kind: 'hold', posture: 'defending' }
     : { kind: 'move', destination: post };
 }
 
 function advance(self: UnitSelf, knowledge: UnitKnowledge, area: Area, tick: number): GroundIntent {
   if (inArea(self.position, area)) return { kind: 'hold', posture: 'defending' };
-  // A platoon with drills answers a reported position with one (§4.0.2); others wait it out.
+  // A platoon with the drills for it answers a reported position (§4.0.2); others wait it out.
   const threat = reportedThreat(self, knowledge, self.position, self.doctrine.alertRadiusMeters, tick);
-  if (self.doctrine.drills.length === 0 && threat !== null && strengthRatio(self, threat) >= self.doctrine.delayStrengthRatio) {
+  if (!canAnswerPosition(self) && threat !== null && strengthRatio(self, threat) >= self.doctrine.delayStrengthRatio) {
     return { kind: 'hold', posture: 'prone' };
   }
   return { kind: 'move', destination: slotted(self, area.center, area.radius) };
@@ -439,7 +443,7 @@ function pursueObjective(
 /** Moves to its place on the ambush, then hides. */
 function lieInWait(self: UnitSelf, area: Area): GroundIntent {
   const post = slotted(self, area.center, area.radius);
-  return distance(self.position, post) <= REPOSITION_ARRIVED_METERS
+  return distance(self.position, post) <= self.doctrine.arrivedMeters
     ? { kind: 'hold', posture: 'hidden' }
     : { kind: 'move', destination: post };
 }
@@ -455,50 +459,67 @@ const drillAvoid = (self: UnitSelf, viaDone: boolean): Area | null =>
 type DrillAct = Readonly<{ intent: GroundIntent; viaDone: boolean }>;
 
 /** What this squad's role asks of it (§4.0.2). */
-function runDrill(self: UnitSelf, target: ContactEstimate | null, rates: BehaviorFireRates): DrillAct {
-  const drill = self.drill;
-  if (drill === null) return { intent: { kind: 'hold', posture: 'prone' }, viaDone: false };
+function runDrill(
+  self: UnitSelf,
+  drill: Drill,
+  role: SquadRole,
+  target: ContactEstimate | null,
+  rates: BehaviorFireRates,
+  map: DrillMap,
+): DrillAct {
   const { doctrine } = self;
   const pinned = self.suppression >= doctrine.pinnedSuppression;
-  const inReach = target !== null && self.ammunition > 0 && rangeTo(self, target) <= doctrine.engageRangeMeters;
+  const stay: GroundIntent = { kind: 'hold', posture: 'prone' };
+  // Pinned or out of rounds, a squad goes nowhere: it can't carry the drill forward.
+  const go = (destination: Vec2): GroundIntent =>
+    pinned || self.ammunition <= 0 ? stay : { kind: 'move', destination };
+  // Fire goes at a place: the enemy as this platoon sees it, or, with nobody in view,
+  // the position the drill is about, which support can still suppress.
+  const point = target?.position.center ?? (SUPPRESSES.has(role) ? drill.target : null);
+  const inReach =
+    point !== null &&
+    self.ammunition > 0 &&
+    distance(self.position, point) <= doctrine.engageRangeMeters &&
+    map.sees(self.position, point);
   const fire = (closeTo: Vec2 | null, fireRate: number, prepared = false): GroundIntent =>
-    target === null
-      ? { kind: 'hold', posture: 'prone' }
-      : { kind: 'engage', contactId: target.contactId, closeTo: pinned ? null : closeTo, fireRate, prepared };
+    point === null
+      ? stay
+      : { kind: 'engage', aim: point, closeTo: pinned ? null : closeTo, fireRate: target === null ? rates.harass : fireRate, prepared };
   const close = (): GroundIntent => {
-    const aim = target?.position.center ?? slotted(self, drill.target, drill.radius);
-    const stopAt = doctrine.closesToMeters ?? REPOSITION_ARRIVED_METERS;
-    if (inReach) return fire(rangeTo(self, target) > stopAt ? aim : null, rates.assault);
-    return distance(self.position, aim) > REPOSITION_ARRIVED_METERS ? { kind: 'move', destination: aim } : { kind: 'hold', posture: 'defending' };
+    const aim = point ?? slotted(self, drill.target, drill.radius);
+    const stopAt = doctrine.closesToMeters ?? self.doctrine.arrivedMeters;
+    if (inReach) return fire(distance(self.position, aim) > stopAt ? aim : null, rates.assault);
+    return distance(self.position, aim) > self.doctrine.arrivedMeters ? go(aim) : { kind: 'hold', posture: 'defending' };
   };
 
-  switch (self.role) {
+  switch (role) {
     case 'assault':
       return { intent: close(), viaDone: false };
     case 'support': {
       if (inReach) return { intent: fire(null, rates.assault), viaDone: false };
-      const standoff = doctrine.engageRangeMeters * 0.8;
       const gap = distance(self.position, drill.target);
-      if (gap > standoff) return { intent: { kind: 'move', destination: pointToward(self.position, drill.target, gap - standoff) }, viaDone: false };
-      return { intent: { kind: 'hold', posture: 'prone' }, viaDone: false };
+      const standoff = doctrine.engageRangeMeters * 0.8;
+      if (gap > standoff) return { intent: go(pointToward(self.position, drill.target, gap - standoff)), viaDone: false };
+      // In range but no view: it has to move to be any use.
+      const blocked = target !== null && self.ammunition > 0;
+      return { intent: blocked ? go(pointToward(self.position, drill.target, self.doctrine.sidestepMeters)) : stay, viaDone: false };
     }
     case 'maneuver': {
-      const via = drill.via;
-      const viaDone = self.viaDone || via === null || distance(self.position, via) <= REPOSITION_ARRIVED_METERS * 2;
+      const { via } = drill;
+      const viaDone = self.viaDone || via === null || distance(self.position, via) <= self.doctrine.arrivedMeters * 2;
       if (viaDone) return { intent: close(), viaDone: true };
-      return { intent: inReach && self.underFire ? fire(via, rates.disengage) : { kind: 'move', destination: via }, viaDone: false };
+      return { intent: inReach && self.underFire ? fire(via, rates.disengage) : go(via), viaDone: false };
     }
     case 'cover':
-      return { intent: inReach ? fire(null, rates.assault, true) : { kind: 'hold', posture: 'prone' }, viaDone: false };
+      return { intent: inReach ? fire(null, rates.assault, true) : stay, viaDone: false };
     case 'bypass': {
       const onward = objectivePoint(self) ?? drill.target;
-      return { intent: inReach && self.underFire ? fire(onward, rates.disengage) : { kind: 'move', destination: onward }, viaDone: false };
+      return { intent: inReach && self.underFire ? fire(onward, rates.disengage) : go(onward), viaDone: false };
     }
     case 'ambush':
       if (self.ambushSprung && inReach) return { intent: fire(null, rates.assault), viaDone: false };
       return { intent: { kind: 'hold', posture: 'hidden' }, viaDone: false };
     case 'hold':
-    case null:
-      return { intent: inReach && self.underFire ? fire(null, rates.observe, true) : { kind: 'hold', posture: 'prone' }, viaDone: false };
+      return { intent: inReach && self.underFire ? fire(null, rates.observe, true) : stay, viaDone: false };
   }
 }

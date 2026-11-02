@@ -14,6 +14,7 @@ import {
   type MessageId,
   type RadioMessage,
   type ReportNeed,
+  type Suppression,
 } from '../domain/public/radio';
 import type { Aircraft } from '../domain/truth/world';
 import { receiveByUnit } from '../knowledge/unit-knowledge';
@@ -153,6 +154,51 @@ function cancelPoi(state: SimState, scenario: Scenario, poiId: string): void {
   sendPoi(state, scenario, poi, true);
 }
 
+/**
+ * Air operations puts a suppression mission on the net, so platoons know when a position will
+ * have its head down, and calls it off when the aircraft is given something else (§8.0).
+ */
+function announceSuppression(state: SimState, scenario: Scenario, aircraft: Aircraft, before: Aircraft['order']): void {
+  const order = aircraft.order;
+  const suppressing = order?.kind === 'Suppress';
+  if (!suppressing && before?.kind !== 'Suppress') return;
+  const entry = aircraftTelemetry(state.truth, scenario.file.air, state.tick).find((candidate) => candidate.aircraftId === aircraft.id);
+  const recipients = Object.values(state.truth.platoons)
+    .filter((platoon) => platoon.side === 'friendly' && canReach(scenario, platoon.id))
+    .map((platoon) => platoon.id as string)
+    .sort();
+  const suppression: Suppression = suppressing
+    ? {
+        aircraftId: aircraft.id,
+        center: order.center,
+        radius: order.radius,
+        fromTick: state.tick + Math.ceil(entry?.etaSeconds ?? 0),
+        untilTick: order.untilTick,
+      }
+    : { aircraftId: aircraft.id, center: before?.kind === 'Suppress' ? before.center : aircraft.position, radius: 0, fromTick: state.tick, untilTick: state.tick };
+  for (const recipient of recipients) {
+    const message: RadioMessage = {
+      id: nextId(state.radio),
+      kind: 'SUPPRESSION',
+      senderId: AIR_OPS,
+      observedAt: state.tick,
+      sentAt: state.tick,
+      receivedAt: state.tick + scenario.file.radio.transmitSeconds,
+      suppression,
+      cancelled: !suppressing,
+    };
+    transmit(state, scenario, { kind: 'message', recipient, message });
+  }
+}
+
+/** Clearing it is the controller's call, and only on a unit's own request (§8.1.1). */
+function answerDangerClose(state: SimState, scenario: Scenario, unitId: string, approved: boolean): void {
+  const request = state.player.supportRequests[unitId];
+  if (request === undefined || !request.dangerClose) return;
+  state.player.supportRequests[unitId] = { ...request, dangerClose: false };
+  if (approved) state.player.dangerCloseClearedUntil[unitId] = state.tick + scenario.file.air.dangerCloseClearanceSeconds;
+}
+
 function aircraftById(aircraft: readonly Aircraft[], id: AircraftId): Aircraft | undefined {
   return aircraft.find((entry) => entry.id === id);
 }
@@ -164,7 +210,10 @@ export function applyCommand(state: SimState, command: PlayerCommand, scenario: 
       return;
     case 'aircraftOrder': {
       const aircraft = aircraftById(state.truth.aircraft, command.aircraftId);
-      if (aircraft !== undefined) applyOrder(aircraft, command.order, scenario.file.air);
+      if (aircraft === undefined) return;
+      const before = aircraft.order;
+      if (!applyOrder(aircraft, command.order, scenario.file.air)) return;
+      announceSuppression(state, scenario, aircraft, before);
       return;
     }
     case 'setAltitude': {
@@ -172,6 +221,24 @@ export function applyCommand(state: SimState, command: PlayerCommand, scenario: 
       if (aircraft !== undefined) setTargetAltitude(aircraft, command.meters, scenario.file.air);
       return;
     }
+    case 'releaseAltitude': {
+      const aircraft = aircraftById(state.truth.aircraft, command.aircraftId);
+      if (aircraft !== undefined) aircraft.manualAltitude = false;
+      return;
+    }
+    case 'setRisk': {
+      const aircraft = aircraftById(state.truth.aircraft, command.aircraftId);
+      if (aircraft !== undefined) aircraft.risk = command.risk;
+      return;
+    }
+    case 'setWeapons': {
+      const aircraft = aircraftById(state.truth.aircraft, command.aircraftId);
+      if (aircraft !== undefined) aircraft.weapons = command.weapons;
+      return;
+    }
+    case 'answerDangerClose':
+      answerDangerClose(state, scenario, command.unitId, command.approved);
+      return;
     case 'reportPoi':
       reportPoi(state, scenario, command);
       return;

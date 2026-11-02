@@ -13,21 +13,21 @@ import {
   type UnitSelf,
 } from '../domain/public/ground';
 import { cellAt, hasGroundLos, type TerrainGrid } from '../domain/public/terrain';
-import { CECON, type MessageId } from '../domain/public/radio';
+import { AIR_OPS, CECON, type MessageId } from '../domain/public/radio';
 import type { GroundUnit, Platoon, WorldTruth } from '../domain/truth/world';
 import { reviewContacts } from '../knowledge/player-knowledge';
 import { updatePerception } from '../perception/observe';
 import { nextGaussian, type RngState } from '../rng/streams';
 import type { Scenario } from '../scenario/load';
 import type { PerceptionConfig } from '../scenario/schema';
-import { advanceAircraft, resolveCas, sensorCoverage, updateAircraftNotice, updateAircraftPerception } from './air';
+import { advanceAircraft, updateCrews, resolveCas, sensorCoverage, updateAircraftNotice, updateAircraftPerception } from './air';
 import { resolveGroundFire } from './ground-fire';
 import { issueForecast } from './weather';
 import { resolveCombat } from './combat';
 import { updateOutcome } from './outcome';
 import { advanceOutbound, applyCommand, reviewPromises } from './player-commands';
-import { livingSquads, platoonOf, platoonSelf, sortedPlatoons } from './platoon';
-import { advanceRadio, enqueue, planReports, type RadioUnit } from './radio';
+import { livingSquads, platoonOf, platoonPersonnel, platoonSelf, sortedPlatoons } from './platoon';
+import { advanceRadio, enqueue, linkedNodes, planReports, type RadioUnit } from './radio';
 import { findRoute, routeLength } from './route';
 import type { SimState } from './state';
 
@@ -75,10 +75,21 @@ function selfView(unit: GroundUnit, platoon: Platoon, personnel: number, scenari
     handled: platoon.handled,
     routeAhead: unit.route,
     secondsLeft: file.durationSeconds - tick,
+    canCallAir: linkedNodes(scenario, platoon.id).includes(AIR_OPS),
     objective: platoon.objective,
     fallback: platoon.fallback,
     doctrine: unit.doctrine,
   };
+}
+
+function squadViews(state: SimState, scenario: Scenario): ReadonlyMap<string, UnitSelf> {
+  const { truth, tick } = state;
+  const squads = new Map<string, UnitSelf>();
+  for (const platoon of sortedPlatoons(truth)) {
+    const personnel = platoonPersonnel(platoon);
+    for (const unit of livingSquads(platoon)) squads.set(unit.id, selfView(unit, platoon, personnel, scenario, tick));
+  }
+  return squads;
 }
 
 type Selves = Readonly<{ squads: ReadonlyMap<string, UnitSelf>; platoons: ReadonlyMap<string, UnitSelf> }>;
@@ -90,7 +101,7 @@ function selfViews(state: SimState, scenario: Scenario, wanted?: (platoonId: str
   for (const platoon of sortedPlatoons(truth)) {
     if (wanted !== undefined && !wanted(platoon.id)) continue;
     const living = livingSquads(platoon);
-    const personnel = living.reduce((sum, unit) => sum + unit.personnel, 0);
+    const personnel = platoonPersonnel(platoon);
     for (const unit of living) squads.set(unit.id, selfView(unit, platoon, personnel, scenario, tick));
     const self = platoonSelf(platoon, living, squads, scenario);
     if (self !== null) platoons.set(platoon.id, self);
@@ -129,6 +140,8 @@ function reportedPosition(knowledge: UnitKnowledge, memory: number, tick: number
 
 function followOrders(state: SimState, platoon: Platoon, done: boolean): void {
   const { tick } = state;
+  // Each finished objective starts only the next one in the schedule.
+  let arrived = done;
   platoon.objectiveSchedule.forEach((entry, index) => {
     if (entry.kind === 'time') {
       if (entry.fromTick === tick) changeObjective(platoon, entry.objective);
@@ -136,7 +149,8 @@ function followOrders(state: SimState, platoon: Platoon, done: boolean): void {
     }
     if (platoon.ordersUsed.includes(index)) return;
     if (entry.kind === 'objectiveDone') {
-      if (!done) return;
+      if (!arrived) return;
+      arrived = false;
       platoon.ordersUsed = [...platoon.ordersUsed, index];
       changeObjective(platoon, entry.objective);
       return;
@@ -180,7 +194,10 @@ function applyPlatoonDecisions(state: SimState, selves: ReadonlyMap<string, Unit
   const map = drillMap(scenario.terrain);
   for (const platoon of sortedPlatoons(state.truth)) {
     const self = selves.get(platoon.id);
-    if (self === undefined || state.tick < platoon.activeFromTick) continue;
+    if (self === undefined || state.tick < platoon.activeFromTick) {
+      followOrders(state, platoon, false);
+      continue;
+    }
     const decision = decidePlatoon(self, state.unitKnowledge[platoon.id] ?? emptyKnowledge(), state.tick, map);
     platoon.mode = decision.mode;
     platoon.returnsUsed = decision.returnsUsed;
@@ -197,21 +214,13 @@ function applyPlatoonDecisions(state: SimState, selves: ReadonlyMap<string, Unit
 }
 
 function applyDecisions(state: SimState, selves: ReadonlyMap<string, UnitSelf>, scenario: Scenario): void {
+  const map = drillMap(scenario.terrain);
   for (const unit of state.truth.units) {
     const self = selves.get(unit.id);
     const platoon = platoonOf(state.truth, unit);
     if (self === undefined || unit.personnel <= 0 || state.tick < platoon.activeFromTick) continue;
     const knowledge = state.unitKnowledge[unit.platoonId] ?? emptyKnowledge();
-    const current = {
-      ...self,
-      mode: platoon.mode,
-      returnsUsed: platoon.returnsUsed,
-      objective: platoon.objective,
-      drill: platoon.drill,
-      role: unit.role,
-      ambushSprung: platoon.ambushSprung,
-    };
-    const decision = decideGround(current, knowledge, state.tick, scenario.file.combat.behaviorFireRate);
+    const decision = decideGround(self, knowledge, state.tick, scenario.file.combat.behaviorFireRate, map);
     unit.intent = decision.intent;
     unit.behavior = decision.behavior;
     unit.behaviorSinceTick = decision.behaviorSinceTick;
@@ -220,7 +229,7 @@ function applyDecisions(state: SimState, selves: ReadonlyMap<string, UnitSelf>, 
     unit.viaDone = decision.viaDone;
     unit.avoid = decision.avoid;
     unit.posture = postureFor(unit);
-    unit.facingRad = facingOf(unit, platoon, state.truth);
+    unit.facingRad = facingOf(unit, platoon);
   }
 }
 
@@ -231,7 +240,7 @@ function radioUnits(truth: WorldTruth): readonly RadioUnit[] {
     const lead = squads[0] ?? null;
     return {
       id: platoon.id,
-      personnel: squads.reduce((sum, unit) => sum + unit.personnel, 0),
+      personnel: platoonPersonnel(platoon),
       mode: platoon.mode,
       suppression: lead?.suppression ?? 0,
       intent: lead?.intent ?? { kind: 'wait' },
@@ -239,19 +248,16 @@ function radioUnits(truth: WorldTruth): readonly RadioUnit[] {
   });
 }
 
-/** Which way a squad looks: where it's going, what it's shooting at, or the ground it covers. */
-function facingOf(unit: GroundUnit, platoon: Platoon, truth: WorldTruth): number {
+/** Which way a squad looks: where it's going, where it's shooting, or the ground it covers. */
+function facingOf(unit: GroundUnit, platoon: Platoon): number {
   const toward = (point: Vec2): number => atan2(point.y - unit.position.y, point.x - unit.position.x);
   const destination = destinationOf(unit);
   if (destination !== null) return toward(destination);
-  const { objective } = platoon;
-  if (objective.kind === 'AmbushArea' && objective.watches !== undefined) return toward(objective.watches);
-  if (unit.intent.kind !== 'engage') return unit.facingRad;
-  const { contactId } = unit.intent;
-  const tracks = Object.entries(truth.tracks[unit.platoonId] ?? {});
-  const targetId = tracks.find(([, track]) => track.contactId === contactId)?.[0];
-  const target = truth.units.find((other) => other.id === targetId);
-  return target === undefined ? unit.facingRad : toward(target.position);
+  if (unit.intent.kind !== 'engage') {
+    const { objective } = platoon;
+    return objective.kind === 'AmbushArea' && objective.watches !== undefined ? toward(objective.watches) : unit.facingRad;
+  }
+  return toward(unit.intent.aim);
 }
 
 function postureFor(unit: GroundUnit): GroundUnit['posture'] {
@@ -358,10 +364,12 @@ export function step(state: SimState, commands: readonly PlayerCommand[], scenar
     updateAircraftNotice(truth, state.unitKnowledge, file.air, terrain, rng, state.tick);
     const selves = selfViews(state, scenario);
     applyPlatoonDecisions(state, selves.platoons, scenario);
-    applyDecisions(state, selves.squads, scenario);
+    // Squads act on what their platoon has just decided.
+    applyDecisions(state, squadViews(state, scenario), scenario);
     planReports(radioUnits(truth), selves.platoons, state.unitKnowledge, state.radio, scenario, state.tick);
   }
 
+  if (tactical) updateCrews(truth, state.player, file.air, file.combat, state.tick);
   for (const unit of truth.units) {
     moveUnit(unit, terrain);
     if (tactical) driftNavigation(unit, file.perception, rng);
@@ -371,7 +379,7 @@ export function step(state: SimState, commands: readonly PlayerCommand[], scenar
   resolveCas(truth, state.player, state.radio, terrain, file.air, file.combat, file.display, file.perception.engageMemorySeconds, rng, state.tick);
 
   if (tactical) {
-    resolveCombat(truth, state.unitKnowledge, terrain, file.combat, rng, state.tick);
+    resolveCombat(truth, terrain, file.combat, rng, state.tick);
     resolveGroundFire(truth, state.player, state.radio, file.combat, file.air, terrain, rng, state.tick);
     reviewContacts(state.player, sensorCoverage(truth, file.air), file.display, TACTICAL_INTERVAL_TICKS, state.tick);
   }

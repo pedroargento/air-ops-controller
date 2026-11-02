@@ -54,6 +54,16 @@ const doctrine: Doctrine = {
   corridorMeters: 180,
   clearSeconds: 60,
   rallyMeters: null,
+  airWaitSeconds: 300,
+  groupRadiusMeters: 200,
+  arrivedMeters: 25,
+  sidestepMeters: 60,
+  breakContactMeters: 300,
+  assaultAmmunitionFraction: 0.25,
+  noSupportWeaponsAssaultFactor: 0.6,
+  objectiveMarginMeters: 60,
+  attackRadiusMeters: 100,
+  headingTowardsCos: 0.5,
 };
 
 const rates: BehaviorFireRates = { observe: 0.5, probe: 0.6, harass: 0.35, assault: 1, disengage: 0.5 };
@@ -71,6 +81,7 @@ const self = (overrides: Partial<UnitSelf> = {}): UnitSelf => ({
   handled: [],
   routeAhead: [],
   secondsLeft: 3600,
+    canCallAir: false,
   ownPosition: { center: { x: 5, y: 5 }, sigmaMeters: 40, headingRad: null, speedMps: null, observedAt: 0 },
   underFire: false,
   personnel: 40,
@@ -126,7 +137,7 @@ const flatMap: DrillMap = { routeMeters: (from, to) => distance(from, to), sees:
 /** One squad as its whole platoon: the platoon's decision first, as in the sim. */
 const decide = (unit: UnitSelf, knowledge: UnitKnowledge, tick = 0) => {
   const platoon = decidePlatoon(unit, knowledge, tick, flatMap);
-  return { ...platoon, ...decideGround({ ...unit, ...platoon }, knowledge, tick, rates) };
+  return { ...platoon, ...decideGround({ ...unit, ...platoon }, knowledge, tick, rates, flatMap) };
 };
 
 describe('decideGround', () => {

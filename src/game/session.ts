@@ -74,6 +74,7 @@ export class GameSession {
       friendlyLeft: count('friendly', (u) => u.personnel),
       friendlyDestroyed: platoons.filter((p) => p.side === 'friendly' && lost(p)).length,
       locatedShare: truth.locatedShare,
+      friendlyFireCasualties: truth.friendlyFireCasualties,
     };
   }
 

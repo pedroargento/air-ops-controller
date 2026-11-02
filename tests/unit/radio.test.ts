@@ -45,6 +45,7 @@ function setup() {
     handled: [],
     routeAhead: [],
     secondsLeft: 3600,
+    canCallAir: false,
     platoonPersonnel: squad.personnel,
     ownPosition: { center: { x: 512, y: 488 }, sigmaMeters: 40, headingRad: null, speedMps: null, observedAt: 0 },
     personnel: squad.personnel,
@@ -109,7 +110,7 @@ describe('radio tasks', () => {
   it('runs at full speed when idle, modestly slower when engaging, and stops under heavy suppression', () => {
     const { unit } = setup();
     expect(radioRate(unit, config)).toBe(1);
-    unit.intent = { kind: 'engage', contactId: 'C-1' as ContactId, closeTo: null, fireRate: 1, prepared: false };
+    unit.intent = { kind: 'engage', aim: { x: 0, y: 0 }, closeTo: null, fireRate: 1, prepared: false };
     expect(radioRate(unit, config)).toBe(config.engagedRate);
     expect(config.engagedRate).toBeGreaterThan(0.5);
     unit.suppression = config.interruptSuppression;
@@ -159,7 +160,7 @@ describe('radio tasks', () => {
 
 describe('deciding what to report', () => {
   const decide = (self: UnitSelf, knowledge: UnitKnowledge, memory = initialRadioMemory(40), tick = 100) =>
-    decideReports(self, knowledge, memory, config, true, tick);
+    decideReports(self, knowledge, memory, { ...config, dangerCloseMeters: -1 }, true, tick);
   const inContact = { ...emptyKnowledge(), contacts: { 'C-1': { ...contact, position: { ...contact.position, center: { x: 2525, y: 2500 } } } } };
 
   it('raises a TIC and support request only when actually in contact', () => {
@@ -195,6 +196,14 @@ describe('deciding what to report', () => {
     expect(decide(low, near).needs.map((n) => n.kind)).toContain('SUPPORT_REQUEST');
     const bloodied = { ...self, underFire: true, objective: faraway, personnel: 30 };
     expect(decide(bloodied, near).needs.map((n) => n.kind)).toContain('SUPPORT_REQUEST');
+  });
+
+  it('asks for danger close with the enemy on top of it, even after an answered request', () => {
+    const { self } = setup();
+    const near = { ...emptyKnowledge(), contacts: { 'C-1': { ...contact, position: { ...contact.position, center: self.position } } } };
+    const memory = { ...initialRadioMemory(40), supportAcknowledgedAt: 100 };
+    const { needs } = decideReports({ ...self, underFire: true }, near, memory, config, true, 100);
+    expect(needs.find((need) => need.kind === 'SUPPORT_REQUEST')?.dangerClose).toBe(true);
   });
 
   it('treats an enemy on its position as a threat whatever its size', () => {

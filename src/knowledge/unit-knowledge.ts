@@ -24,13 +24,23 @@ export function receiveByUnit(knowledge: UnitKnowledge, message: RadioMessage): 
       if (message.cancelled) delete knowledge.pois[message.poi.id];
       else knowledge.pois[message.poi.id] = message.poi;
       return;
+    case 'SUPPRESSION': {
+      const { aircraftId } = message.suppression;
+      if (message.cancelled) delete knowledge.suppressions[aircraftId];
+      else knowledge.suppressions[aircraftId] = message.suppression;
+      return;
+    }
     case 'ACKNOWLEDGEMENT':
       if (message.supportCancelled) knowledge.expectedSupport = null;
       else if (message.support !== null) knowledge.expectedSupport = message.support;
+      // "Nothing available" is an answer: a platoon holding for air stops waiting.
+      if (message.support === null) knowledge.supportRefusedAt = message.receivedAt;
       return;
     case 'POSITION_REPORT':
     case 'SITREP':
     case 'SUPPORT_REQUEST':
+    case 'CHECK_FIRE':
+    case 'DANGER_CLOSE_HOLD':
     case 'DRILL':
     case 'COMMAND_UPDATE':
     case 'STRIKE_RESULT':

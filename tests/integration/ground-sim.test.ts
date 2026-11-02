@@ -1,3 +1,4 @@
+import { emptyPlayerKnowledge } from '../../src/knowledge/player-knowledge';
 import { describe, expect, it } from 'vitest';
 import { runBattle } from '../../src/cli/battle';
 import { noAir, reconInformed } from '../../src/policies/air-policies';
@@ -41,6 +42,7 @@ function duel(reverseOrder = false): { truth: WorldTruth; a: GroundUnit; b: Grou
   const track = (contactId: string, seen: GroundUnit): Track => ({
     contactId: contactId as ContactId,
     anchor: seen.position,
+    sampleRange: 100,
     errorOffset: { x: 0, y: 0 },
     lastActivity: 'stationary',
     lastSeenPosition: seen.position,
@@ -51,8 +53,8 @@ function duel(reverseOrder = false): { truth: WorldTruth; a: GroundUnit; b: Grou
     [a.platoonId]: { [b.id]: track('C-1', b) },
     [b.platoonId]: { [a.id]: track('C-2', a) },
   };
-  a.intent = { kind: 'engage', contactId: 'C-1' as never, closeTo: null, fireRate: 1, prepared: false };
-  b.intent = { kind: 'engage', contactId: 'C-2' as never, closeTo: null, fireRate: 1, prepared: false };
+  a.intent = { kind: 'engage', aim: b.position, closeTo: null, fireRate: 1, prepared: false };
+  b.intent = { kind: 'engage', aim: a.position, closeTo: null, fireRate: 1, prepared: false };
   a.posture = b.posture = 'firing';
   return { truth, a, b };
 }
@@ -70,7 +72,7 @@ describe('combat', () => {
       a.suppression = b.suppression = 0;
       arm(a, 8000);
       arm(b, 8000);
-      resolveCombat(truth, {}, scenario.terrain, combat, createRng(i), i);
+      resolveCombat(truth, scenario.terrain, combat, createRng(i), i);
       casualtiesA += 30 - a.personnel;
       casualtiesB += 30 - b.personnel;
     }
@@ -81,8 +83,8 @@ describe('combat', () => {
   it('does not depend on unit order', () => {
     const forward = duel(false);
     const backward = duel(true);
-    resolveCombat(forward.truth, {}, scenario.terrain, combat, createRng(5), 10);
-    resolveCombat(backward.truth, {}, scenario.terrain, combat, createRng(5), 10);
+    resolveCombat(forward.truth, scenario.terrain, combat, createRng(5), 10);
+    resolveCombat(backward.truth, scenario.terrain, combat, createRng(5), 10);
     expect(backward.a.personnel).toBe(forward.a.personnel);
     expect(backward.b.personnel).toBe(forward.b.personnel);
     expect(backward.a.suppression).toBe(forward.a.suppression);
@@ -92,7 +94,7 @@ describe('combat', () => {
   it('computes effects from one snapshot, so a unit killed this update still fires', () => {
     const { truth, a, b } = duel();
     a.personnel = 1;
-    resolveCombat(truth, {}, scenario.terrain, combat, createRng(1), 10);
+    resolveCombat(truth, scenario.terrain, combat, createRng(1), 10);
     expect(b.suppression).toBeGreaterThan(0);
   });
 
@@ -100,7 +102,7 @@ describe('combat', () => {
     const { truth, a, b } = duel();
     arm(a, 0);
     const before = b.suppression;
-    resolveCombat(truth, {}, scenario.terrain, combat, createRng(1), 10);
+    resolveCombat(truth, scenario.terrain, combat, createRng(1), 10);
     expect(b.suppression).toBe(before);
     expect(totalAmmunition(b.equipment)).toBeLessThan(b.initialAmmunition);
   });
@@ -137,7 +139,7 @@ describe('suppression, morale and attrition', () => {
       truth.units.push(second);
     }
     for (let i = 0; i < updates; i += 1) {
-      resolveCombat(truth, {}, scenario.terrain, harmless, createRng(i), i * 5);
+      resolveCombat(truth, scenario.terrain, harmless, createRng(i), i * 5);
     }
     return platoonOf(truth, a);
   }
@@ -168,7 +170,7 @@ describe('suppression, morale and attrition', () => {
     a.suppression = 0.8;
     a.personnel = 20;
     arm(a, 100);
-    for (let i = 0; i < 40; i += 1) resolveCombat(truth, {}, scenario.terrain, combat, createRng(i), i * 5);
+    for (let i = 0; i < 40; i += 1) resolveCombat(truth, scenario.terrain, combat, createRng(i), i * 5);
     expect(a.suppression).toBeLessThan(0.1);
     expect(a.personnel).toBe(20);
     expect(totalAmmunition(a.equipment)).toBe(100);
@@ -181,7 +183,7 @@ describe('suppression, morale and attrition', () => {
     const platoon = platoonOf(truth, a);
     platoon.morale = 0.3;
     a.personnel = 15;
-    for (let i = 0; i < 2000; i += 1) resolveCombat(truth, {}, scenario.terrain, combat, createRng(i), i * 5);
+    for (let i = 0; i < 2000; i += 1) resolveCombat(truth, scenario.terrain, combat, createRng(i), i * 5);
     expect(platoon.morale).toBeCloseTo(combat.moraleRecoveryCap * 0.75);
   });
 
@@ -189,8 +191,8 @@ describe('suppression, morale and attrition', () => {
     const full = duel();
     const light = duel();
     light.a.intent = { ...light.a.intent, fireRate: 0.35 } as GroundUnit['intent'];
-    resolveCombat(full.truth, {}, scenario.terrain, combat, createRng(1), 10);
-    resolveCombat(light.truth, {}, scenario.terrain, combat, createRng(1), 10);
+    resolveCombat(full.truth, scenario.terrain, combat, createRng(1), 10);
+    resolveCombat(light.truth, scenario.terrain, combat, createRng(1), 10);
     expect(light.b.suppression).toBeCloseTo(full.b.suppression * 0.35);
     expect(light.a.initialAmmunition - totalAmmunition(light.a.equipment)).toBeCloseTo(
       (full.a.initialAmmunition - totalAmmunition(full.a.equipment)) * 0.35,
@@ -202,7 +204,7 @@ describe('equipment', () => {
   const volleyOn = (setup: (firer: GroundUnit) => void) => {
     const { truth, a, b } = duel();
     setup(a);
-    resolveCombat(truth, {}, scenario.terrain, combat, createRng(1), 10);
+    resolveCombat(truth, scenario.terrain, combat, createRng(1), 10);
     return { suppression: b.suppression, spent: a.initialAmmunition - totalAmmunition(a.equipment) };
   };
 
@@ -219,14 +221,14 @@ describe('equipment', () => {
     arm(a, 8000, 2);
     arm(b, 8000, 2);
     a.posture = b.posture = 'firing';
-    resolveCombat(truth, {}, scenario.terrain, combat, createRng(1), 10);
+    resolveCombat(truth, scenario.terrain, combat, createRng(1), 10);
     expect(a.suppression).toBeCloseTo(b.suppression);
   });
 
   it('a weapon with no ground role adds nothing to ground fire', () => {
     const { truth, a, b } = duel();
     a.equipment = [{ weapon: 'MANPADS', quantity: 1, ammunition: 3 }];
-    resolveCombat(truth, {}, scenario.terrain, combat, createRng(1), 10);
+    resolveCombat(truth, scenario.terrain, combat, createRng(1), 10);
     expect(b.suppression).toBe(0);
     expect(a.equipment[0]?.ammunition).toBe(3);
   });
@@ -234,7 +236,7 @@ describe('equipment', () => {
   it('stops firing beyond the range of its weapons', () => {
     const { truth, a, b } = duel();
     const short = { ...combat.weapons.SMALL_ARMS, rangeMeters: 50 };
-    resolveCombat(truth, {}, scenario.terrain, { ...combat, weapons: { ...combat.weapons, SMALL_ARMS: short } }, createRng(1), 10);
+    resolveCombat(truth, scenario.terrain, { ...combat, weapons: { ...combat.weapons, SMALL_ARMS: short } }, createRng(1), 10);
     expect(b.suppression).toBe(0);
     expect(a.lastFiredAtTick).toBeNull();
   });
@@ -327,31 +329,31 @@ describe('outcome', () => {
   it('captures only after the condition persists for the full hold time', () => {
     const truth = atOutpost();
     for (let tick = 1; tick < capture.holdSeconds; tick += 1) {
-      updateOutcome(truth, capture, 4500, tick);
+      updateOutcome(truth, capture, 4500, tick, emptyPlayerKnowledge());
     }
     expect(truth.outcome).toBe('running');
-    updateOutcome(truth, capture, 4500, capture.holdSeconds);
+    updateOutcome(truth, capture, 4500, capture.holdSeconds, emptyPlayerKnowledge());
     expect(truth.outcome).toBe('failure');
   });
 
   it('resets capture progress when the condition lapses', () => {
     const truth = atOutpost();
-    for (let tick = 1; tick <= 30; tick += 1) updateOutcome(truth, capture, 4500, tick);
+    for (let tick = 1; tick <= 30; tick += 1) updateOutcome(truth, capture, 4500, tick, emptyPlayerKnowledge());
     const enemies = truth.units.filter((u) => u.side === 'enemy');
     for (const unit of enemies) platoonOf(truth, unit).mode = 'broken';
-    updateOutcome(truth, capture, 4500, 31);
+    updateOutcome(truth, capture, 4500, 31, emptyPlayerKnowledge());
     expect(truth.captureProgressSeconds).toBe(0);
   });
 
   it('requires minimum defenders for success at the deadline', () => {
     const strong = createInitialState(scenario, 1).truth;
     for (const u of strong.units) if (u.side === 'friendly') u.position = capture.area.center;
-    updateOutcome(strong, capture, 4500, 4500);
+    updateOutcome(strong, capture, 4500, 4500, emptyPlayerKnowledge());
     expect(strong.outcome).toBe('success');
 
     const weak = createInitialState(scenario, 1).truth;
     for (const u of weak.units) if (u.side === 'friendly') u.personnel = 5;
-    updateOutcome(weak, capture, 4500, 4500);
+    updateOutcome(weak, capture, 4500, 4500, emptyPlayerKnowledge());
     expect(weak.outcome).toBe('partial');
   });
 });

@@ -157,13 +157,14 @@ describe('fire and strikes on squads', () => {
         plane.status = 'onStation';
         plane.position = target.position;
         plane.altitudeMeters = 300;
-        plane.order = { kind: 'SupportArea', center: target.position, radius: 200 };
+        plane.order = { kind: 'Watch', center: target.position, radius: 200 };
         const contactId = 'C-1' as ContactId;
         plane.contacts[contactId] = { ...contact('C-1', 2525), position: { ...contact('C-1', 2525).position, center: target.position } };
         state.truth.tracks[plane.id] = {
           [target.id]: {
             contactId,
             anchor: target.position,
+            sampleRange: 100,
             errorOffset: { x: 0, y: 0 },
             lastActivity: 'moving',
             lastSeenPosition: target.position,
@@ -171,6 +172,8 @@ describe('fire and strikes on squads', () => {
             estimate: contact('C-1', 2525),
           },
         };
+        plane.gunBursts = 0;
+        resolveCas(state.truth, state.player, state.radio, scenario.terrain, heavy.file.air, combat, scenario.file.display, 120, state.rng, 0);
         resolveCas(state.truth, state.player, state.radio, scenario.terrain, heavy.file.air, combat, scenario.file.display, 120, state.rng, 0);
         if (count === 'close') close += start - neighbour.personnel;
         else far += start - neighbour.personnel;
@@ -193,6 +196,7 @@ describe('fire and strikes on squads', () => {
         [target.id]: {
           contactId: 'C-1' as ContactId,
           anchor: target.position,
+          sampleRange: 100,
           errorOffset: { x: 0, y: 0 },
           lastActivity: 'moving',
           lastSeenPosition: target.position,
@@ -200,9 +204,9 @@ describe('fire and strikes on squads', () => {
           estimate: contact('C-1', 200),
         },
       };
-      firer.intent = { kind: 'engage', contactId: 'C-1' as ContactId, closeTo: null, fireRate: 1, prepared: false };
+      firer.intent = { kind: 'engage', aim: target.position, closeTo: null, fireRate: 1, prepared: false };
       const terrain = blocked ? withWall(scenario.terrain) : scenario.terrain;
-      resolveCombat(truth, {}, terrain, combat, createRng(1), 0);
+      resolveCombat(truth, terrain, combat, createRng(1), 0);
       return totalAmmunition(firer.equipment);
     };
     const start = createInitialState(scenario, 1).truth.platoons['F-A']?.squads[0]?.initialAmmunition;
@@ -215,23 +219,23 @@ describe('contact groups', () => {
   const near = knowing(contact('C-1', 0), contact('C-2', 80), contact('C-3', 150));
 
   it('adds up contacts close together', () => {
-    expect(groupStrength(near, contact('C-1', 0))).toBe(30);
-    expect(groupedContact(near, contact('C-1', 0)).strength).toEqual({ kind: 'range', min: 15, max: 50 });
+    expect(groupStrength(near, contact('C-1', 0), 200)).toBe(30);
+    expect(groupedContact(near, contact('C-1', 0), 200).strength).toEqual({ kind: 'range', min: 15, max: 50 });
   });
 
   it('keeps contacts far apart separate', () => {
     const far = knowing(contact('C-1', 0), contact('C-2', 900));
-    expect(groupStrength(far, contact('C-1', 0))).toBe(10);
-    expect(groupLeads(far)).toHaveLength(2);
+    expect(groupStrength(far, contact('C-1', 0), 200)).toBe(10);
+    expect(groupLeads(far, 200)).toHaveLength(2);
   });
 
   it('returns a lone contact unchanged', () => {
     const lone = contact('C-1', 0);
-    expect(groupedContact(knowing(lone), lone)).toEqual(lone);
+    expect(groupedContact(knowing(lone), lone, 200)).toEqual(lone);
   });
 
   it('makes one contact report for a group of squads', () => {
-    const self = { position: { x: 0, y: 0 }, personnel: 30, initialPersonnel: 30 } as UnitSelf;
+    const self = { position: { x: 0, y: 0 }, personnel: 30, initialPersonnel: 30, drill: null, doctrine: { groupRadiusMeters: 200 } } as UnitSelf;
     const { needs } = decideReports(
       { ...self, underFire: false },
       near,

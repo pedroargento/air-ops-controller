@@ -31,6 +31,8 @@ export type ContactEstimate = Readonly<{
   observedWeapons: readonly WeaponType[];
   /** Which way a still squad was seen to face, if anyone saw. */
   facingRad?: number;
+  /** A radio report of several contacts as one, already holding their combined strength. */
+  grouped?: boolean;
 }>;
 
 const STRENGTH_CATEGORIES: readonly (readonly [min: number, max: number])[] = [

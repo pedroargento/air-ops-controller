@@ -46,7 +46,7 @@ describe('formatting', () => {
   });
 
   it('reports strike results as the crew\'s estimate, never a true count', () => {
-    const message: RadioMessage = { ...meta, kind: 'STRIKE_RESULT', contact, effect: 'effect-observed', assessment: null };
+    const message: RadioMessage = { ...meta, kind: 'STRIKE_RESULT', aim: contact.position.center, contact, effect: 'effect-observed', assessment: null };
     expect(radioLine(message, 50).text).toBe('Strike near grid 042-081: effect observed.');
     const hit = { ...message, assessment: { estimatedCasualties: 9, destroyed: false } };
     expect(radioLine(hit, 50).text).toBe('Strike near grid 042-081: effect observed, about 9 casualties.');

@@ -1,17 +1,12 @@
 import { loadScenario, type Scenario } from './load';
-import { applyRules } from './rules';
+import { applyRules, DEFAULT_SCENARIO_NAME, type RawScenario } from './rules';
 
-type RawScenario = Readonly<Record<string, unknown>> & {
-  rules: string;
-  terrain: Readonly<{ classLayer: string; elevationLayer: string }>;
-};
+export { DEFAULT_SCENARIO_NAME };
 
 // The browser's copy of the scenario folder, bundled at build time.
 const scenarioFiles = import.meta.glob<RawScenario>('../../scenarios/*.json', { eager: true, import: 'default' });
 const ruleFiles = import.meta.glob<Record<string, unknown>>('../../scenarios/rules/*.json', { eager: true, import: 'default' });
 const layers = import.meta.glob<string>('../../scenarios/*/*.txt', { eager: true, query: '?raw', import: 'default' });
-
-export const DEFAULT_SCENARIO_NAME = 'outpost-under-pressure';
 
 export function scenarioNames(): readonly string[] {
   return Object.keys(scenarioFiles)

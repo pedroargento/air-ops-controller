@@ -13,6 +13,7 @@ import { isAirborne, modelOf } from './air';
 import type { RadioState } from './radio';
 
 const AIRCRAFT_SIDE: Side = 'friendly';
+const FIRE_MEMORY_ENTRIES = 8;
 
 /** A weapon's reach is measured from where it stands, so a team on a hill reaches higher. */
 function heightAbove(unit: GroundUnit, aircraft: Aircraft, terrain: TerrainGrid): number {
@@ -43,6 +44,7 @@ function damageAircraft(aircraft: Aircraft): void {
   aircraft.damaged = true;
   aircraft.status = 'returning';
   aircraft.order = null;
+  aircraft.attackRun = null;
 }
 
 /** The crew's own impression: an estimated source, and the weapon only if they saw it. */
@@ -68,6 +70,7 @@ function reportFire(
     y: unit.position.y + nextGaussian(rng, label) * air.groundFireSigmaMeters,
   };
   const seen = nextBool(rng, label, air.groundFireWeaponSeenChance) ? weapon : null;
+  aircraft.firedOn = [...aircraft.firedOn.slice(-FIRE_MEMORY_ENTRIES + 1), { center, tick, weapon: seen, hit }];
   player.groundFire.push({ aircraftId: aircraft.id, position: center, tick, hit, weapon: seen });
   player.log.push({
     id: nextId(radio),

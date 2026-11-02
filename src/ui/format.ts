@@ -1,3 +1,4 @@
+import type { SupportWeapons } from '../domain/public/air';
 import { POI_KINDS } from '../domain/public/poi';
 import type { DrillKind } from '../domain/public/ground';
 import type { AircraftTelemetryEntry } from '../domain/public/air';
@@ -92,7 +93,7 @@ export function aircraftSummary(aircraft: AircraftTelemetryEntry): string {
   const status = aircraft.damaged ? `DAMAGED ${aircraft.status}` : aircraft.status;
   return (
     `${aircraft.aircraftId} (${aircraft.model}): ${status}, ${aircraftMission(aircraft)}, ${Math.round(aircraft.altitudeMeters)} m, ` +
-    `fuel ${Math.round(aircraft.fuelFraction * 100)}%, ordnance ${aircraft.ammunition}`
+    `fuel ${Math.round(aircraft.fuelFraction * 100)}%, ordnance ${aircraft.ammunition}, guns ${aircraft.gunBursts}`
   );
 }
 
@@ -178,6 +179,8 @@ export function forceRatioText(enemy: Readonly<{ low: number; high: number }>, d
   return `${rangeText({ low: round(enemy.low / defenders), high: round(enemy.high / defenders) })} : 1`;
 }
 
+const WANTS_TEXT: Readonly<Record<SupportWeapons, string>> = { heavy: 'bombs', guns: 'guns', both: 'bombs and guns' };
+
 const DRILL_TEXT: Readonly<Record<DrillKind, string>> = {
   nearAmbush: 'ambushed, assaulting through',
   farAmbush: 'under fire, returning fire and flanking',
@@ -185,6 +188,7 @@ const DRILL_TEXT: Readonly<Record<DrillKind, string>> = {
   bypass: 'bypassing a known position',
   hastyAmbush: 'setting a hasty ambush',
   waitForAir: 'holding short of a known position for air',
+  pushThrough: 'pushing through under air cover',
 };
 
 export type ContactMemory = Readonly<{ center: Vec2; at: number; strengthMax: number }>;
@@ -237,6 +241,10 @@ export function radioLine(message: RadioMessage, cellSize: number): RadioLine {
         text: `SITREP from ${grid(message.ownPosition.center)}: ${message.personnel} effectives, ammunition ${Math.round(message.ammunitionFraction * 100)}%, ${message.status}.`,
         coordinates: [message.ownPosition.center],
       };
+    case 'CHECK_FIRE':
+      return { text: `CHECK FIRE! Friendly strike on our position at ${grid(message.ownPosition.center)}.`, coordinates: [message.ownPosition.center] };
+    case 'DANGER_CLOSE_HOLD':
+      return { text: `Holding: friendlies too close to the target at ${grid(message.aim)}.`, coordinates: [message.aim] };
     case 'DRILL':
       return { text: `At ${grid(message.ownPosition.center)}: ${DRILL_TEXT[message.drill]}.`, coordinates: [message.ownPosition.center] };
     case 'POI_REPORT': {
@@ -244,8 +252,15 @@ export function radioLine(message: RadioMessage, cellSize: number): RadioLine {
       const text = message.cancelled ? `Cancel ${label.toLowerCase()} at` : `${label} at`;
       return { text: `${text} ${grid(message.poi.center)}.`, coordinates: [message.poi.center] };
     }
+    case 'SUPPRESSION': {
+      const { center, untilTick, fromTick } = message.suppression;
+      const text = message.cancelled
+        ? `Suppression at ${grid(center)} called off.`
+        : `Suppressing ${grid(center)} from ${clock(fromTick)} until ${clock(untilTick)}.`;
+      return { text, coordinates: [center] };
+    }
     case 'SUPPORT_REQUEST':
-      return { text: `Requesting air support at ${grid(message.ownPosition.center)}.`, coordinates: [message.ownPosition.center] };
+      return { text: `Requesting air support at ${grid(message.ownPosition.center)}${message.target === null ? '' : `, ${WANTS_TEXT[message.wants]} on ${grid(message.target)}`}${message.target === null && message.wants !== 'both' ? `, ${WANTS_TEXT[message.wants]}` : ''}${message.dangerClose ? ', DANGER CLOSE: commander accepts the risk' : ''}.`, coordinates: [message.ownPosition.center] };
     case 'COMMAND_UPDATE':
       return { text: message.text, coordinates: [] };
     case 'ACKNOWLEDGEMENT':
@@ -262,8 +277,8 @@ export function radioLine(message: RadioMessage, cellSize: number): RadioLine {
       };
     case 'STRIKE_RESULT':
       return {
-        text: `Strike near ${grid(message.contact.position.center)}: ${strikeOutcome(message.effect, message.assessment)}.`,
-        coordinates: [message.contact.position.center],
+        text: `${message.contact === null ? 'Fire on area' : 'Strike'} near ${grid(message.aim)}: ${strikeOutcome(message.effect, message.assessment)}.`,
+        coordinates: [message.aim],
       };
   }
 }

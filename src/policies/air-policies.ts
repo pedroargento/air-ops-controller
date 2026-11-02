@@ -1,10 +1,9 @@
 import { cos, sin } from '../domain/public/det-math';
 import { POI_KINDS } from '../domain/public/poi';
-import type { AircraftId, AircraftTelemetryEntry } from '../domain/public/air';
+import type { AircraftId, AircraftTelemetryEntry, RiskLimit, SupportWeapons } from '../domain/public/air';
 import type { PlayerCommand } from '../domain/public/commands';
 import { isAntiAir } from '../domain/public/equipment';
 import { strengthMidpoint } from '../domain/public/estimates';
-import { rainVisibilityMeters, weatherAt } from '../domain/public/weather';
 import { distance, type Vec2 } from '../domain/public/geometry';
 import type { ContactMarker, PlayerView } from '../knowledge/player-view';
 
@@ -17,26 +16,27 @@ const FRESH_CONTACT_SECONDS = 120;
 const NEARBY_FORWARD_METERS = 1200;
 const KILL_ZONE_REACH_METERS = 150;
 const KILL_ZONE_GROUP_METERS = 150;
+const SAME_SQUAD_METERS = 30;
 const DEFAULT_LAUNCH_RANGE_METERS = 1300;
 const SECOND_CAS_CONTACTS = 3;
 const THREAT_MEMORY_SECONDS = 900;
-const CAS_STATION_METERS = 650;
-const CLOUD_MARGIN_METERS = 80;
-const MIN_UNDER_CLOUD_METERS = 100;
-/** Stays well inside the visibility, since a target isn't directly below. */
-const RAIN_SIGHT_SHARE = 0.7;
-const THREAT_STANDOFF_METERS = 900;
 const STRUCK_RADIUS_METERS = 300;
+const SUPPRESS_RADIUS_METERS = 150;
+const AMBUSH_REACH_METERS = 400;
 
 export const noAir: Policy = () => [];
 
 const cas = (view: PlayerView): readonly AircraftTelemetryEntry[] =>
   view.aircraft.filter((aircraft) => aircraft.aircraftType === 'cas');
 
-/** Going home is the player's call, so a spent aircraft is sent back to rearm. */
+/**
+ * Going home is the player's call, so a spent aircraft is sent back to rearm. Bombs gone
+ * counts as spent: guns keep a crew useful, but low runs get aircraft hit.
+ */
 function recallEmpty(view: PlayerView): readonly PlayerCommand[] {
   return cas(view)
-    .filter((aircraft) => aircraft.ammunition <= 0 && aircraft.status !== 'returning' && aircraft.status !== 'turnaround')
+    .filter((aircraft) => aircraft.ammunition <= 0)
+    .filter((aircraft) => aircraft.status !== 'returning' && aircraft.status !== 'turnaround' && aircraft.status !== 'ready')
     .map((aircraft) => ({
       kind: 'aircraftOrder',
       tick: view.tick,
@@ -45,18 +45,39 @@ function recallEmpty(view: PlayerView): readonly PlayerCommand[] {
     }));
 }
 
-const order = (view: PlayerView, aircraftId: AircraftId, center: Vec2, radius: number): PlayerCommand => ({
-  kind: 'aircraftOrder',
-  tick: view.tick,
-  aircraftId,
-  order: { kind: 'SupportArea', center, radius },
-});
+/** Sends a strike aircraft to watch an area, free to use the weapons given. */
+const order = (
+  view: PlayerView,
+  aircraftId: AircraftId,
+  center: Vec2,
+  radius: number,
+  weapons: SupportWeapons = 'both',
+): readonly PlayerCommand[] => [
+  { kind: 'setWeapons', tick: view.tick, aircraftId, weapons },
+  { kind: 'aircraftOrder', tick: view.tick, aircraftId, order: { kind: 'Watch', center, radius } },
+];
+
+const watching = (aircraft: AircraftTelemetryEntry): Vec2 | null =>
+  aircraft.order?.kind === 'Watch' ? aircraft.order.center : null;
 
 const engaged = (aircraft: AircraftTelemetryEntry): boolean =>
   aircraft.status === 'takeoff' || aircraft.status === 'enroute' || aircraft.status === 'onStation';
 
-/** Answers each support request with whatever CAS is ready, in the requester's reported position. */
-export function reactiveCas(): Policy {
+/** The hostile on the controller's map nearest a point, if one is close enough to be what's firing. */
+function nearestHostile(view: PlayerView, point: Vec2): Vec2 | null {
+  const [nearest] = view.contacts
+    .filter((marker) => marker.status !== 'destroyed' && marker.contact.identification === 'hostile')
+    .map((marker) => marker.contact.position.center)
+    .filter((center) => distance(center, point) <= NEARBY_FORWARD_METERS)
+    .sort((a, b) => distance(a, point) - distance(b, point));
+  return nearest ?? null;
+}
+
+/**
+ * Answers each support request with whatever CAS is ready, in the requester's reported position.
+ * With `suppressSeconds`, it suppresses the hostile nearest the requester on the map instead.
+ */
+export function reactiveCas(suppressSeconds: number | null = null): Policy {
   return (view) => {
     const commands: PlayerCommand[] = [...recallEmpty(view)];
     const taken = new Set<string>();
@@ -68,7 +89,14 @@ export function reactiveCas(): Policy {
         continue;
       }
       taken.add(aircraft.aircraftId);
-      commands.push(order(view, aircraft.aircraftId, request.position.center, SUPPORT_RADIUS_METERS));
+      // Gives the unit what it asked for, where it asked for it.
+      const target = suppressSeconds === null ? null : (request.target ?? nearestHostile(view, request.position.center));
+      if (suppressSeconds !== null && target !== null) {
+        const mission = { kind: 'Suppress', center: target, radius: SUPPRESS_RADIUS_METERS, untilTick: view.tick + suppressSeconds } as const;
+        commands.push({ kind: 'aircraftOrder', tick: view.tick, aircraftId: aircraft.aircraftId, order: mission });
+      } else {
+        commands.push(...order(view, aircraft.aircraftId, request.target ?? request.position.center, SUPPORT_RADIUS_METERS, request.wants));
+      }
       commands.push({ kind: 'acknowledge', tick: view.tick, unitId: request.unitId, casAircraftId: aircraft.aircraftId });
     }
     return commands;
@@ -86,7 +114,7 @@ export function immediateCas(): Policy {
       ...recallEmpty(view),
       ...cas(view)
         .filter((aircraft) => aircraft.status === 'ready')
-        .map((aircraft) => order(view, aircraft.aircraftId, newest.contact.position.center, SUPPORT_RADIUS_METERS)),
+        .flatMap((aircraft) => order(view, aircraft.aircraftId, newest.contact.position.center, SUPPORT_RADIUS_METERS)),
     ];
   };
 }
@@ -116,14 +144,7 @@ function recentlyStruck(view: PlayerView, marker: ContactMarker): boolean {
     (message) =>
       message.kind === 'STRIKE_RESULT' &&
       view.tick - message.sentAt <= THREAT_MEMORY_SECONDS &&
-      distance(message.contact.position.center, marker.contact.position.center) <= STRUCK_RADIUS_METERS,
-  );
-}
-
-/** Where aircraft have recently been fired on, as far as the crews could tell. */
-function recentFireSources(view: PlayerView): readonly Vec2[] {
-  return view.log.flatMap((message) =>
-    message.kind === 'GROUND_FIRE' && view.tick - message.sentAt <= THREAT_MEMORY_SECONDS ? [message.source.center] : [],
+      distance(message.aim, marker.contact.position.center) <= STRUCK_RADIUS_METERS,
   );
 }
 
@@ -142,73 +163,33 @@ function forwardNew(view: PlayerView, contacts: readonly ContactMarker[], forwar
   return commands;
 }
 
-/** Reads the forecast at each aircraft's destination: out of sight of the ground it can do nothing. */
-function underCloud(view: PlayerView): readonly PlayerCommand[] {
-  const { forecast } = view;
-  if (forecast === null) return [];
-  return view.aircraft.flatMap((aircraft) => {
-    const order = aircraft.order;
-    const point = order !== null && 'center' in order ? order.center : aircraft.position;
-    const arrival = view.tick + (aircraft.etaSeconds ?? 0);
-    const { ceilingMeters, rain } = weatherAt(forecast, point, arrival);
-    const seeing = rainVisibilityMeters(forecast, rain) * RAIN_SIGHT_SHARE;
-    const wanted = Math.max(MIN_UNDER_CLOUD_METERS, Math.min(CAS_STATION_METERS, ceilingMeters - CLOUD_MARGIN_METERS, seeing));
-    if (Math.abs(aircraft.targetAltitudeMeters - wanted) < CLOUD_MARGIN_METERS) return [];
-    return [{ kind: 'setAltitude', tick: view.tick, aircraftId: aircraft.aircraftId, meters: wanted } as const];
-  });
-}
-
 /** Scouts first, sends CAS to confirmed air contacts, and optionally shares them with ground units. */
 export function reconInformed(
   objective: Vec2,
   forward: boolean,
   launchRangeMeters: number = DEFAULT_LAUNCH_RANGE_METERS,
-  threatAware: boolean = true,
-  climbAfterFireMeters: number | null = null,
-  casTransitMeters: number | null = null,
-  stayUnderCloud: boolean = false,
 ): Policy {
   const forwarded = new Set<string>();
   return (view) => {
     const commands: PlayerCommand[] = [...recallEmpty(view)];
-    if (stayUnderCloud) commands.push(...underCloud(view));
-    if (casTransitMeters !== null) {
-      // A pop-up attack: stay down on the way in, then climb to work the target.
-      for (const aircraft of cas(view)) {
-        const wanted = aircraft.status === 'onStation' ? CAS_STATION_METERS : casTransitMeters;
-        if (aircraft.targetAltitudeMeters === wanted) continue;
-        commands.push({ kind: 'setAltitude', tick: view.tick, aircraftId: aircraft.aircraftId, meters: wanted });
-      }
-    }
-    if (climbAfterFireMeters !== null && view.log.some((message) => message.kind === 'GROUND_FIRE')) {
-      // Recon can afford height. CAS can't: strikes are its job, and they suffer more than a hit costs.
-      for (const aircraft of view.aircraft) {
-        if (aircraft.aircraftType !== 'recon' || aircraft.targetAltitudeMeters === climbAfterFireMeters) continue;
-        commands.push({ kind: 'setAltitude', tick: view.tick, aircraftId: aircraft.aircraftId, meters: climbAfterFireMeters });
-      }
-    }
     for (const recon of view.aircraft) {
       if (recon.aircraftType === 'recon' && recon.status === 'ready') {
         commands.push({
           kind: 'aircraftOrder',
           tick: view.tick,
           aircraftId: recon.aircraftId,
-          order: { kind: 'ReconArea', center: objective, radius: RECON_RADIUS_METERS },
+          order: { kind: 'Watch', center: objective, radius: RECON_RADIUS_METERS },
         });
       }
     }
 
-    const fireSources = threatAware ? recentFireSources(view) : [];
-    const safe = (marker: ContactMarker): boolean =>
-      isAntiAirContact(marker) ||
-      !fireSources.some((source) => distance(source, marker.contact.position.center) <= THREAT_STANDOFF_METERS);
-    const fresh = freshAirContacts(view, objective).filter(safe);
+    const fresh = freshAirContacts(view, objective);
     // Known air defense comes first: left alone it keeps taking aircraft out of the fight.
     const byStrength = [...fresh].sort(
       (a, b) => strengthMidpoint(b.contact.strength) - strengthMidpoint(a.contact.strength),
     );
     const priority = (marker: ContactMarker): boolean => isAntiAirContact(marker) && !recentlyStruck(view, marker);
-    const contacts = threatAware ? [...byStrength.filter(priority), ...byStrength.filter((m) => !priority(m))] : byStrength;
+    const contacts = [...byStrength.filter(priority), ...byStrength.filter((m) => !priority(m))];
     const nearest = contacts[0];
     if (nearest !== undefined) {
       const point = nearest.contact.position.center;
@@ -218,25 +199,23 @@ export function reconInformed(
       const ready = cas(view).filter((aircraft) => aircraft.status === 'ready');
       if (threatened) {
         for (const aircraft of ready.slice(0, Math.max(0, wanted - committed))) {
-          commands.push(order(view, aircraft.aircraftId, point, SUPPORT_RADIUS_METERS));
+          commands.push(...order(view, aircraft.aircraftId, point, SUPPORT_RADIUS_METERS));
         }
       }
       for (const aircraft of cas(view)) {
-        if (aircraft.status !== 'onStation' || aircraft.order?.kind !== 'SupportArea') continue;
-        const covered = contacts.some(
-          (marker) => distance(marker.contact.position.center, (aircraft.order as { center: Vec2 }).center) <= SUPPORT_RADIUS_METERS,
-        );
-        if (!covered) commands.push(order(view, aircraft.aircraftId, point, SUPPORT_RADIUS_METERS));
+        const center = watching(aircraft);
+        if (aircraft.status !== 'onStation' || center === null) continue;
+        const covered = contacts.some((marker) => distance(marker.contact.position.center, center) <= SUPPORT_RADIUS_METERS);
+        if (!covered) commands.push(...order(view, aircraft.aircraftId, point, SUPPORT_RADIUS_METERS));
       }
     }
 
     for (const request of view.supportRequests) {
       if (request.acknowledged) continue;
-      const coming = cas(view).find(
-        (aircraft) =>
-          aircraft.order?.kind === 'SupportArea' &&
-          distance(aircraft.order.center, request.position.center) <= SUPPORT_RADIUS_METERS,
-      );
+      const coming = cas(view).find((aircraft) => {
+        const center = watching(aircraft);
+        return center !== null && distance(center, request.position.center) <= SUPPORT_RADIUS_METERS;
+      });
       commands.push({
         kind: 'acknowledge',
         tick: view.tick,
@@ -278,11 +257,14 @@ export function markingKillZones(policy: Policy, minContacts = 2): Policy {
     // Consolidation can fold squads into one marker, and each of them still looked somewhere.
     const faced = view.contacts.flatMap((marker) => [marker, ...marker.members]).flatMap((marker) => {
       const point = marker.contact.identification === 'hostile' ? facedPoint(marker) : null;
-      return point === null ? [] : [point];
+      return point === null ? [] : [{ point, from: marker.contact.position.center }];
     });
-    for (const point of faced) {
-      const together = faced.filter((other) => distance(other, point) <= KILL_ZONE_GROUP_METERS);
-      if (together.length < minContacts) continue;
+    for (const { point, from } of faced) {
+      const looking = faced.filter((other) => distance(other.point, point) <= KILL_ZONE_GROUP_METERS);
+      const together = looking.map((other) => other.point);
+      // Two crews on one squad are one squad, so only separate positions count.
+      const squads = looking.filter((other) => distance(other.from, from) >= SAME_SQUAD_METERS).length + 1;
+      if (squads < minContacts) continue;
       if (view.pois.some((poi) => distance(poi.center, point) <= KILL_ZONE_GROUP_METERS * 2)) continue;
       const center = {
         x: together.reduce((sum, other) => sum + other.x, 0) / together.length,
@@ -309,9 +291,146 @@ export function sweepingRecon(areas: readonly Vec2[], radiusMeters: number, dwel
     const leg = Math.floor(view.tick / dwellSeconds);
     return recon.flatMap((aircraft, index) => {
       const center = areas[(leg + index * Math.ceil(areas.length / recon.length)) % areas.length] as Vec2;
-      const assigned = aircraft.order?.kind === 'ReconArea' && distance(aircraft.order.center, center) < 1;
+      const assigned = aircraft.order?.kind === 'Watch' && distance(aircraft.order.center, center) < 1;
       if (assigned || (aircraft.status !== 'ready' && aircraft.status !== 'onStation' && aircraft.status !== 'enroute')) return [];
-      return [{ kind: 'aircraftOrder', tick: view.tick, aircraftId: aircraft.aircraftId, order: { kind: 'ReconArea', center, radius: radiusMeters } } as const];
+      return [{ kind: 'aircraftOrder', tick: view.tick, aircraftId: aircraft.aircraftId, order: { kind: 'Watch', center, radius: radiusMeters } } as const];
     });
+  };
+}
+
+/** Answers every danger close request the same way: a controller's standing rule. */
+export function answeringDangerClose(policy: Policy, approved: boolean): Policy {
+  return (view) => [
+    ...policy(view),
+    ...view.supportRequests
+      .filter((request) => request.dangerClose)
+      .map((request) => ({ kind: 'answerDangerClose', tick: view.tick, unitId: request.unitId, approved }) as const),
+  ];
+}
+
+/** Sets every aircraft's risk limit once, as a controller might at the start of a mission. */
+export function atRisk(policy: Policy, risk: RiskLimit): Policy {
+  return (view) => [
+    ...policy(view),
+    ...view.aircraft
+      .filter((aircraft) => aircraft.risk !== risk)
+      .map((aircraft) => ({ kind: 'setRisk', tick: view.tick, aircraftId: aircraft.aircraftId, risk }) as const),
+  ];
+}
+
+/** Keeps strike aircraft on station with their guns once the bombs are gone. */
+export function lingeringOnGuns(policy: Policy): Policy {
+  return (view) => {
+    const lingering = new Set(cas(view).filter((aircraft) => aircraft.gunBursts > 0).map((aircraft) => aircraft.aircraftId as string));
+    return policy(view).filter(
+      (command) => !(command.kind === 'aircraftOrder' && command.order.kind === 'ReturnToBase' && lingering.has(command.aircraftId)),
+    );
+  };
+}
+
+/** Answers ground units' support requests, as asked, with any strike aircraft left over. */
+export function answeringRequests(policy: Policy): Policy {
+  const answer = reactiveCas();
+  return (view) => {
+    const own = policy(view);
+    const busy = new Set(own.flatMap((command) => ('aircraftId' in command ? [command.aircraftId as string] : [])));
+    const free = { ...view, aircraft: view.aircraft.filter((aircraft) => !busy.has(aircraft.aircraftId)) };
+    return [...own, ...answer(free).filter((command) => command.kind !== 'aircraftOrder' || command.order.kind !== 'ReturnToBase')];
+  };
+}
+
+/** Strike aircraft that can take a fire mission now, with guns to do it. */
+function canSuppress(aircraft: AircraftTelemetryEntry): boolean {
+  return aircraft.aircraftType === 'cas' && !aircraft.damaged && aircraft.gunBursts > 0 && aircraft.status !== 'returning' && aircraft.status !== 'turnaround';
+}
+
+/** Where the ambush watching a kill zone sits: the hostiles crews saw near it, if any. */
+function ambushAt(view: PlayerView, killZone: Vec2): Vec2 | null {
+  const seen = view.contacts.filter(
+    (marker) =>
+      marker.status !== 'destroyed' &&
+      marker.contact.identification === 'hostile' &&
+      distance(marker.contact.position.center, killZone) <= AMBUSH_REACH_METERS,
+  );
+  if (seen.length === 0) return null;
+  return {
+    x: seen.reduce((sum, marker) => sum + marker.contact.position.center.x, 0) / seen.length,
+    y: seen.reduce((sum, marker) => sum + marker.contact.position.center.y, 0) / seen.length,
+  };
+}
+
+/**
+ * Times air to the ground: as a friendly platoon nears a marked kill zone, a strike aircraft
+ * suppresses the ambush watching it, and goes back to its own targets once the platoons are
+ * clear. Only what the controller's map shows goes into it: the mark, the crews' sightings and
+ * the platoons' own reports.
+ */
+export function suppressingKillZones(policy: Policy, leadMeters = 500, windowSeconds = 900): Policy {
+  const answered = new Map<string, AircraftId>();
+  return (view) => {
+    const near = (point: Vec2): boolean => view.friendlies.some((friendly) => distance(friendly.position.center, point) <= leadMeters);
+    const commands: PlayerCommand[] = [];
+    const busy = new Set<string>();
+    // A mission whose platoons are all clear of it ends, and the aircraft is free again.
+    for (const aircraft of cas(view)) {
+      if (aircraft.order?.kind !== 'Suppress') continue;
+      if (near(aircraft.order.center)) busy.add(aircraft.aircraftId);
+      else commands.push(...order(view, aircraft.aircraftId, aircraft.order.center, SUPPORT_RADIUS_METERS, aircraft.weapons === 'hold' ? 'both' : aircraft.weapons));
+    }
+    const free = (command: PlayerCommand): boolean => !('aircraftId' in command) || !busy.has(command.aircraftId);
+    const ended = new Set(commands.flatMap((command) => ('aircraftId' in command ? [command.aircraftId as string] : [])));
+    let own = policy(view).filter((command) => free(command) && (!('aircraftId' in command) || !ended.has(command.aircraftId)));
+    for (const poi of view.pois) {
+      if (poi.kind !== 'killZone' || answered.has(poi.id) || !near(poi.center)) continue;
+      const center = ambushAt(view, poi.center);
+      if (center === null) continue;
+      const [aircraft] = cas(view)
+        .filter((candidate) => canSuppress(candidate) && !busy.has(candidate.aircraftId))
+        .sort(
+          (a, b) =>
+            Number(b.status === 'onStation') - Number(a.status === 'onStation') ||
+            distance(a.position, center) - distance(b.position, center),
+        );
+      if (aircraft === undefined) continue;
+      answered.set(poi.id, aircraft.aircraftId);
+      busy.add(aircraft.aircraftId);
+      own = own.filter(free);
+      commands.push({
+        kind: 'aircraftOrder',
+        tick: view.tick,
+        aircraftId: aircraft.aircraftId,
+        order: { kind: 'Suppress', center, radius: SUPPRESS_RADIUS_METERS, untilTick: view.tick + windowSeconds },
+      });
+    }
+    return [...own, ...commands];
+  };
+}
+
+/**
+ * Keeps strike aircraft with the lead platoon, the one nearest the destination on the map,
+ * engaging what they find ahead of it, instead of going after sightings.
+ */
+export function coveringLead(policy: Policy, destination: Vec2, radiusMeters = SUPPORT_RADIUS_METERS): Policy {
+  return (view) => {
+    const strikers = new Set(cas(view).map((aircraft) => aircraft.aircraftId as string));
+    const own = policy(view).filter(
+      (command) => !(command.kind === 'aircraftOrder' && strikers.has(command.aircraftId) && command.order.kind !== 'ReturnToBase'),
+    );
+    const [lead] = [...view.friendlies].sort(
+      (a, b) => distance(a.position.center, destination) - distance(b.position.center, destination) || (a.unitId < b.unitId ? -1 : 1),
+    );
+    if (lead === undefined) return own;
+    const going = new Set(own.flatMap((command) => (command.kind === 'aircraftOrder' ? [command.aircraftId as string] : [])));
+    const covers = cas(view)
+      .filter((aircraft) => !going.has(aircraft.aircraftId) && !aircraft.damaged && aircraft.ammunition + aircraft.gunBursts > 0)
+      .filter((aircraft) => aircraft.status === 'ready' || aircraft.status === 'enroute' || aircraft.status === 'onStation')
+      .filter((aircraft) => !(aircraft.order?.kind === 'Cover' && aircraft.order.unitId === lead.unitId))
+      .map((aircraft): PlayerCommand => ({
+        kind: 'aircraftOrder',
+        tick: view.tick,
+        aircraftId: aircraft.aircraftId,
+        order: { kind: 'Cover', unitId: lead.unitId, center: lead.position.center, radius: radiusMeters },
+      }));
+    return [...own, ...covers];
   };
 }

@@ -1,16 +1,11 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import { applyRules } from '../scenario/rules';
+import { applyRules, DEFAULT_SCENARIO_NAME, type RawScenario } from '../scenario/rules';
 import { loadScenario, type Scenario } from '../scenario/load';
 
+export { DEFAULT_SCENARIO_NAME };
+
 const SCENARIO_DIRECTORY = 'scenarios';
-export const DEFAULT_SCENARIO_NAME = 'outpost-under-pressure';
-
-type RawScenario = Readonly<Record<string, unknown>> & {
-  rules: string;
-  terrain: Readonly<{ classLayer: string; elevationLayer: string }>;
-};
-
 export function scenarioNames(): readonly string[] {
   return readdirSync(SCENARIO_DIRECTORY)
     .filter((entry) => entry.endsWith('.json'))

@@ -62,7 +62,7 @@ export function linkedNodes(scenario: Scenario, id: string): readonly string[] {
 }
 
 function sameNeed(a: ReportNeed, b: ReportNeed): boolean {
-  return a.kind === b.kind && a.contactId === b.contactId;
+  return a.kind === b.kind && a.contactId === b.contactId && a.drill === b.drill;
 }
 
 export function enqueue(

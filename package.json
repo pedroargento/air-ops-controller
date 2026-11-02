@@ -12,7 +12,8 @@
     "check": "npm run typecheck && npm run lint && npm run test",
     "sim": "tsx src/cli/batch.ts",
     "e2e": "tsx tests/e2e/definition-of-done.ts",
-    "balance": "tsx src/cli/batch.ts --seeds 1000 --json reports/balance.json"
+    "balance": "tsx src/cli/batch.ts --seeds 1000 --json reports/balance.json",
+    "params": "tsx src/cli/parameters.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

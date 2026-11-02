@@ -42,6 +42,7 @@ const self = (overrides: Partial<UnitSelf> = {}): UnitSelf => ({
   handled: [],
   routeAhead: [{ x: 100, y: 0 }, { x: 200, y: 0 }, { x: 300, y: 0 }, { x: 400, y: 0 }, { x: 500, y: 0 }, { x: 600, y: 0 }, { x: 700, y: 0 }],
   secondsLeft: 7200,
+  canCallAir: false,
   ownPosition: { center: { x: 0, y: 0 }, sigmaMeters: 40, headingRad: null, speedMps: null, observedAt: 0 },
   personnel: 24,
   initialPersonnel: 24,
@@ -115,9 +116,23 @@ describe('choosing a drill', () => {
     expect(decidePlatoon(self(), told(seen(500, 0, 'C-1', 150, 51)), 100, long).drill?.kind).toBe('attack');
   });
 
-  it('waits when air support is promised', () => {
-    const knowledge = { ...told(seen(500)), expectedSupport: { aircraftId: 'CAS-1', etaAt: 200, lapsesAt: 400 } };
-    expect(started(self(), knowledge)).toBe('waitForAir');
+  it('holds short and asks for air when it can call Air Ops, once', () => {
+    const patient = { ...column, drills: [...column.drills, 'waitForAir', 'pushThrough'] } as const;
+    expect(started(self({ doctrine: patient, canCallAir: true }), told(seen(500)))).toBe('waitForAir');
+    expect(started(self({ doctrine: patient }), told(seen(500)))).toBe('attack');
+    const asked = [{ center: { x: 500, y: 0 }, tick: 50, askedAir: true }];
+    expect(started(self({ doctrine: patient, canCallAir: true, handled: asked }), told(seen(500)))).toBe('attack');
+  });
+
+  it('pushes through once air arrives, and gives up waiting when refused', () => {
+    const patient = { ...column, drills: [...column.drills, 'waitForAir', 'pushThrough'] } as const;
+    const waiting = decidePlatoon(self({ doctrine: patient, canCallAir: true }), told(seen(500)), 100, map).drill;
+    const arrived = { ...told(seen(500)), expectedSupport: { aircraftId: 'CAS-1', etaAt: 150, lapsesAt: 400 } };
+    expect(decidePlatoon(self({ doctrine: patient, drill: waiting }), arrived, 160, map).drill?.kind).toBe('pushThrough');
+    const lapsed = { ...told(seen(500)), expectedSupport: { aircraftId: 'CAS-1', etaAt: 10, lapsesAt: 50 } };
+    expect(decidePlatoon(self({ doctrine: patient, drill: waiting }), lapsed, 160, map).drill?.kind).toBe('waitForAir');
+    const refused = { ...told(seen(500)), supportRefusedAt: 120 };
+    expect(decidePlatoon(self({ doctrine: patient, drill: waiting }), refused, 160, map).drill).toBeNull();
   });
 
   it('sets a hasty ambush for an enemy coming towards it', () => {
@@ -379,12 +394,13 @@ describe('ambushes', () => {
         truth.units = [firer, target];
         ambushers.ambushSprungAt = 0;
         column.drill = warned
-          ? { kind: 'attack', startedAt: 0, target: firer.position, radius: 80, via: null, avoid: null }
+          ? { kind: 'attack', startedAt: 0, target: firer.position, radius: 80, via: null, avoid: null, warned: true }
           : null;
         truth.tracks[firer.platoonId] = {
           [target.id]: {
             contactId: 'C-1' as ContactId,
             anchor: target.position,
+            sampleRange: 100,
             errorOffset: { x: 0, y: 0 },
             lastActivity: 'moving',
             lastSeenPosition: target.position,
@@ -392,9 +408,9 @@ describe('ambushes', () => {
             estimate: seen(0),
           },
         };
-        firer.intent = { kind: 'engage', contactId: 'C-1' as ContactId, closeTo: null, fireRate: 1, prepared: false };
+        firer.intent = { kind: 'engage', aim: target.position, closeTo: null, fireRate: 1, prepared: false };
         const start = target.personnel;
-        resolveCombat(truth, {}, valley.terrain, valley.file.combat, createRng(seed), 5);
+        resolveCombat(truth, valley.terrain, valley.file.combat, createRng(seed), 5);
         casualties += start - target.personnel;
       }
       return casualties;

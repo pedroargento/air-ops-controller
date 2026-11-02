@@ -1,3 +1,4 @@
+import type { SupportWeapons } from '../domain/public/air';
 import type { Poi } from '../domain/public/poi';
 import type { WeaponType } from '../domain/public/equipment';
 import type { ContactEstimate, PositionEstimate } from '../domain/public/estimates';
@@ -56,6 +57,9 @@ export type SupportRequest = Readonly<{
   position: PositionEstimate;
   receivedAt: number;
   acknowledged: boolean;
+  dangerClose: boolean;
+  wants: SupportWeapons;
+  target: Vec2 | null;
 }>;
 
 export type TicFlag = Readonly<{ unitId: string; position: PositionEstimate; receivedAt: number }>;
@@ -86,6 +90,8 @@ export type PlayerKnowledge = {
   friendlies: Record<string, FriendlyMarker>;
   discrepancies: Discrepancy[];
   supportRequests: Record<string, SupportRequest>;
+  /** Units cleared for danger close, and until when. */
+  dangerCloseClearedUntil: Record<string, number>;
   ticFlags: Record<string, TicFlag>;
   statusReports: Record<string, UnitStatusReport>;
   estimatedLosses: number;
@@ -105,6 +111,7 @@ export function emptyPlayerKnowledge(): PlayerKnowledge {
     friendlies: {},
     discrepancies: [],
     supportRequests: {},
+    dangerCloseClearedUntil: {},
     ticFlags: {},
     statusReports: {},
     estimatedLosses: 0,
@@ -275,6 +282,9 @@ export function receiveByPlayer(player: PlayerKnowledge, message: RadioMessage, 
         receivedAt: message.receivedAt,
       };
       return;
+    case 'DRILL':
+      friendly(message.ownPosition);
+      return;
     case 'SUPPORT_REQUEST':
       friendly(message.ownPosition);
       player.supportRequests[message.senderId] = {
@@ -282,12 +292,21 @@ export function receiveByPlayer(player: PlayerKnowledge, message: RadioMessage, 
         position: message.ownPosition,
         receivedAt: message.receivedAt,
         acknowledged: false,
+        dangerClose: message.dangerClose,
+        wants: message.wants,
+        target: message.target,
       };
+      return;
+    case 'CHECK_FIRE':
+      friendly(message.ownPosition);
+      return;
+    case 'DANGER_CLOSE_HOLD':
       return;
     case 'COMMAND_UPDATE':
     case 'ACKNOWLEDGEMENT':
     case 'INTEL_REPORT':
     case 'POI_REPORT':
+    case 'SUPPRESSION':
     case 'STRIKE_RESULT':
     case 'GROUND_FIRE':
       return;

@@ -1,4 +1,4 @@
-import type { AircraftId, AircraftOrder } from './air';
+import type { AircraftId, AircraftOrder, RiskLimit, WeaponsControl } from './air';
 import type { Vec2 } from './geometry';
 import type { PoiKind } from './poi';
 
@@ -10,6 +10,9 @@ export type PlayerCommand =
   | Readonly<{ kind: 'noop'; tick: number }>
   | Readonly<{ kind: 'aircraftOrder'; tick: number; aircraftId: AircraftId; order: AircraftOrder }>
   | Readonly<{ kind: 'setAltitude'; tick: number; aircraftId: AircraftId; meters: number }>
+  | Readonly<{ kind: 'releaseAltitude'; tick: number; aircraftId: AircraftId }>
+  | Readonly<{ kind: 'setRisk'; tick: number; aircraftId: AircraftId; risk: RiskLimit }>
+  | Readonly<{ kind: 'setWeapons'; tick: number; aircraftId: AircraftId; weapons: WeaponsControl }>
   | Readonly<{ kind: 'forwardContact'; tick: number; contactKey: string; recipients: readonly string[] }>
   | Readonly<{
       kind: 'reportPoi';
@@ -20,6 +23,7 @@ export type PlayerCommand =
       recipients: readonly string[];
     }>
   | Readonly<{ kind: 'cancelPoi'; tick: number; poiId: string }>
+  | Readonly<{ kind: 'answerDangerClose'; tick: number; unitId: string; approved: boolean }>
   | Readonly<{ kind: 'requestReport'; tick: number; unitId: string; report: ReportRequest }>
   | Readonly<{ kind: 'acknowledge'; tick: number; unitId: string; casAircraftId: AircraftId | null }>;
 

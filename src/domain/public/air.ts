@@ -1,17 +1,126 @@
+import type { ContactEstimate } from './estimates';
+import type { WeaponType } from './equipment';
 import { distance, type Vec2 } from './geometry';
+import type { Weather } from './weather';
 
 export type AircraftId = string & { readonly __brand: 'AircraftId' };
 export type AircraftType = 'recon' | 'cas';
 export type AircraftStatus = 'ready' | 'takeoff' | 'enroute' | 'onStation' | 'returning' | 'turnaround';
 
+/**
+ * What the controller tasks an aircraft with (§8.0). Every task except going home has a
+ * center the aircraft works over and a radius it works within.
+ * - Watch: be over the area. Recon searches it; strike aircraft engage what they find there,
+ *   as far as their weapons control allows.
+ * - Cover: watch the ground ahead of a friendly platoon, as the controller's map shows it.
+ *   The center follows the platoon.
+ * - Suppress: gun runs on the area until `untilTick`, with no target needed.
+ * - Strike: one heavy pass on the center, then watch it.
+ */
 export type AircraftOrder =
-  | Readonly<{ kind: 'MoveTo'; point: Vec2 }>
-  | Readonly<{ kind: 'Orbit'; point: Vec2; radius: number }>
-  | Readonly<{ kind: 'ReconArea'; center: Vec2; radius: number }>
-  | Readonly<{ kind: 'SupportArea'; center: Vec2; radius: number }>
+  | Readonly<{ kind: 'Watch'; center: Vec2; radius: number }>
+  | Readonly<{ kind: 'Cover'; unitId: string; center: Vec2; radius: number }>
+  | Readonly<{ kind: 'Suppress'; center: Vec2; radius: number; untilTick: number }>
+  | Readonly<{ kind: 'Strike'; center: Vec2; radius: number }>
   | Readonly<{ kind: 'ReturnToBase' }>;
 
-export type CasPhase = 'searching' | 'identifying' | 'target-acquired' | 'out-of-ordnance';
+export type TaskOrder = Exclude<AircraftOrder, Readonly<{ kind: 'ReturnToBase' }>>;
+
+/** How much risk the controller accepts on this aircraft (§8.0). */
+export type RiskLimit = 'cautious' | 'normal' | 'pressOn';
+
+export type StrikeWeapon = 'heavy' | 'guns';
+
+/** What a ground unit asks for, or what a crew may use. */
+export type SupportWeapons = 'heavy' | 'guns' | 'both';
+
+/**
+ * What a crew may fire on its own judgment, set per aircraft (§8.0). Hold means it never
+ * picks its own targets. A Suppress or Strike order is the controller's own call, so it fires
+ * whatever this says.
+ */
+export type WeaponsControl = 'hold' | SupportWeapons;
+
+/** Ground fire as the crew judged it: an estimated source, and the weapon if they saw it. */
+export type FiredOn = Readonly<{ center: Vec2; tick: number; weapon: WeaponType | null; hit: boolean }>;
+
+export type AttackRun = Readonly<{
+  aim: Vec2;
+  /** Null when firing on a place rather than on something the crew can see. */
+  contactId: string | null;
+  weapon: StrikeWeapon;
+  phase: 'runIn' | 'pullOff';
+  releaseAltitudeMeters: number;
+  pullOffSeconds: number;
+  nextPassSeconds: number;
+}>;
+
+/** What to hit, with what, and how long until the next pass. */
+export type CrewAttack = Readonly<{ contact: ContactEstimate; weapon: StrikeWeapon; nextPassSeconds: number }>;
+
+/** Everything a crew knows when it decides. None of it is truth. */
+export type CrewSelf = Readonly<{
+  tick: number;
+  role: AircraftType;
+  rotary: boolean;
+  status: AircraftStatus;
+  order: AircraftOrder | null;
+  destination: Vec2 | null;
+  position: Vec2;
+  risk: RiskLimit;
+  weapons: WeaponsControl;
+  manualAltitude: boolean;
+  defaultAltitudeMeters: number;
+  minAltitudeMeters: number;
+  maxAltitudeMeters: number;
+  ammunition: number;
+  gunBursts: number;
+  /** A hand-set altitude can rule out a low gun run. */
+  gunsReachable: boolean;
+  /** Seconds it can stay before it has to head home. */
+  enduranceSeconds: number;
+  passIntervalSeconds: number;
+  gunPassFactor: number;
+  firedOn: readonly FiredOn[];
+  contacts: readonly ContactEstimate[];
+  forecast: Weather | null;
+  weaponCeilings: Readonly<Record<WeaponType, number>>;
+  threatMemorySeconds: number;
+  breakReactionSeconds: number;
+  searchLeg: number;
+  searchPoint: Vec2 | null;
+  attackRun: AttackRun | null;
+  tuning: CrewTuning;
+}>;
+
+/** The crew's rules of thumb, from the rules file's `air` section. */
+export type CrewTuning = Readonly<{
+  cloudMarginMeters: number;
+  rainSightShare: number;
+  threatStandoffMeters: number;
+  searchReachedMeters: number;
+  searchLegs: number;
+  searchRingShare: number;
+  suppressSpreadShare: number;
+}>;
+
+export type CrewDecision = Readonly<{
+  altitudeMeters: number | null;
+  breakFrom: Vec2 | null;
+  searchPoint: Vec2 | null;
+  searchLeg: number;
+}>;
+
+export type CasPhase =
+  | 'searching'
+  | 'identifying'
+  | 'target-acquired'
+  | 'attack-run'
+  | 'breaking-off'
+  | 'holding-danger-close'
+  | 'suppressing'
+  | 'weapons-hold'
+  | 'out-of-ordnance';
 
 export type AircraftTelemetryEntry = Readonly<{
   aircraftId: AircraftId;
@@ -31,6 +140,10 @@ export type AircraftTelemetryEntry = Readonly<{
   order: AircraftOrder | null;
   fuelFraction: number;
   ammunition: number;
+  gunBursts: number;
+  risk: RiskLimit;
+  weapons: WeaponsControl;
+  manualAltitude: boolean;
   etaSeconds: number | null;
   availableInSeconds: number;
 }>;
@@ -44,7 +157,9 @@ export function qualifiesForSupport(
   ackDistanceMeters: number,
 ): boolean {
   if (entry === undefined || reported === undefined) return false;
-  if (entry.aircraftType !== 'cas' || entry.order?.kind !== 'SupportArea') return false;
+  if (entry.aircraftType !== 'cas' || entry.order === null || entry.order.kind === 'ReturnToBase') return false;
   if (entry.status === 'returning' || entry.status === 'turnaround') return false;
+  // An aircraft on hold over the area isn't support, but one told to suppress or strike is.
+  if (entry.weapons === 'hold' && (entry.order.kind === 'Watch' || entry.order.kind === 'Cover')) return false;
   return distance(entry.order.center, reported) <= entry.order.radius + ackDistanceMeters;
 }

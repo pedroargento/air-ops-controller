@@ -3,14 +3,13 @@ import { distance, type Vec2 } from '../domain/public/geometry';
 import type { GroundBehavior, GroundMode } from '../domain/public/ground';
 import type { GroundUnit, Platoon } from '../domain/truth/world';
 import type { Scenario } from '../scenario/load';
+import { livingSquads, meanSuppression, sortedPlatoons } from '../sim/platoon';
 import type { SimState } from '../sim/state';
 
 const BOUT_GAP_SECONDS = 120;
 const WARNING_RANGE_METERS = 1500;
 const SUPPRESSED = 0.5;
 const RECOVERED = 0.2;
-
-import { livingSquads, sortedPlatoons } from '../sim/platoon';
 
 export type WithdrawalTrigger = 'casualties' | 'morale' | 'suppression' | 'ammunition' | 'other';
 
@@ -35,7 +34,7 @@ export type Tempo = Readonly<{
 function withdrawalTrigger(platoon: Platoon, squads: readonly GroundUnit[]): WithdrawalTrigger {
   const { doctrine } = platoon;
   const personnel = squads.reduce((sum, unit) => sum + unit.personnel, 0);
-  const suppression = squads.reduce((sum, unit) => sum + unit.suppression * unit.personnel, 0) / Math.max(1, personnel);
+  const suppression = meanSuppression(squads);
   if (squads.every((unit) => totalAmmunition(unit.equipment) <= 0)) return 'ammunition';
   if (suppression >= doctrine.withdrawSuppression) return 'suppression';
   if (platoon.morale <= doctrine.withdrawMorale) return 'morale';

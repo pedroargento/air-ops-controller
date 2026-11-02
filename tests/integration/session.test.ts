@@ -10,7 +10,7 @@ const center = scenario.file.mission.area.center;
 const order = {
   kind: 'aircraftOrder',
   aircraftId: 'CAS-1' as AircraftId,
-  order: { kind: 'SupportArea', center, radius: 500 },
+  order: { kind: 'Watch', center, radius: 500 },
 } as const;
 
 describe('GameSession', () => {

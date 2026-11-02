@@ -251,7 +251,9 @@ scrub.addEventListener('input', () => {
 // Opens a specific moment, e.g. /debug.html?policy=informed&seed=3&minute=30
 const startAt = new URLSearchParams(location.search);
 byId<HTMLInputElement>('seed').value = startAt.get('seed') ?? '1';
-byId<HTMLSelectElement>('policy').value = startAt.get('policy') ?? 'none';
+const policySelect = byId<HTMLSelectElement>('policy');
+for (const name of Object.keys(policies(scenario))) policySelect.add(new Option(name, name));
+policySelect.value = startAt.get('policy') ?? 'none';
 runSelected();
 playhead = Math.round(Number(startAt.get('minute') ?? 0) * 60);
 scrub.value = String(playhead);

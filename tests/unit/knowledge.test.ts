@@ -121,7 +121,7 @@ describe('player knowledge', () => {
   it('flags TICs and records pending support requests without launching anything', () => {
     const player = emptyPlayerKnowledge();
     receiveByPlayer(player, { ...meta, kind: 'TIC', ownPosition: position(), contact: contact('C-1', 'F-A', 0) }, 120);
-    receiveByPlayer(player, { ...meta, kind: 'SUPPORT_REQUEST', ownPosition: position() }, 120);
+    receiveByPlayer(player, { ...meta, kind: 'SUPPORT_REQUEST', ownPosition: position(), dangerClose: false, wants: 'both', target: null }, 120);
     expect(player.ticFlags['F-A']).toBeDefined();
     expect(player.supportRequests['F-A']?.acknowledged).toBe(false);
     expect(Object.keys(player.contacts)).toEqual(['F-A/C-1']);
@@ -387,7 +387,7 @@ describe('clusters', () => {
 
   it('holds nothing about organization', () => {
     const [cluster] = held(contact('C-1', 'CAS-1', 0, 100), contact('C-2', 'RECON-1', 0, 250)).clusters;
-    expect(Object.keys(cluster ?? {}).sort()).toEqual(['center', 'keys', 'radiusMeters', 'reports', 'strength']);
+    expect(Object.keys(cluster ?? {}).sort()).toEqual(['center', 'radiusMeters', 'reports', 'strength']);
   });
 });
 

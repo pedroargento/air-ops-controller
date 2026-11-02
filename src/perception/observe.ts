@@ -120,7 +120,10 @@ function rollIdentification(
 ): Identification {
   const chance = config.identifyPerScan * observer.quality * (1 - range / observer.rangeMeters);
   if (!nextBool(rng, label, Math.min(1, chance))) return 'unidentified';
-  return target.side === observer.side ? 'friendly' : 'hostile';
+  if (target.side !== observer.side) return 'hostile';
+  // From the air one group of men looks much like another, and more so from far off.
+  const mistaken = observer.medium === 'air' && nextBool(rng, label, config.misidentifyChance * (range / observer.rangeMeters) * 2);
+  return mistaken ? 'hostile' : 'friendly';
 }
 
 function sampleEstimate(
@@ -159,6 +162,8 @@ function sampleEstimate(
   const known = track?.estimate.identification ?? 'unidentified';
   const identification =
     known !== 'unidentified' ? known : rollIdentification(observer, target, range, rng, label, config);
+  const stayedPut = track !== null && distance(track.anchor, target.position) < config.revisionMoveMeters;
+  const keptFacing = stayedPut ? track.estimate.facingRad : undefined;
 
   const estimate: ContactEstimate = {
     contactId,
@@ -176,11 +181,14 @@ function sampleEstimate(
     activity,
     confidence: confidenceFor(sigma, config),
     observedWeapons: track?.estimate.observedWeapons ?? [],
+    // Facing outlives a new look unless the squad has really gone somewhere else.
+    ...(keptFacing === undefined ? {} : { facingRad: keptFacing }),
   };
 
   return {
     contactId,
     anchor: target.position,
+    sampleRange: range,
     errorOffset,
     lastActivity: activity,
     lastSeenPosition: target.position,
@@ -227,7 +235,6 @@ function seenFacing(
 
 function isGenuinelyNew(
   track: Track,
-  observer: Observer,
   target: GroundUnit,
   range: number,
   config: PerceptionConfig,
@@ -235,8 +242,8 @@ function isGenuinelyNew(
 ): boolean {
   if (distance(track.anchor, target.position) >= config.revisionMoveMeters) return true;
   if (activityOf(target, tick) !== track.lastActivity) return true;
-  const previousRange = distance(observer.position, track.anchor);
-  return range < previousRange * (1 - config.revisionRangeImprovement);
+  // Against the range of the last real look, so a nearer squad improves on a further one.
+  return range < track.sampleRange * (1 - config.revisionRangeImprovement);
 }
 
 /**
@@ -285,7 +292,7 @@ export function observeTarget(
     truth.nextContactNumber += 1;
     const contactId = `C-${truth.nextContactNumber}` as ContactId;
     current = sampleEstimate(observer, target, null, contactId, range, terrain, rng, config, tick);
-  } else if (isGenuinelyNew(track, observer, target, range, config, tick)) {
+  } else if (isGenuinelyNew(track, target, range, config, tick)) {
     current = sampleEstimate(observer, target, track, track.contactId, range, terrain, rng, config, tick);
   } else {
     const known = track.estimate.identification;
@@ -354,6 +361,7 @@ export function updatePerception(
   config: PerceptionConfig,
   tick: number,
 ): void {
+  const cues = new Map<string, (target: GroundUnit) => number>();
   for (const unit of truth.units) {
     const belief = (knowledge[unit.platoonId] ??= emptyKnowledge());
     if (unit.personnel <= 0) continue;
@@ -365,15 +373,21 @@ export function updatePerception(
       const dx = target.position.x - unit.position.x;
       const dy = target.position.y - unit.position.y;
       if (dx * dx + dy * dy > reach * reach) continue;
-      observer ??= groundObserver(unit, truth.weather, reportCue(belief, unit.doctrine.reportMemorySeconds, config, tick), tick);
+      const cue = cues.get(unit.platoonId) ?? reportCue(belief, unit.doctrine.reportMemorySeconds, config, tick);
+      cues.set(unit.platoonId, cue);
+      observer ??= groundObserver(unit, truth.weather, cue, tick);
       const estimate = observeTarget(truth, observer, target, terrain, rng, config, tick);
       if (estimate !== null) belief.contacts[estimate.contactId] = estimate;
     }
+  }
+  for (const platoon of Object.values(truth.platoons)) {
+    const belief = knowledge[platoon.id];
+    if (belief === undefined) continue;
     for (const [id, contact] of Object.entries(belief.contacts)) {
       if (tick - contact.position.observedAt > config.contactMemorySeconds) delete belief.contacts[id];
     }
     for (const [key, report] of Object.entries(belief.reports)) {
-      if (tick - report.position.observedAt > unit.doctrine.reportMemorySeconds) delete belief.reports[key];
+      if (tick - report.position.observedAt > platoon.doctrine.reportMemorySeconds) delete belief.reports[key];
     }
   }
 }

@@ -1,5 +1,5 @@
 // Hidden ground truth. Only sim, perception, scenario, debug and cli may import this.
-import type { AircraftId, AircraftOrder, AircraftStatus, AircraftType } from '../public/air';
+import type { AircraftId, AircraftOrder, AircraftStatus, AircraftType, AttackRun, FiredOn, RiskLimit, WeaponsControl } from '../public/air';
 import type { Equipment, WeaponType } from '../public/equipment';
 import type { ContactActivity, ContactEstimate } from '../public/estimates';
 import type { Weather } from '../public/weather';
@@ -93,6 +93,8 @@ export type GroundUnit = {
 export type Track = {
   contactId: ContactId;
   anchor: Vec2;
+  /** How far off the observer was on the last real look. */
+  sampleRange: number;
   errorOffset: Vec2;
   lastActivity: ContactActivity;
   lastSeenPosition: Vec2;
@@ -111,11 +113,23 @@ export type Aircraft = {
   status: AircraftStatus;
   damaged: boolean;
   lastFiredOnTick: number | null;
+  heldForFriendliesAt: number | null;
+  heldReportAt: number | null;
   order: AircraftOrder | null;
   timerSeconds: number;
   fuelSeconds: number;
   ammunition: number;
+  gunBursts: number;
   nextPassTick: number;
+  risk: RiskLimit;
+  weapons: WeaponsControl;
+  manualAltitude: boolean;
+  firedOn: readonly FiredOn[];
+  breakSeconds: number;
+  breakPoint: Vec2 | null;
+  searchLeg: number;
+  searchPoint: Vec2 | null;
+  attackRun: AttackRun | null;
   contacts: Record<string, ContactEstimate>;
 };
 
@@ -131,6 +145,8 @@ export type WorldTruth = {
   captureProgressSeconds: number;
   /** How much of the enemy the player had found, for a `LocateForce` mission. */
   locatedShare: number | null;
+  /** Men lost to their own side's strikes. */
+  friendlyFireCasualties: number;
   outcome: Outcome;
   endedAtTick: number | null;
 };

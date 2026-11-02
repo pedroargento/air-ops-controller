@@ -1,4 +1,13 @@
-import type { AircraftId, AircraftOrder, AircraftTelemetry, CasPhase } from '../domain/public/air';
+import { chooseAttack, chooseStrike, chooseSuppression, decideCrew } from '../ai/decide-crew';
+import type {
+  AircraftId,
+  AircraftOrder,
+  AircraftTelemetry,
+  AttackRun,
+  CasPhase,
+  CrewSelf,
+  StrikeWeapon,
+} from '../domain/public/air';
 import { atan2, cos, exp, hypot, PI, sin } from '../domain/public/det-math';
 import type { ContactEstimate } from '../domain/public/estimates';
 import { distance, type Vec2 } from '../domain/public/geometry';
@@ -9,11 +18,11 @@ import { airSightClear, airVisibilityMeters, rangeInVisibility, weatherAt, type 
 import type { Aircraft, GroundUnit, WorldTruth } from '../domain/truth/world';
 import { recordStrike, updateContact, updateFriendly, type PlayerKnowledge, type SensorCoverage } from '../knowledge/player-knowledge';
 import { observeTarget, type Observer } from '../perception/observe';
-import { nextBinomial, nextBool, nextFloat, type RngState } from '../rng/streams';
+import { nextBinomial, nextBool, nextFloat, nextGaussian, type RngState } from '../rng/streams';
 import type { Scenario } from '../scenario/load';
 import type { AircraftModelConfig, AirConfig, CombatConfig, DisplayConfig, PerceptionConfig } from '../scenario/schema';
 import { applyEffects, type CombatEffect } from './combat';
-import type { RadioState } from './radio';
+import { enqueue, type RadioState } from './radio';
 
 export function createAircraft(scenario: Scenario): Aircraft[] {
   const { air } = scenario.file;
@@ -32,11 +41,23 @@ export function createAircraft(scenario: Scenario): Aircraft[] {
         status: 'ready',
         damaged: false,
         lastFiredOnTick: null,
+        heldForFriendliesAt: null,
+        heldReportAt: null,
         order: null,
         timerSeconds: 0,
         fuelSeconds: type.fuelSeconds,
         ammunition: type.ammunition,
+        gunBursts: type.gunBursts,
         nextPassTick: 0,
+        risk: 'normal',
+        weapons: 'both',
+        manualAltitude: false,
+        firedOn: [],
+        breakSeconds: 0,
+        breakPoint: null,
+        searchLeg: 0,
+        searchPoint: null,
+        attackRun: null,
         contacts: {},
       };
     })
@@ -50,43 +71,33 @@ function typeOf(aircraft: Aircraft, air: AirConfig): AircraftModelConfig {
 }
 
 function destinationOf(order: AircraftOrder | null): Vec2 | null {
-  if (order === null) return null;
-  switch (order.kind) {
-    case 'MoveTo':
-    case 'Orbit':
-      return order.point;
-    case 'ReconArea':
-    case 'SupportArea':
-      return order.center;
-    case 'ReturnToBase':
-      return null;
-  }
+  return order === null || order.kind === 'ReturnToBase' ? null : order.center;
 }
 
 // Never tighter than the aircraft can actually fly.
 function orbitRadius(order: AircraftOrder | null, type: AircraftModelConfig): number {
   const tightest = (type.speedMps / type.turnRateRadPerSecond) * 1.2;
-  switch (order?.kind) {
-    case 'Orbit':
-    case 'ReconArea':
-    case 'SupportArea':
-      return Math.max(tightest, Math.min(order.radius, type.orbitRadiusMeters));
-    default:
-      return Math.max(tightest, type.orbitRadiusMeters);
-  }
+  if (order === null || order.kind === 'ReturnToBase') return Math.max(tightest, type.orbitRadiusMeters);
+  return Math.max(tightest, Math.min(order.radius, type.orbitRadiusMeters));
 }
+
+/** Firing on the controller's say-so needs something to fire with. */
+const FIRE_ORDERS: ReadonlySet<AircraftOrder['kind']> = new Set(['Suppress', 'Strike']);
 
 /** Returns false when the aircraft can't take the order, e.g. during turnaround. */
 export function applyOrder(aircraft: Aircraft, order: AircraftOrder, air: AirConfig): boolean {
   if (aircraft.status === 'turnaround' || aircraft.damaged) return false;
-  if (order.kind === 'SupportArea' && aircraft.aircraftType !== 'cas') return false;
+  if (FIRE_ORDERS.has(order.kind) && aircraft.aircraftType !== 'cas') return false;
   if (order.kind === 'ReturnToBase') {
     if (aircraft.status === 'ready') return false;
     aircraft.status = aircraft.status === 'takeoff' ? 'ready' : 'returning';
     aircraft.order = null;
+    aircraft.attackRun = null;
     return true;
   }
   aircraft.order = order;
+  aircraft.attackRun = null;
+  aircraft.searchPoint = null;
   if (aircraft.status === 'ready') {
     aircraft.status = 'takeoff';
     aircraft.timerSeconds = typeOf(aircraft, air).takeoffSeconds;
@@ -161,6 +172,79 @@ function clearanceFloor(aircraft: Aircraft, air: AirConfig, terrain: TerrainGrid
 export function setTargetAltitude(aircraft: Aircraft, meters: number, air: AirConfig): void {
   const { minAltitudeMeters, maxAltitudeMeters } = typeOf(aircraft, air);
   aircraft.targetAltitudeMeters = Math.max(minAltitudeMeters, Math.min(maxAltitudeMeters, meters));
+  aircraft.manualAltitude = true;
+}
+
+function crewSelf(aircraft: Aircraft, player: PlayerKnowledge, air: AirConfig, combat: CombatConfig, tick: number): CrewSelf {
+  const type = typeOf(aircraft, air);
+  const weaponCeilings = Object.fromEntries(
+    Object.entries(combat.weapons).map(([weapon, definition]) => [weapon, definition.maxAltitudeMeters]),
+  ) as CrewSelf['weaponCeilings'];
+  return {
+    tick,
+    role: aircraft.aircraftType,
+    rotary: type.rotary,
+    status: aircraft.status,
+    order: aircraft.order,
+    destination: destinationOf(aircraft.order),
+    position: aircraft.position,
+    risk: aircraft.risk,
+    weapons: aircraft.weapons,
+    manualAltitude: aircraft.manualAltitude,
+    defaultAltitudeMeters: type.defaultAltitudeMeters,
+    minAltitudeMeters: type.minAltitudeMeters,
+    maxAltitudeMeters: type.maxAltitudeMeters,
+    ammunition: aircraft.ammunition,
+    gunBursts: aircraft.gunBursts,
+    enduranceSeconds: Math.max(0, aircraft.fuelSeconds - secondsToBase(aircraft, type, air) - type.bingoMarginSeconds),
+    passIntervalSeconds: type.passIntervalSeconds,
+    gunPassFactor: air.gunPassFactor,
+    gunsReachable: !aircraft.manualAltitude || aircraft.targetAltitudeMeters <= air.gunRunHeightMeters * air.gunHeightTolerance,
+    firedOn: aircraft.firedOn,
+    contacts: Object.values(aircraft.contacts),
+    forecast: player.forecast,
+    weaponCeilings,
+    threatMemorySeconds: air.threatMemorySeconds,
+    breakReactionSeconds: air.breakReactionSeconds,
+    searchLeg: aircraft.searchLeg,
+    searchPoint: aircraft.searchPoint,
+    attackRun: aircraft.attackRun,
+    tuning: air,
+  };
+}
+
+/** Each crew's decisions about how to fly its mission (§8.0). */
+export function updateCrews(truth: WorldTruth, player: PlayerKnowledge, air: AirConfig, combat: CombatConfig, tick: number): void {
+  for (const aircraft of truth.aircraft) {
+    if (!isAirborne(aircraft) || aircraft.status === 'returning') continue;
+    if (aircraft.order?.kind === 'Cover') aircraft.order = followCovered(aircraft.order, player, air);
+    const decision = decideCrew(crewSelf(aircraft, player, air, combat, tick));
+    if (decision.altitudeMeters !== null) aircraft.targetAltitudeMeters = decision.altitudeMeters;
+    aircraft.searchPoint = decision.searchPoint;
+    aircraft.searchLeg = decision.searchLeg;
+    if (decision.breakFrom !== null && aircraft.breakSeconds <= 0) {
+      const gap = Math.max(1, distance(aircraft.position, decision.breakFrom));
+      const away = air.breakDistanceMeters / gap;
+      aircraft.breakPoint = {
+        x: aircraft.position.x + (aircraft.position.x - decision.breakFrom.x) * away,
+        y: aircraft.position.y + (aircraft.position.y - decision.breakFrom.y) * away,
+      };
+      aircraft.breakSeconds = air.breakSeconds;
+    }
+  }
+}
+
+/**
+ * Where the covered platoon is going, from the controller's map: its last reported position,
+ * pushed ahead along its heading when that's known. A lost platoon leaves the area where it was.
+ */
+function followCovered(order: Extract<AircraftOrder, { kind: 'Cover' }>, player: PlayerKnowledge, air: AirConfig): AircraftOrder {
+  const friendly = player.friendlies[order.unitId];
+  if (friendly === undefined) return order;
+  const { center, headingRad } = friendly.position;
+  const ahead = headingRad === null ? 0 : air.coverAheadMeters;
+  const point = { x: center.x + cos(headingRad ?? 0) * ahead, y: center.y + sin(headingRad ?? 0) * ahead };
+  return point.x === order.center.x && point.y === order.center.y ? order : { ...order, center: point };
 }
 
 /** Sensors work best close to the ground, measured from the ground beneath the aircraft. */
@@ -168,6 +252,16 @@ function altitudeQuality(aircraft: Aircraft, air: AirConfig, terrain: TerrainGri
   const height = aircraft.altitudeMeters - elevationAt(terrain, aircraft.position);
   const quality = 1 - (height - air.sensorReferenceHeightMeters) / typeOf(aircraft, air).sensorFalloffMeters;
   return Math.max(air.sensorQualityMin, Math.min(air.sensorQualityMax, quality));
+}
+
+function flyAttackRun(aircraft: Aircraft, run: AttackRun, type: AircraftModelConfig): void {
+  if (run.phase === 'runIn') {
+    steer(aircraft, bearing(aircraft.position, run.aim), type);
+    return;
+  }
+  steer(aircraft, aircraft.headingRad, type);
+  const pullOffSeconds = run.pullOffSeconds - 1;
+  aircraft.attackRun = pullOffSeconds <= 0 ? null : { ...run, pullOffSeconds };
 }
 
 function flyAircraft(aircraft: Aircraft, air: AirConfig): void {
@@ -198,10 +292,17 @@ function flyAircraft(aircraft: Aircraft, air: AirConfig): void {
       return;
     }
     case 'onStation': {
-      const center = destinationOf(aircraft.order);
+      const center = aircraft.searchPoint ?? destinationOf(aircraft.order);
       if (center === null) return;
-      // A helicopter holds its position; anything else has to keep flying.
-      if (!type.rotary) steer(aircraft, orbitHeading(aircraft, center, orbitRadius(aircraft.order, type)), type);
+      if (aircraft.breakSeconds > 0 && aircraft.breakPoint !== null) {
+        aircraft.breakSeconds -= 1;
+        steer(aircraft, bearing(aircraft.position, aircraft.breakPoint), type);
+      } else if (aircraft.attackRun !== null) {
+        flyAttackRun(aircraft, aircraft.attackRun, type);
+      } else if (!type.rotary) {
+        // A helicopter holds its position; anything else has to keep flying.
+        steer(aircraft, orbitHeading(aircraft, center, orbitRadius(aircraft.order, type)), type);
+      }
       burnFuel(aircraft, type, air);
       return;
     }
@@ -221,6 +322,7 @@ function flyAircraft(aircraft: Aircraft, air: AirConfig): void {
         aircraft.damaged = false;
         aircraft.fuelSeconds = type.fuelSeconds;
         aircraft.ammunition = type.ammunition;
+        aircraft.gunBursts = type.gunBursts;
       }
       return;
   }
@@ -239,7 +341,7 @@ export function isAirborne(aircraft: Aircraft): boolean {
  * cues the wrong ground. It speeds detection; it never makes a target visible.
  */
 function cuedBoost(aircraft: Aircraft, player: PlayerKnowledge, air: AirConfig, tick: number): (t: GroundUnit) => number {
-  if (aircraft.order?.kind !== 'SupportArea') return () => 1;
+  if (!seeksTargets(aircraft)) return () => 1;
   const cues: Vec2[] = [];
   for (const key of Object.keys(player.contacts).sort()) {
     const entry = player.contacts[key];
@@ -350,52 +452,87 @@ export function updateAircraftPerception(
   }
 }
 
-function unitForContact(truth: WorldTruth, aircraft: Aircraft, contact: ContactEstimate): GroundUnit | null {
-  const tracks = truth.tracks[aircraft.id] ?? {};
-  for (const unitId of Object.keys(tracks).sort()) {
-    if (tracks[unitId]?.contactId === contact.contactId) {
-      return truth.units.find((unit) => unit.id === unitId) ?? null;
-    }
-  }
-  return null;
+/** Friendly units on the controller's map too near this point, who haven't been cleared. */
+function dangerClose(player: PlayerKnowledge, point: Vec2, meters: number, tick: number): boolean {
+  return Object.values(player.friendlies).some((friendly) => {
+    const clearedUntil = player.dangerCloseClearedUntil[friendly.unitId];
+    if (clearedUntil !== undefined && tick <= clearedUntil) return false;
+    return distance(friendly.position.center, point) <= meters;
+  });
 }
 
-/** A confirmed hostile the aircraft itself holds, inside its assigned area. */
-function chooseCasTarget(aircraft: Aircraft, center: Vec2, radius: number, memory: number, tick: number): ContactEstimate | null {
-  let best: ContactEstimate | null = null;
-  let bestGap = Number.POSITIVE_INFINITY;
-  for (const id of Object.keys(aircraft.contacts).sort()) {
-    const contact = aircraft.contacts[id];
-    if (contact === undefined || contact.identification !== 'hostile') continue;
-    if (tick - contact.position.observedAt > memory) continue;
-    const gap = distance(contact.position.center, center);
-    if (gap <= radius && gap < bestGap) {
-      best = contact;
-      bestGap = gap;
-    }
-  }
-  return best;
+/** A strike aircraft cleared to pick its own targets in its area. */
+function seeksTargets(aircraft: Aircraft): boolean {
+  const kind = aircraft.order?.kind;
+  return aircraft.aircraftType === 'cas' && aircraft.weapons !== 'hold' && (kind === 'Watch' || kind === 'Cover');
+}
+
+/** Confirmed hostiles the aircraft itself holds inside its assigned area, nearest first. */
+function casCandidates(aircraft: Aircraft, center: Vec2, radius: number, memory: number, tick: number): readonly ContactEstimate[] {
+  return Object.keys(aircraft.contacts)
+    .sort()
+    .flatMap((id) => {
+      const contact = aircraft.contacts[id];
+      if (contact === undefined || contact.identification !== 'hostile') return [];
+      if (tick - contact.position.observedAt > memory) return [];
+      return distance(contact.position.center, center) <= radius ? [contact] : [];
+    })
+    .sort((a, b) => distance(a.position.center, center) - distance(b.position.center, center));
+}
+
+function holdForFriendlies(aircraft: Aircraft, aim: Vec2, player: PlayerKnowledge, radio: RadioState, air: AirConfig, tick: number): void {
+  aircraft.heldForFriendliesAt = tick;
+  if (aircraft.heldReportAt !== null && tick - aircraft.heldReportAt < air.dangerCloseHoldReportSeconds) return;
+  aircraft.heldReportAt = tick;
+  player.log.push({ id: nextId(radio), kind: 'DANGER_CLOSE_HOLD', senderId: aircraft.id, observedAt: tick, sentAt: tick, receivedAt: tick, aim });
 }
 
 /** What the crew thinks it did: noisy, because nobody counts casualties from the air. */
 function assessStrike(
   casualties: number,
-  target: GroundUnit,
+  caught: readonly GroundUnit[],
   combat: CombatConfig,
   rng: RngState,
   label: string,
 ): StrikeAssessment {
   const noise = 1 + (nextFloat(rng, label) * 2 - 1) * combat.assessmentNoise;
-  return { estimatedCasualties: Math.round(casualties * noise), destroyed: target.personnel <= 0 };
+  return { estimatedCasualties: Math.round(casualties * noise), destroyed: caught.filter((unit) => unit.side !== AIRCRAFT_SIDE).every((unit) => unit.personnel <= 0) };
 }
 
 /** How far a strike can catch neighbouring squads, in splash radii. */
-const SPLASH_REACH = 2;
+const AIRCRAFT_SIDE = 'friendly';
+const HOLD_PHASE_SECONDS = 30;
+
+/** Men hit by their own side know it, and they say so at once. */
+function reportFriendlyFire(
+  truth: WorldTruth,
+  caught: readonly GroundUnit[],
+  effects: readonly CombatEffect[],
+  radio: RadioState,
+  tick: number,
+): void {
+  caught.forEach((unit, index) => {
+    if (unit.side !== AIRCRAFT_SIDE) return;
+    const casualties = effects[index]?.casualties ?? 0;
+    truth.friendlyFireCasualties += casualties;
+    const unitRadio = radio.units[unit.platoonId];
+    if (unitRadio !== undefined) enqueue(unitRadio, { kind: 'CHECK_FIRE', contactId: null }, tick);
+  });
+}
+
+/** The crew watches its pass land, so its next estimate is a new look, not the same error. */
+function lookAgain(truth: WorldTruth, aircraft: Aircraft, contact: ContactEstimate): void {
+  for (const track of Object.values(truth.tracks[aircraft.id] ?? {})) {
+    if (track.contactId === contact.contactId) track.sampleRange = Number.MAX_SAFE_INTEGER;
+  }
+}
 
 function strikePass(
   aircraft: Aircraft,
-  contact: ContactEstimate,
-  target: GroundUnit,
+  aim: Vec2,
+  contact: ContactEstimate | null,
+  weapon: StrikeWeapon,
+  nextPassSeconds: number,
   truth: WorldTruth,
   player: PlayerKnowledge,
   radio: RadioState,
@@ -406,43 +543,52 @@ function strikePass(
   rng: RngState,
   tick: number,
 ): void {
-  aircraft.ammunition -= 1;
   const model = typeOf(aircraft, air);
-  aircraft.nextPassTick = tick + model.passIntervalSeconds;
-  const label = `air/${aircraft.id}/${target.id}`;
-  const height = Math.max(0, aircraft.altitudeMeters - elevationAt(terrain, target.position));
-  const local = weatherAt(truth.weather, target.position, tick);
+  const guns = weapon === 'guns';
+  if (guns) aircraft.gunBursts -= 1;
+  else aircraft.ammunition -= 1;
+  const splash = guns ? air.gunSplashMeters : air.strikeSplashMeters;
+  const casualtyFraction = guns ? model.gunCasualtyFraction : model.casualtyFractionPerPass;
+  const suppressionPerPass = guns ? model.gunSuppression : model.suppressionPerPass;
+  aircraft.nextPassTick = tick + Math.round(nextPassSeconds);
+  const label = `air/${aircraft.id}/${contact?.contactId ?? 'area'}`;
+  const height = Math.max(0, aircraft.altitudeMeters - elevationAt(terrain, aim));
+  const local = weatherAt(truth.weather, aim, tick);
   const blur = hypot(height * model.strikeMissPerMeterAltitude, local.rain * truth.weather.rainMissMeters);
-  const miss = hypot(distance(contact.position.center, target.position), blur);
-  const accuracy = exp(-(miss * miss) / (2 * air.blastRadiusMeters * air.blastRadiusMeters));
-  // Squads beside the target are caught too, so spreading out is what reduces a strike (§4.0.1).
+  const delivery = exp(-(blur * blur) / (2 * air.blastRadiusMeters * air.blastRadiusMeters));
+  // Whoever is near the aiming point is hit, so spreading out is what reduces a strike (§4.0.1).
+  const shareAt = (unit: GroundUnit): number => {
+    const gap = distance(aim, unit.position);
+    return delivery * exp(-(gap * gap) / (2 * splash * splash));
+  };
   const caught = truth.units.filter(
-    (unit) =>
-      unit.side === target.side &&
-      unit.personnel > 0 &&
-      distance(target.position, unit.position) <= air.strikeSplashMeters * SPLASH_REACH,
+    (unit) => unit.personnel > 0 && distance(aim, unit.position) <= splash * air.splashReach,
   );
+  const strongest = new Map<string, number>();
+  for (const unit of caught) strongest.set(unit.platoonId, Math.max(strongest.get(unit.platoonId) ?? 0, shareAt(unit)));
   const shaken = new Set<string>();
   const effects = caught.map((unit): CombatEffect => {
-    const gap = distance(target.position, unit.position);
-    const share = accuracy * exp(-(gap * gap) / (2 * air.strikeSplashMeters * air.strikeSplashMeters));
+    const share = shareAt(unit);
     const cover = cellAt(terrain, unit.position).airCover;
     const first = !shaken.has(unit.platoonId);
     shaken.add(unit.platoonId);
     return {
       targetId: unit.id,
-      casualties: nextBinomial(rng, `air/${aircraft.id}/${unit.id}`, unit.personnel, model.casualtyFractionPerPass * (1 - cover) * share),
-      suppression: model.suppressionPerPass * share,
-      // The shock falls once per platoon, however many of its squads were caught.
-      morale: first ? model.moralePerPass * accuracy : 0,
+      casualties: nextBinomial(rng, `air/${aircraft.id}/${unit.id}`, unit.personnel, casualtyFraction * (1 - cover) * share),
+      suppression: suppressionPerPass * share,
+      // The shock falls once per platoon, as hard as the pass came to it.
+      morale: first ? model.moralePerPass * (strongest.get(unit.platoonId) ?? 0) : 0,
     };
   });
   const casualties = effects.reduce((sum, effect) => sum + effect.casualties, 0);
   applyEffects(truth, effects, combat, rng, tick);
+  reportFriendlyFire(truth, caught, effects, radio, tick);
+  const accuracy = Math.max(0, ...strongest.values());
+  if (contact !== null) lookAgain(truth, aircraft, contact);
   const effectObserved = nextBool(rng, label, accuracy);
-  const assessment = effectObserved ? assessStrike(casualties, target, combat, rng, label) : null;
-  if (assessment !== null) recordStrike(player, contact, assessment, display.plausibleSpeedMps, tick);
-  player.strikes.push({ aircraftId: aircraft.id, position: contact.position.center, tick, effectObserved });
+  const assessment = effectObserved ? assessStrike(casualties, caught, combat, rng, label) : null;
+  if (assessment !== null && contact !== null) recordStrike(player, contact, assessment, display.plausibleSpeedMps, tick);
+  player.strikes.push({ aircraftId: aircraft.id, position: aim, tick, effectObserved });
   const message: RadioMessage = {
     id: nextId(radio),
     kind: 'STRIKE_RESULT',
@@ -450,6 +596,7 @@ function strikePass(
     observedAt: tick,
     sentAt: tick,
     receivedAt: tick,
+    aim,
     contact,
     effect: effectObserved ? 'effect-observed' : 'no-effect-observed',
     assessment,
@@ -471,16 +618,111 @@ export function resolveCas(
   tick: number,
 ): void {
   for (const aircraft of truth.aircraft) {
-    if (aircraft.status !== 'onStation' || aircraft.order?.kind !== 'SupportArea') continue;
-    if (aircraft.ammunition <= 0 || tick < aircraft.nextPassTick) continue;
-    const { center, radius } = aircraft.order;
-    const contact = chooseCasTarget(aircraft, center, radius, engageMemorySeconds, tick);
-    if (contact === null) continue;
-    const target = unitForContact(truth, aircraft, contact);
-    if (target === null || target.personnel <= 0 || target.side === 'friendly') continue;
-    if (!airSightClear(terrain, truth.weather, target.position, aircraft.position, aircraft.altitudeMeters, tick)) continue;
-    strikePass(aircraft, contact, target, truth, player, radio, terrain, air, combat, display, rng, tick);
+    const order = aircraft.order;
+    if (aircraft.status !== 'onStation' || aircraft.aircraftType !== 'cas' || order === null || order.kind === 'ReturnToBase') continue;
+    if (aircraft.breakSeconds > 0) continue;
+    const run = aircraft.attackRun;
+    if (run !== null) {
+      if (run.phase === 'runIn') continueRun(aircraft, run, truth, player, radio, terrain, air, combat, display, rng, tick);
+      continue;
+    }
+    if (order.kind === 'Suppress' || order.kind === 'Strike') {
+      fireOnPlace(aircraft, order, truth, player, radio, terrain, air, combat, tick);
+      continue;
+    }
+    if (!seeksTargets(aircraft)) continue;
+    if ((aircraft.ammunition <= 0 && aircraft.gunBursts <= 0) || tick < aircraft.nextPassTick) continue;
+    const { center, radius } = order;
+    const candidates = casCandidates(aircraft, center, radius, engageMemorySeconds, tick);
+    if (candidates.length === 0) continue;
+    const near = (contact: ContactEstimate, weapon: StrikeWeapon): boolean =>
+      dangerClose(player, contact.position.center, weapon === 'guns' ? air.gunDangerCloseMeters : air.dangerCloseMeters, tick);
+    const attack = chooseAttack(crewSelf(aircraft, player, air, combat, tick), candidates, near);
+    if (attack === null) {
+      const [nearest] = candidates;
+      if (nearest !== undefined && near(nearest, 'guns')) holdForFriendlies(aircraft, nearest.position.center, player, radio, air, tick);
+      continue;
+    }
+    const { contact, weapon, nextPassSeconds } = attack;
+    // The crew commits on its own estimate: whether it was right shows only in the result.
+    if (!airSightClear(terrain, truth.weather, contact.position.center, aircraft.position, aircraft.altitudeMeters, tick)) continue;
+    startRun(aircraft, contact.position.center, contact.contactId, weapon, nextPassSeconds, air);
   }
+}
+
+function startRun(aircraft: Aircraft, aim: Vec2, contactId: string | null, weapon: StrikeWeapon, nextPassSeconds: number, air: AirConfig): void {
+  const type = typeOf(aircraft, air);
+  aircraft.attackRun = {
+    aim,
+    contactId,
+    weapon,
+    phase: 'runIn',
+    releaseAltitudeMeters: weapon === 'guns' ? air.gunRunHeightMeters : Math.max(type.minAltitudeMeters, aircraft.targetAltitudeMeters),
+    pullOffSeconds: air.pullOffSeconds,
+    nextPassSeconds,
+  };
+}
+
+/** The task is done, or can't be done any more: the aircraft stays and watches the place. */
+function watchInstead(aircraft: Aircraft, order: Extract<AircraftOrder, { kind: 'Suppress' | 'Strike' }>): void {
+  aircraft.order = { kind: 'Watch', center: order.center, radius: order.radius };
+}
+
+/** Suppress and Strike: fire on a place the controller chose, with no target of the crew's own. */
+function fireOnPlace(
+  aircraft: Aircraft,
+  order: Extract<AircraftOrder, { kind: 'Suppress' | 'Strike' }>,
+  truth: WorldTruth,
+  player: PlayerKnowledge,
+  radio: RadioState,
+  terrain: TerrainGrid,
+  air: AirConfig,
+  combat: CombatConfig,
+  tick: number,
+): void {
+  const self = crewSelf(aircraft, player, air, combat, tick);
+  const near = (point: Vec2, meters: number): boolean => dangerClose(player, point, meters, tick);
+  // Fire on a place has no seen enemy to justify a risk, so it keeps friends out of its whole reach.
+  const reach = Math.max(air.gunDangerCloseMeters, air.gunSplashMeters * air.splashReach);
+  const pass = order.kind === 'Suppress' ? chooseSuppression(self, order, (point) => near(point, reach)) : chooseStrike(self, order);
+  if (pass === 'done') {
+    watchInstead(aircraft, order);
+    return;
+  }
+  if (pass === null || tick < aircraft.nextPassTick) return;
+  const meters = pass.weapon === 'guns' ? reach : air.dangerCloseMeters;
+  if (dangerClose(player, pass.aim, meters, tick)) {
+    holdForFriendlies(aircraft, pass.aim, player, radio, air, tick);
+    return;
+  }
+  if (!airSightClear(terrain, truth.weather, pass.aim, aircraft.position, aircraft.altitudeMeters, tick)) return;
+  startRun(aircraft, pass.aim, null, pass.weapon, pass.nextPassSeconds, air);
+}
+
+function continueRun(
+  aircraft: Aircraft,
+  run: AttackRun,
+  truth: WorldTruth,
+  player: PlayerKnowledge,
+  radio: RadioState,
+  terrain: TerrainGrid,
+  air: AirConfig,
+  combat: CombatConfig,
+  display: DisplayConfig,
+  rng: RngState,
+  tick: number,
+): void {
+  if (distance(aircraft.position, run.aim) > (run.weapon === 'guns' ? air.gunReleaseMeters : air.releaseMeters)) return;
+  const contact = run.contactId === null ? null : aircraft.contacts[run.contactId];
+  const stillClear = !dangerClose(player, run.aim, run.weapon === 'guns' ? air.gunDangerCloseMeters : air.dangerCloseMeters, tick);
+  const heightOk = run.weapon !== 'guns' || aircraft.altitudeMeters - elevationAt(terrain, run.aim) <= air.gunRunHeightMeters * air.gunHeightTolerance;
+  aircraft.attackRun = { ...run, phase: 'pullOff' };
+  if (contact === undefined || !stillClear || !heightOk) return;
+  if (!airSightClear(terrain, truth.weather, run.aim, aircraft.position, aircraft.altitudeMeters, tick)) return;
+  // On a target the crew aims where it now sees it; on a place, where it was told.
+  const aim = contact === null ? run.aim : contact.position.center;
+  strikePass(aircraft, aim, contact, run.weapon, run.nextPassSeconds, truth, player, radio, terrain, air, combat, display, rng, tick);
+  if (aircraft.order?.kind === 'Strike') watchInstead(aircraft, aircraft.order);
 }
 
 /** Ground units notice aircraft and react through their own AI, with no automatic aura. */
@@ -508,7 +750,18 @@ export function updateAircraftNotice(
         }
         // Height above the unit: a weapon's reach is measured from where it stands.
         const altitudeMeters = Math.max(0, aircraft.altitudeMeters - elevationAt(terrain, unit.position));
-        belief.noticedAircraft = { position: aircraft.position, altitudeMeters, seenAt: tick };
+        const label = `noticed/${unit.id}/${aircraft.id}`;
+        const sigma = air.groundNoticeSigmaMeters;
+        // Judged by eye, so what a unit decides to fire on is an estimate too.
+        const position = {
+          x: aircraft.position.x + nextGaussian(rng, label) * sigma,
+          y: aircraft.position.y + nextGaussian(rng, label) * sigma,
+        };
+        belief.noticedAircraft = {
+          position,
+          altitudeMeters: Math.max(0, altitudeMeters + nextGaussian(rng, label) * sigma),
+          seenAt: tick,
+        };
       }
     }
   }
@@ -522,10 +775,16 @@ export function sensorCoverage(truth: WorldTruth, air: AirConfig): readonly Sens
 }
 
 /** What the crew would say they are doing, from the contacts the aircraft itself holds. */
-function casPhase(aircraft: Aircraft): CasPhase | null {
-  if (aircraft.status !== 'onStation' || aircraft.order?.kind !== 'SupportArea') return null;
-  if (aircraft.ammunition <= 0) return 'out-of-ordnance';
-  const { center, radius } = aircraft.order;
+function casPhase(aircraft: Aircraft, tick: number): CasPhase | null {
+  const order = aircraft.order;
+  if (aircraft.status !== 'onStation' || aircraft.aircraftType !== 'cas' || order === null || order.kind === 'ReturnToBase') return null;
+  if (aircraft.ammunition <= 0 && aircraft.gunBursts <= 0) return 'out-of-ordnance';
+  if (aircraft.breakSeconds > 0) return 'breaking-off';
+  if (aircraft.attackRun !== null) return 'attack-run';
+  if (aircraft.heldForFriendliesAt !== null && tick - aircraft.heldForFriendliesAt <= HOLD_PHASE_SECONDS) return 'holding-danger-close';
+  if (order.kind === 'Suppress') return 'suppressing';
+  if (aircraft.weapons === 'hold' && order.kind !== 'Strike') return 'weapons-hold';
+  const { center, radius } = order;
   const inArea = Object.values(aircraft.contacts).filter((c) => distance(c.position.center, center) <= radius);
   if (inArea.some((contact) => contact.identification === 'hostile')) return 'target-acquired';
   return inArea.some((contact) => contact.identification === 'unidentified') ? 'identifying' : 'searching';
@@ -550,10 +809,14 @@ export function aircraftTelemetry(truth: WorldTruth, air: AirConfig, tick = 0): 
       damaged: aircraft.damaged,
       aboveCloud: isAirborne(aircraft) && aircraft.altitudeMeters > weatherAt(truth.weather, aircraft.position, tick).ceilingMeters,
       visibilityMeters: airVisibilityMeters(truth.weather, aircraft.position, aircraft.position, aircraft.altitudeMeters, tick),
-      casPhase: casPhase(aircraft),
+      casPhase: casPhase(aircraft, tick),
       order: aircraft.order,
       fuelFraction: aircraft.fuelSeconds / type.fuelSeconds,
       ammunition: aircraft.ammunition,
+      gunBursts: aircraft.gunBursts,
+      risk: aircraft.risk,
+      weapons: aircraft.weapons,
+      manualAltitude: aircraft.manualAltitude,
       etaSeconds:
         flying && destination !== null ? takeoff + distance(aircraft.position, destination) / type.speedMps : null,
       availableInSeconds:

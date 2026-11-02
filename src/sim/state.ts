@@ -41,6 +41,7 @@ export function createInitialState(scenario: Scenario, seed: number): SimState {
       weather: generateWeather(file.weather, terrain.width * terrain.cellSize, file.durationSeconds, rng),
       captureProgressSeconds: 0,
       locatedShare: null,
+      friendlyFireCasualties: 0,
       outcome: 'running',
       endedAtTick: null,
     },

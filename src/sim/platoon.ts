@@ -20,12 +20,19 @@ export function platoonOf(truth: WorldTruth, unit: GroundUnit): Platoon {
   return platoon;
 }
 
+/** In ID order: state.ts creates them sorted, and no platoon is ever added. */
 export function sortedPlatoons(truth: WorldTruth): readonly Platoon[] {
   return Object.values(truth.platoons);
 }
 
 export function platoonPersonnel(platoon: Platoon): number {
   return platoon.squads.reduce((sum, unit) => sum + unit.personnel, 0);
+}
+
+/** Weighted by headcount, so one pinned squad of five doesn't pin the platoon. */
+export function meanSuppression(squads: readonly GroundUnit[]): number {
+  const personnel = squads.reduce((sum, unit) => sum + unit.personnel, 0);
+  return squads.reduce((sum, unit) => sum + unit.suppression * unit.personnel, 0) / Math.max(1, personnel);
 }
 
 /** Largest-remainder split, so shares always add up to `total` and early squads get any spare. */
@@ -206,7 +213,7 @@ export function platoonSelf(
     equipment,
     supportWeapons: supportWeaponCount(equipment, personnel, weapons),
     airWeapons: airWeapons(equipment, personnel, weapons),
-    suppression: squads.reduce((sum, unit) => sum + unit.suppression * unit.personnel, 0) / Math.max(1, personnel),
+    suppression: meanSuppression(squads),
     underFire: squads.some((unit) => selves.get(unit.id)?.underFire === true),
   };
 }
