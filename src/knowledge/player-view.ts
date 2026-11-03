@@ -19,9 +19,11 @@ import {
   type PlayerContact,
   type PlayerKnowledge,
   type PositionSource,
+  type RequestAnswer,
   type UnitStatusReport,
 } from './player-knowledge';
 import { markerOpacity, type DisplayParameters } from './reachability';
+import { claimsOf, fuse } from './tracks';
 
 export type { ContactStatus, UnitStatusReport };
 
@@ -46,9 +48,14 @@ export type ContactMarker = Readonly<{
   stale: boolean;
   engaging: boolean;
   status: ContactStatus;
+  /** Strike damage and claims, summed over the track's reports. */
   estimatedLosses: number;
-  // Older reports this marker has absorbed: nothing is deleted, and a player can split them out.
+  /** The track's other reports: nothing is deleted, and a player can split them out. */
   members: readonly ContactMarker[];
+  /** TN 4001 and up, or null for a report not yet on a track. */
+  trackNumber: number | null;
+  /** Another track could also have taken one of its reports. */
+  ambiguous: boolean;
 }>;
 
 export type FriendlyMarkerView = Readonly<{
@@ -60,6 +67,8 @@ export type FriendlyMarkerView = Readonly<{
   engaging: boolean;
   silent: boolean;
   statusReport: UnitStatusReport | null;
+  /** Danger close cleared for this unit until then, or null. */
+  dangerCloseUntil: number | null;
 }>;
 
 export type StrikeEffect = Readonly<{
@@ -87,13 +96,31 @@ export type PlayerView = Readonly<{
   reporting: readonly ReportingUnit[];
   friendlies: readonly FriendlyMarkerView[];
   ticFlags: readonly Readonly<{ unitId: string; position: PositionEstimate; ageSeconds: number }>[];
-  supportRequests: readonly Readonly<{ unitId: string; position: PositionEstimate; acknowledged: boolean; dangerClose: boolean; wants: SupportWeapons; target: Vec2 | null }>[];
+  supportRequests: readonly Readonly<{
+    unitId: string;
+    position: PositionEstimate;
+    acknowledged: boolean;
+    dangerClose: boolean;
+    wants: SupportWeapons;
+    target: Vec2 | null;
+    targetStrength: StrengthEstimate | null;
+    marked: boolean;
+    ageSeconds: number;
+    answer: RequestAnswer | null;
+    /** Danger close cleared for this unit until then, or null. */
+    dangerCloseUntil: number | null;
+  }>[];
   log: readonly RadioMessage[];
   aircraft: AircraftTelemetry;
   strikes: readonly StrikeEffect[];
   groundFire: readonly GroundFireEffect[];
   archivedContacts: number;
+  /** Smoke marks crews have reported, while they last. */
+  smoke: readonly Readonly<{ position: Vec2; ageSeconds: number }>[];
+  /** Aircrews' strike assessments. */
   estimatedLosses: number;
+  /** Ground units' claims on the tracks shown, each track counted once at its largest claim. */
+  groundClaims: number;
   confirmedDestroyed: number;
   forecast: Weather | null;
   forecastIssuedAt: number | null;
@@ -158,44 +185,44 @@ function isArchived(entry: PlayerContact, tick: number, display: ViewParameters)
   return tick - entry.contact.position.observedAt > display.archiveSeconds;
 }
 
-const isConfirming = (marker: ContactMarker, display: ViewParameters): boolean =>
-  marker.viaAircraft &&
-  marker.contact.confidence !== 'low' &&
-  marker.ageSeconds <= display.consolidateMaxAgeSeconds &&
-  (marker.status === 'active' || marker.status === 'hit');
-
 /**
- * A fresh, confident aircraft sighting absorbs older reports that could be the same unit.
- * Only such a sighting does this, and it works from estimates, so close units can be
- * wrongly merged. Anything any report saw carries over, so a weapon isn't lost.
+ * One marker per track, fused from its reports (§7.2). A report not yet put on a track shows
+ * on its own. The reports stay as members, so the player can split a track and see them all.
  */
-function consolidate(markers: readonly ContactMarker[], display: ViewParameters): readonly ContactMarker[] {
-  const confirming = markers
-    .filter((marker) => isConfirming(marker, display))
-    .sort((a, b) => a.ageSeconds - b.ageSeconds || (a.key < b.key ? -1 : 1));
-  const absorbed = new Set<string>();
-  const groups = new Map<string, ContactMarker>();
-  for (const primary of confirming) {
-    if (absorbed.has(primary.key)) continue;
-    const members = markers.filter(
-      (other) =>
-        other.key !== primary.key &&
-        !absorbed.has(other.key) &&
-        !groups.has(other.key) &&
-        (other.status === 'active' || other.status === 'hit') &&
-        couldBeSameContact(primary.contact, other.contact, display.plausibleSpeedMps),
-    );
-    if (members.length === 0) continue;
-    for (const member of members) absorbed.add(member.key);
-    const weapons = new Set([primary, ...members].flatMap((m) => m.contact.observedWeapons));
-    groups.set(primary.key, {
-      ...primary,
-      contact: { ...primary.contact, observedWeapons: [...weapons].sort() },
-      estimatedLosses: members.reduce((sum, m) => sum + m.estimatedLosses, primary.estimatedLosses),
-      members,
-    });
+function trackMarkers(player: PlayerKnowledge, reports: readonly ContactMarker[], tick: number, display: ViewParameters): readonly ContactMarker[] {
+  const byTrack = new Map<string, ContactMarker[]>();
+  for (const marker of reports) {
+    const trackId = player.trackOf[marker.key] ?? marker.key;
+    const group = byTrack.get(trackId);
+    if (group === undefined) byTrack.set(trackId, [marker]);
+    else group.push(marker);
   }
-  return markers.filter((m) => !absorbed.has(m.key)).map((m) => groups.get(m.key) ?? m);
+  return [...byTrack.entries()].map(([trackId, group]) => {
+    const track = player.tracks[trackId];
+    if (track === undefined || group.length === 0) return { ...(group[0] as ContactMarker), trackNumber: null };
+    const entries = group.flatMap((marker) => {
+      const entry = player.contacts[marker.key];
+      return entry === undefined ? [] : [[marker.key, entry] as const];
+    });
+    const fused = fuse(entries, tick, display.plausibleSpeedMps);
+    const primary = group.find((marker) => marker.key === fused.primaryKey) ?? (group[0] as ContactMarker);
+    const freshest = Math.min(...group.map((marker) => marker.ageSeconds));
+    return {
+      ...primary,
+      key: trackId,
+      trackNumber: track.number,
+      ambiguous: track.ambiguous,
+      contact: fused.contact,
+      viaAircraft: fused.viaAircraft,
+      ageSeconds: freshest,
+      opacity: markerOpacity(freshest, display),
+      stale: freshest >= display.staleSeconds,
+      engaging: group.some((marker) => marker.engaging),
+      status: fused.status,
+      estimatedLosses: fused.losses,
+      members: group.filter((marker) => marker !== primary),
+    };
+  });
 }
 
 /**
@@ -274,6 +301,10 @@ export function project(
 ): PlayerView {
   const age = (position: PositionEstimate): number => tick - position.observedAt;
   const recent = (at: number | undefined): boolean => at !== undefined && tick - at <= display.effectSeconds;
+  const clearedUntil = (unitId: string): number | null => {
+    const until = player.dangerCloseClearedUntil[unitId];
+    return until !== undefined && until >= tick ? until : null;
+  };
   const held = sortedEntries(player.contacts).filter(([, entry]) => !isArchived(entry, tick, display));
   const markers = held.map(([key, entry]): ContactMarker => ({
     key,
@@ -284,10 +315,12 @@ export function project(
     stale: age(entry.contact.position) >= display.staleSeconds,
     engaging: entry.contact.activity === 'engaging' && age(entry.contact.position) <= display.effectSeconds,
     status: entry.status,
-    estimatedLosses: entry.estimatedLosses,
+    estimatedLosses: entry.estimatedLosses + (entry.contact.claimedLosses ?? 0),
     members: [],
+    trackNumber: null,
+    ambiguous: false,
   }));
-  const contacts = consolidate(markers, display);
+  const contacts = trackMarkers(player, markers, tick, display);
   return {
     tick,
     contacts,
@@ -303,6 +336,7 @@ export function project(
       engaging: recent(player.friendlyEngagedAt[unitId]) || recent(player.ticFlags[unitId]?.receivedAt),
       silent: age(marker.position) >= display.friendlySilentSeconds,
       statusReport: player.statusReports[unitId] ?? null,
+      dangerCloseUntil: clearedUntil(unitId),
     })),
     ticFlags: sortedEntries(player.ticFlags).map(([unitId, flag]) => ({
       unitId,
@@ -316,6 +350,11 @@ export function project(
       dangerClose: request.dangerClose,
       wants: request.wants,
       target: request.target,
+      targetStrength: request.targetStrength,
+      marked: request.marked,
+      ageSeconds: tick - request.receivedAt,
+      answer: request.answer,
+      dangerCloseUntil: clearedUntil(unitId),
     })),
     log: player.log,
     aircraft: telemetry,
@@ -329,7 +368,15 @@ export function project(
       })),
     groundFire: mergeGroundFire(player.groundFire, tick, display),
     archivedContacts: Object.keys(player.contacts).length - held.length,
+    smoke: player.smoke.map((mark) => ({ position: mark.position, ageSeconds: tick - mark.placedAt })),
     estimatedLosses: player.estimatedLosses,
+    groundClaims: contacts.reduce((sum, marker) => {
+      const reports = (player.tracks[marker.key]?.reports ?? [marker.key]).flatMap((key) => {
+        const entry = player.contacts[key];
+        return entry === undefined ? [] : [[key, entry] as const];
+      });
+      return sum + Math.max(0, ...claimsOf(reports).bySource.values());
+    }, 0),
     confirmedDestroyed: player.confirmedDestroyed,
     forecast: player.forecast,
     forecastIssuedAt: player.forecastIssuedAt,

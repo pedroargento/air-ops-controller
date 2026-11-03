@@ -132,10 +132,17 @@ async function main(): Promise<void> {
     console.log('Task CAS through the map');
     await page.locator('[data-action="select-aircraft"][data-id="CAS-1"]').click();
     await page.locator('[data-action="order"][data-kind="Watch"]').click();
+    await page.waitForFunction(() => {
+      const shown = document.querySelector<HTMLElement>('#map-banner');
+      return shown !== null && !shown.hidden && (shown.textContent ?? '').includes('CAS-1');
+    });
+    const banner = await page.locator('#map-banner').innerText();
+    check(banner.includes('WATCH') && banner.includes('CAS-1') && banner.includes('Esc'), `picking a place says what for: "${banner}"`);
     await clickWorld(page, point);
     await setPaused(page, false);
     await page.waitForFunction(() => document.querySelector('[data-id="CAS-1"]')?.textContent?.includes('watching'));
     check(true, 'CAS accepted its support mission');
+    check((await page.locator('.log-row.outgoing').count()) > 0, 'the order shows in the radio log as the controller\'s own transmission');
 
     const log = () => page.evaluate(() => (window as unknown as { airops: Hook }).airops.session.commandLog());
     await page.locator('[data-action="weapons"][data-id="hold"]').click();
@@ -153,8 +160,12 @@ async function main(): Promise<void> {
     await page.locator('#requests button').first().click();
     await page.waitForSelector('[data-action="request"][data-kind="sitrep"]');
     await page.locator('[data-action="request"][data-kind="sitrep"]').click();
-    await page.locator('[data-action="ack"][data-kind=""]').click();
+    const status = await page.locator('#selection .request-status').innerText();
+    check(status.includes('Waiting for your answer'), 'the unit panel shows its open request and the answers to it');
+    await page.locator('#selection [data-action="no-air"]').click();
     await setPaused(page, false);
+    await page.waitForFunction(() => document.querySelector('#requests')?.textContent?.includes('no air is available'));
+    check(true, 'the request card shows the answer took effect');
     await page.waitForFunction(
       () => (window as unknown as { airops: Hook }).airops.session.commandLog().commands.some((c) => c.kind === 'acknowledge'),
     );
@@ -199,6 +210,40 @@ async function main(): Promise<void> {
     });
     check(fits, 'the canvas fits its container, so the scale bar is not cut off');
     await shot(page, '3b-overlays');
+
+    console.log('Look back through the timeline');
+    await page.locator('[data-action="timeline"]').first().click();
+    await page.waitForSelector('#timeline', { state: 'visible' });
+    await page.waitForFunction(() => document.querySelector('#status')?.textContent === 'PAUSED');
+    check(true, 'opening the timeline pauses the battle');
+    await page.locator('#timeline-slider').fill('600');
+    await page.waitForFunction(() => document.querySelector('#timeline-head .review-time')?.textContent !== '');
+    const reviewed = await page.locator('#timeline-head .review-time').innerText();
+    check(/^\d{4}$/.test(reviewed), `the timeline shows the moment in military time: ${reviewed}`);
+    await shot(page, '3b-timeline');
+    await page.locator('#timeline-head [data-action="timeline"]').click();
+    await page.waitForSelector('#timeline', { state: 'hidden' });
+    await page.waitForFunction(() => document.querySelector('#status')?.textContent === 'RUNNING');
+    check(true, 'closing the timeline goes back to live and resumes');
+    await page.locator('[data-action="tab"][data-id="tracks"]').click();
+    await page.waitForSelector('#tracks tr.track-row');
+    check((await page.locator('#tracks tr.track-row').count()) > 0, 'the track list shows the tracks held');
+    await shot(page, '3b-tracks');
+    await page.locator('#tracks tr.track-row').first().click();
+    await page.waitForSelector('#tracks tr.active');
+    check(true, 'clicking a track selects it');
+    await page.locator('[data-action="tab"][data-id="radio"]').click();
+
+    console.log('Open the map key');
+    await page.locator('#map-layers [data-action="legend"]').click();
+    await page.waitForSelector('#legend canvas[data-sample]', { state: 'visible' });
+    const samples = await page.locator('#legend canvas[data-sample]').count();
+    const explained = await page.locator('#legend').innerText();
+    check(samples > 20 && explained.includes('JOKER') && explained.includes('WINCHESTER'), `the key draws ${samples} symbols and explains the radio words`);
+    await shot(page, '3b-key');
+    await page.locator('#legend [data-action="legend"]').click();
+    await page.waitForSelector('#legend', { state: 'hidden' });
+    check(true, 'the key closes again');
 
     console.log('Set an altitude on the profile');
     const box = await page.locator('#altitude-profile').boundingBox();
@@ -273,9 +318,7 @@ async function main(): Promise<void> {
     await page.locator('#forecast-lead').fill('1800');
     await page.waitForFunction(() => document.querySelector('#forecast-label')?.textContent?.startsWith('+30 min'));
     check(true, 'the forecast slider looks ahead in time');
-    await page.locator('[data-action="layer"][data-id="threats"]').click();
     await shot(page, '3e-weather');
-    await page.locator('[data-action="layer"][data-id="threats"]').click();
     await page.locator('[data-action="layer"][data-id="weather"]').click();
 
     console.log('Change speed, then play to the end');
@@ -294,6 +337,15 @@ async function main(): Promise<void> {
     await page.waitForFunction(() => document.querySelector('#summary')?.textContent?.includes('what really happened'));
     check(true, 'the end of the run shows a debrief against the estimates');
     await shot(page, '4b-debrief');
+
+    await page.locator('[data-action="timeline"]').first().click();
+    await page.waitForSelector('#timeline', { state: 'visible' });
+    await page.locator('#timeline-slider').fill('1800');
+    await page.locator('#timeline-head [data-action="review-truth"]').click();
+    await page.waitForFunction(() => document.querySelector<HTMLInputElement>('#timeline-head [data-action="review-truth"]')?.checked === true);
+    check(true, 'after the run, the timeline can show where everyone really was');
+    await shot(page, '4c-truth');
+    await page.locator('#timeline-head [data-action="timeline"]').click();
 
     console.log('Replay the session headlessly');
     const finalLog = await log();

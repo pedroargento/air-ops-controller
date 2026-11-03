@@ -5,9 +5,9 @@ import type { AircraftId, AircraftOrder } from '../../src/domain/public/air';
 import type { PlayerCommand } from '../../src/domain/public/commands';
 import type { ContactEstimate } from '../../src/domain/public/estimates';
 import { distance, type Vec2 } from '../../src/domain/public/geometry';
-import type { ContactId } from '../../src/domain/public/ground';
+import { emptyKnowledge, type ContactId } from '../../src/domain/public/ground';
 import type { Aircraft, GroundUnit } from '../../src/domain/truth/world';
-import { updateContact, updateFriendly } from '../../src/knowledge/player-knowledge';
+import { receiveByPlayer, updateContact, updateFriendly } from '../../src/knowledge/player-knowledge';
 import { elevationAt, hasAirLos } from '../../src/domain/public/terrain';
 import type { Weather } from '../../src/domain/public/weather';
 import { GameSession } from '../../src/game/session';
@@ -1150,5 +1150,120 @@ describe('fire missions and weapons control', () => {
     expect(cover.center.x).toBeCloseTo(mapped.center.x + Math.cos(mapped.headingRad ?? 0) * ahead, 6);
     expect(cover.center.y).toBeCloseTo(mapped.center.y + Math.sin(mapped.headingRad ?? 0) * ahead, 6);
     expect(distance(cover.center, start)).toBeGreaterThan(300);
+  });
+});
+
+describe('crew calls', () => {
+  it('calls JOKER, then BINGO, once each, before heading home on fuel', () => {
+    const state = createInitialState(scenario, 3);
+    isolate(state, ['F-A', 'E-N1']);
+    platoonOf(state.truth, unit(state, 'E-N1')).activeFromTick = 100000;
+    const plane = aircraft(state, CAS);
+    run(state, 1, [hold(state, CAS), order(state, CAS, watch(outpost))]);
+    run(state, 400);
+    // Short of fuel, so the calls come within the battle.
+    const model = air.models['A-1E']!;
+    const home = distance(plane.position, air.airbase) / model.speedMps;
+    plane.fuelSeconds = home + model.bingoMarginSeconds + air.jokerSeconds + 60;
+    for (let i = 0; i < 3000 && plane.status !== 'returning'; i += 1) step(state, [], scenario);
+    run(state, 10);
+    const calls = state.player.log.flatMap((m) => (m.kind === 'CREW_CALL' && m.senderId === CAS ? [m.call] : []));
+    expect(calls).toEqual(['JOKER', 'BINGO']);
+  });
+
+  it('says when the bombs are gone, and WINCHESTER when everything is', () => {
+    const state = createInitialState(scenario, 3);
+    const plane = aircraft(state, CAS);
+    run(state, 1, [hold(state, CAS), order(state, CAS, watch(outpost))]);
+    run(state, 400);
+    plane.ammunition = 0;
+    run(state, 10);
+    plane.gunBursts = 0;
+    run(state, 10);
+    const calls = state.player.log.flatMap((m) => (m.kind === 'CREW_CALL' && m.senderId === CAS ? [m.call] : []));
+    expect(calls).toEqual(['BOMBS_EXPENDED', 'WINCHESTER']);
+  });
+});
+
+describe('smoke marks', () => {
+  function expectingAir(): SimState {
+    const state = createInitialState(scenario, 3);
+    isolate(state, ['F-A', 'E-N1']);
+    const enemy = unit(state, 'E-N1');
+    platoonOf(state.truth, enemy).activeFromTick = 100000;
+    enemy.position = { x: 2525, y: 2350 };
+    const belief = (state.unitKnowledge['F-A'] ??= emptyKnowledge());
+    belief.expectedSupport = { aircraftId: CAS, etaAt: 0, lapsesAt: 100000 };
+    return state;
+  }
+
+  it('marks the enemy it knows of once air is due, and the enemy sees the smoke', () => {
+    const state = expectingAir();
+    run(state, 300);
+    expect(platoonOf(state.truth, unit(state, 'F-A')).lastMarkAt).toBeDefined();
+    expect(state.unitKnowledge['E-N1']?.hostileAircraftSeenAt).not.toBeNull();
+  });
+
+  it('marks nothing without air due, or without an enemy in reach', () => {
+    const quiet = createInitialState(scenario, 3);
+    isolate(quiet, ['F-A', 'E-N1']);
+    platoonOf(quiet.truth, unit(quiet, 'E-N1')).activeFromTick = 100000;
+    unit(quiet, 'E-N1').position = { x: 2525, y: 2350 };
+    run(quiet, 300);
+    expect(platoonOf(quiet.truth, unit(quiet, 'F-A')).lastMarkAt).toBeUndefined();
+    const far = expectingAir();
+    unit(far, 'E-N1').position = { x: 2525, y: 1000 };
+    run(far, 300);
+    expect(platoonOf(far.truth, unit(far, 'F-A')).lastMarkAt).toBeUndefined();
+  });
+
+  it('shows on the controller\'s map once a crew overhead sees it', () => {
+    const state = expectingAir();
+    run(state, 1, [hold(state, CAS), order(state, CAS, watch(outpost, 500))]);
+    run(state, 600);
+    expect(state.player.smoke.length).toBeGreaterThan(0);
+  });
+});
+
+describe('answers to support requests', () => {
+  function requested(state: SimState): void {
+    receiveByPlayer(state.player, {
+      id: 'M-900' as never,
+      senderId: 'F-A',
+      observedAt: state.tick,
+      sentAt: state.tick,
+      receivedAt: state.tick,
+      kind: 'SUPPORT_REQUEST',
+      ownPosition: { center: unit(state, 'F-A').position, sigmaMeters: 20, headingRad: null, speedMps: null, observedAt: state.tick },
+      dangerClose: true,
+      wants: 'both',
+      target: null,
+      targetStrength: null,
+      marked: false,
+    }, 120);
+  }
+
+  it('records the promise when an aircraft is sent and acknowledged in one go', () => {
+    const state = createInitialState(scenario, 3);
+    requested(state);
+    run(state, 1, [order(state, CAS, support(unit(state, 'F-A').position)), { kind: 'acknowledge', tick: state.tick, unitId: 'F-A', casAircraftId: CAS }]);
+    expect(state.player.supportRequests['F-A']?.answer).toMatchObject({ kind: 'inbound', aircraftId: CAS });
+  });
+
+  it('records that the promise was called off when the aircraft is given something else', () => {
+    const state = createInitialState(scenario, 3);
+    requested(state);
+    run(state, 1, [order(state, CAS, support(unit(state, 'F-A').position)), { kind: 'acknowledge', tick: state.tick, unitId: 'F-A', casAircraftId: CAS }]);
+    run(state, 10, [order(state, CAS, support({ x: 100, y: 100 }))]);
+    expect(state.player.supportRequests['F-A']?.answer?.kind).toBe('cancelled');
+  });
+
+  it('clears danger close on approval and revokes it on a later denial', () => {
+    const state = createInitialState(scenario, 3);
+    requested(state);
+    run(state, 1, [{ kind: 'answerDangerClose', tick: state.tick, unitId: 'F-A', approved: true }]);
+    expect(state.player.dangerCloseClearedUntil['F-A']).toBeGreaterThan(state.tick);
+    run(state, 1, [{ kind: 'answerDangerClose', tick: state.tick, unitId: 'F-A', approved: false }]);
+    expect(state.player.dangerCloseClearedUntil['F-A']).toBeUndefined();
   });
 });

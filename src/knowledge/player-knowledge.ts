@@ -1,10 +1,11 @@
 import type { SupportWeapons } from '../domain/public/air';
 import type { Poi } from '../domain/public/poi';
 import type { WeaponType } from '../domain/public/equipment';
-import type { ContactEstimate, PositionEstimate } from '../domain/public/estimates';
+import type { ContactEstimate, PositionEstimate, StrengthEstimate } from '../domain/public/estimates';
 import { distance, type Vec2 } from '../domain/public/geometry';
 import type { ObjectiveStatus, RadioMessage, StrikeAssessment } from '../domain/public/radio';
 import type { Weather } from '../domain/public/weather';
+import type { TrackRecord } from './tracks';
 
 export type PositionSource = 'self-report' | 'aircraft';
 
@@ -60,7 +61,20 @@ export type SupportRequest = Readonly<{
   dangerClose: boolean;
   wants: SupportWeapons;
   target: Vec2 | null;
+  targetStrength: StrengthEstimate | null;
+  marked: boolean;
+  /** How air operations answered, so the controller can see the answer took effect. */
+  answer: RequestAnswer | null;
 }>;
+
+/**
+ * An answer to a support request: aircraft inbound with its promised arrival, a plain "no air
+ * available", or a promise air operations later had to call off.
+ */
+export type RequestAnswer =
+  | Readonly<{ kind: 'inbound'; aircraftId: string; etaAt: number; answeredAt: number }>
+  | Readonly<{ kind: 'none'; answeredAt: number }>
+  | Readonly<{ kind: 'cancelled'; aircraftId: string; answeredAt: number }>;
 
 export type TicFlag = Readonly<{ unitId: string; position: PositionEstimate; receivedAt: number }>;
 
@@ -81,12 +95,18 @@ export type GroundFireMark = Readonly<{
 
 export type PlayerKnowledge = {
   pois: Poi[];
+  /** Smoke marks crews have reported seeing. */
+  smoke: Readonly<{ position: Vec2; placedAt: number; platoonId: string; seenAt: number }>[];
   log: RadioMessage[];
   strikes: StrikeMark[];
   groundFire: GroundFireMark[];
   // When an aircraft last saw each friendly unit fighting.
   friendlyEngagedAt: Record<string, number>;
   contacts: Record<string, PlayerContact>;
+  /** Air operations' tracks: which reports it believes are one enemy group (§7.2). */
+  tracks: Record<string, TrackRecord>;
+  trackOf: Record<string, string>;
+  nextTrackNumber: number;
   friendlies: Record<string, FriendlyMarker>;
   discrepancies: Discrepancy[];
   supportRequests: Record<string, SupportRequest>;
@@ -106,8 +126,12 @@ export function emptyPlayerKnowledge(): PlayerKnowledge {
     strikes: [],
     groundFire: [],
     pois: [],
+    smoke: [],
     friendlyEngagedAt: {},
     contacts: {},
+    tracks: {},
+    trackOf: {},
+    nextTrackNumber: 0,
     friendlies: {},
     discrepancies: [],
     supportRequests: {},
@@ -295,6 +319,9 @@ export function receiveByPlayer(player: PlayerKnowledge, message: RadioMessage, 
         dangerClose: message.dangerClose,
         wants: message.wants,
         target: message.target,
+        targetStrength: message.targetStrength,
+        marked: message.marked,
+        answer: null,
       };
       return;
     case 'CHECK_FIRE':

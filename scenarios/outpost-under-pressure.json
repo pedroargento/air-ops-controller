@@ -3,6 +3,7 @@
   "name": "Outpost Under Pressure",
   "rules": "standard",
   "durationSeconds": 4500,
+  "startTime": "0545",
   "terrain": {
     "classLayer": "outpost-under-pressure/terrain.txt",
     "elevationLayer": "outpost-under-pressure/elevation.txt"

@@ -3,6 +3,7 @@
   "name": "Find Them",
   "rules": "standard",
   "durationSeconds": 3600,
+  "startTime": "1300",
   "terrain": {
     "classLayer": "outpost-under-pressure/terrain.txt",
     "elevationLayer": "outpost-under-pressure/elevation.txt"

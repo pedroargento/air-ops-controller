@@ -11,6 +11,7 @@ import {
   updateFriendly,
 } from '../../src/knowledge/player-knowledge';
 import { project } from '../../src/knowledge/player-view';
+import { correlateReports } from '../../src/knowledge/tracks';
 import { markerOpacity } from '../../src/knowledge/reachability';
 
 const display = {
@@ -94,7 +95,7 @@ describe('player knowledge', () => {
   it('flags TICs and records pending support requests without launching anything', () => {
     const player = emptyPlayerKnowledge();
     receiveByPlayer(player, { ...meta, kind: 'TIC', ownPosition: position(), contact: contact('C-1', 'F-A', 0) }, 120);
-    receiveByPlayer(player, { ...meta, kind: 'SUPPORT_REQUEST', ownPosition: position(), dangerClose: false, wants: 'both', target: null }, 120);
+    receiveByPlayer(player, { ...meta, kind: 'SUPPORT_REQUEST', ownPosition: position(), dangerClose: false, wants: 'both', target: null, targetStrength: null, marked: false }, 120);
     expect(player.ticFlags['F-A']).toBeDefined();
     expect(player.supportRequests['F-A']?.acknowledged).toBe(false);
     expect(Object.keys(player.contacts)).toEqual(['F-A/C-1']);
@@ -222,53 +223,132 @@ describe('closing contacts', () => {
   });
 });
 
-describe('consolidation', () => {
-  it('a fresh aircraft sighting absorbs older reports that could be the same unit', () => {
+describe('tracks', () => {
+  // Air operations puts reports on tracks as they arrive, then the map shows one marker each.
+  const tracked = (player: ReturnType<typeof emptyPlayerKnowledge>, tick: number) => {
+    correlateReports(player, display, tick);
+    return project(player, [], tick, display).contacts;
+  };
+
+  it('puts reports that could be one unit on one track, whoever sent them', () => {
     const player = emptyPlayerKnowledge();
     updateContact(player, contact('C-1', 'F-A', 80, 120), 90, false);
     updateContact(player, contact('C-2', 'F-B', 85, 110), 90, false);
     updateContact(player, contact('C-3', 'RECON-1', 100), 100, true);
-    const { contacts } = project(player, [], 105, display);
-    expect(contacts.map((m) => m.key)).toEqual(['RECON-1/C-3']);
-    expect(contacts[0]?.members.map((m) => m.key).sort()).toEqual(['F-A/C-1', 'F-B/C-2']);
+    const contacts = tracked(player, 105);
+    expect(contacts.map((m) => m.key)).toEqual(['TN-4001']);
+    expect(contacts[0]?.trackNumber).toBe(4001);
+    expect(contacts[0]?.members).toHaveLength(2);
+  });
+
+  it('takes the position from the most precise report once its age is counted', () => {
+    const player = emptyPlayerKnowledge();
+    updateContact(player, contact('C-1', 'F-A', 80, 120), 90, false);
+    updateContact(player, { ...contact('C-3', 'RECON-1', 100), position: { ...position({ observedAt: 100 }), sigmaMeters: 10 } }, 100, true);
+    expect(tracked(player, 105)[0]?.contact.provenance.sourceId).toBe('RECON-1');
+    // Twenty minutes on, a fresh ground report is better than the old sighting.
+    updateContact(player, { ...contact('C-1', 'F-A', 1300, 130), position: { ...position({ observedAt: 1300 }), center: { x: 130, y: 100 } } }, 1300, false);
+    expect(tracked(player, 1305)[0]?.contact.provenance.sourceId).toBe('F-A');
+  });
+
+  it('keeps apart two contacts the same source tells apart', () => {
+    const player = emptyPlayerKnowledge();
+    updateContact(player, contact('C-1', 'RECON-1', 100, 100), 100, true);
+    updateContact(player, contact('C-2', 'RECON-1', 100, 130), 100, true);
+    expect(tracked(player, 105)).toHaveLength(2);
   });
 
   it('never deletes anything: stored reports stay as they were', () => {
     const player = emptyPlayerKnowledge();
     updateContact(player, contact('C-1', 'F-A', 80, 120), 90, false);
     updateContact(player, contact('C-3', 'RECON-1', 100), 100, true);
-    project(player, [], 105, display);
+    tracked(player, 105);
     expect(Object.keys(player.contacts).sort()).toEqual(['F-A/C-1', 'RECON-1/C-3']);
-  });
-
-  it('does not merge ground reports with each other, or anything on age alone', () => {
-    const player = emptyPlayerKnowledge();
-    updateContact(player, contact('C-1', 'F-A', 80, 120), 90, false);
-    updateContact(player, contact('C-2', 'F-B', 85, 110), 90, false);
-    expect(project(player, [], 105, display).contacts).toHaveLength(2);
-  });
-
-  it('needs a fresh, confident sighting', () => {
-    const player = emptyPlayerKnowledge();
-    updateContact(player, contact('C-1', 'F-A', 80, 120), 90, false);
-    updateContact(player, { ...contact('C-3', 'RECON-1', 100), confidence: 'low' }, 100, true);
-    expect(project(player, [], 105, display).contacts).toHaveLength(2);
   });
 
   it('keeps reports apart when the estimates can\'t be one unit', () => {
     const player = emptyPlayerKnowledge();
     updateContact(player, contact('C-1', 'F-A', 80, 3000), 90, false);
-    updateContact(player, { ...contact('C-2', 'F-B', 80, 120), strength: { kind: 'range', min: 100, max: 150 } }, 90, false);
+    updateContact(player, { ...contact('C-2', 'F-B', 80, 120), strength: { kind: 'range', min: 151, max: 500 } }, 90, false);
     updateContact(player, contact('C-3', 'RECON-1', 100), 100, true);
-    expect(project(player, [], 105, display).contacts).toHaveLength(3);
+    expect(tracked(player, 105)).toHaveLength(3);
   });
 
-  it('carries over a weapon any report saw, without changing the stored report', () => {
+  it('flags a track that another could also have taken', () => {
+    const player = emptyPlayerKnowledge();
+    updateContact(player, contact('C-1', 'RECON-1', 100, 100), 100, true);
+    updateContact(player, contact('C-2', 'RECON-1', 100, 160), 100, true);
+    tracked(player, 100);
+    // A ground report between the two could be either.
+    updateContact(player, contact('C-9', 'F-A', 101, 130), 101, false);
+    const contacts = tracked(player, 105);
+    expect(contacts).toHaveLength(2);
+    expect(contacts.some((m) => m.ambiguous)).toBe(true);
+  });
+
+  it('carries over a weapon any report saw, without changing stored reports', () => {
     const player = emptyPlayerKnowledge();
     updateContact(player, { ...contact('C-1', 'F-A', 80, 120), observedWeapons: ['MANPADS'] }, 90, false);
     updateContact(player, contact('C-3', 'RECON-1', 100), 100, true);
-    expect(project(player, [], 105, display).contacts[0]?.contact.observedWeapons).toEqual(['MANPADS']);
+    const [track] = tracked(player, 105);
+    expect(track?.contact.observedWeapons).toEqual(['MANPADS']);
     expect(player.contacts['RECON-1/C-3']?.contact.observedWeapons).toEqual([]);
+  });
+
+  it('takes the largest ground claim, since units watching one fight claim the same men, and adds strike assessments', () => {
+    const player = emptyPlayerKnowledge();
+    updateContact(player, { ...contact('C-1', 'F-A', 80, 120), claimedLosses: 4 }, 90, false);
+    updateContact(player, { ...contact('C-2', 'F-B', 85, 110), claimedLosses: 6 }, 90, false);
+    updateContact(player, contact('C-3', 'RECON-1', 100), 100, true);
+    const entry = player.contacts['RECON-1/C-3'];
+    if (entry !== undefined) player.contacts['RECON-1/C-3'] = { ...entry, estimatedLosses: 3 };
+    expect(tracked(player, 105)[0]?.estimatedLosses).toBe(9);
+  });
+
+  it('averages comparable reports, weighted by how precise each is', () => {
+    const player = emptyPlayerKnowledge();
+    const at = (x: number, sigma: number) => ({ ...position({ observedAt: 100 }), center: { x, y: 100 }, sigmaMeters: sigma });
+    updateContact(player, { ...contact('C-1', 'RECON-1', 100), position: at(100, 20) }, 100, true);
+    updateContact(player, { ...contact('C-2', 'CAS-1', 100), position: at(130, 20) }, 100, true);
+    const [track] = tracked(player, 100);
+    expect(track?.contact.position.center.x).toBeCloseTo(115);
+    expect(track?.contact.position.sigmaMeters).toBeLessThan(20);
+  });
+
+  it('merges two fresh tracks that turn out to be one group, keeping the older number', () => {
+    const player = emptyPlayerKnowledge();
+    updateContact(player, contact('C-1', 'F-A', 100, 100), 100, false);
+    updateContact(player, contact('C-5', 'RECON-1', 100, 1500), 100, true);
+    expect(tracked(player, 100)).toHaveLength(2);
+    // The crew's next look puts its contact right beside the platoon's report.
+    updateContact(player, contact('C-5', 'RECON-1', 110, 120), 110, true);
+    const merged = tracked(player, 110);
+    expect(merged.map((m) => m.trackNumber)).toEqual([4001]);
+    expect(player.tracks['TN-4001']?.merged).toEqual([4002]);
+  });
+
+  it('folds a stale track into the one fresh track its unit could have reached, and only then', () => {
+    const player = emptyPlayerKnowledge();
+    updateContact(player, contact('C-1', 'F-A', 100, 100), 100, false);
+    updateContact(player, contact('C-5', 'RECON-1', 100, 1500), 100, true);
+    tracked(player, 100);
+    updateContact(player, contact('C-5', 'RECON-1', 400, 400), 400, true);
+    const after = tracked(player, 400);
+    expect(after.map((m) => m.trackNumber)).toEqual([4001]);
+    const two = emptyPlayerKnowledge();
+    updateContact(two, contact('C-1', 'F-A', 100, 100), 100, false);
+    updateContact(two, contact('C-5', 'RECON-1', 100, 1500), 100, true);
+    updateContact(two, contact('C-6', 'RECON-1', 100, -1500), 100, true);
+    tracked(two, 100);
+    updateContact(two, contact('C-5', 'RECON-1', 400, 400), 400, true);
+    updateContact(two, contact('C-6', 'RECON-1', 400, -200), 400, true);
+    expect(tracked(two, 400)).toHaveLength(3);
+  });
+
+  it('shows a report on its own until it has been put on a track', () => {
+    const player = emptyPlayerKnowledge();
+    updateContact(player, contact('C-1', 'F-A', 80, 120), 90, false);
+    expect(project(player, [], 105, display).contacts[0]).toMatchObject({ key: 'F-A/C-1', trackNumber: null });
   });
 });
 

@@ -95,7 +95,8 @@ export function reactiveCas(suppressSeconds: number | null = null): Policy {
         const mission = { kind: 'Suppress', center: target, radius: SUPPRESS_RADIUS_METERS, untilTick: view.tick + suppressSeconds } as const;
         commands.push({ kind: 'aircraftOrder', tick: view.tick, aircraftId: aircraft.aircraftId, order: mission });
       } else {
-        commands.push(...order(view, aircraft.aircraftId, request.target ?? request.position.center, SUPPORT_RADIUS_METERS, request.wants));
+        // Support goes where the unit is: it covers whatever is attacking it, not just the one target named.
+        commands.push(...order(view, aircraft.aircraftId, request.position.center, SUPPORT_RADIUS_METERS, request.wants));
       }
       commands.push({ kind: 'acknowledge', tick: view.tick, unitId: request.unitId, casAircraftId: aircraft.aircraftId });
     }

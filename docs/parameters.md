@@ -92,6 +92,10 @@ rules or the schema.
 | `perception.postureConcealment.hidden` | `0.95` | Concealment from each posture. |
 | `perception.hiddenAirConcealment` | `0.5` | Concealment of a hidden unit from the air, which is less than from the ground. |
 | `perception.misidentifyChance` | `0.02` | Chance at full range that a crew takes friendly troops for hostile. |
+| `perception.claimWindowSeconds` | `60` | A unit that fired this recently claims the men it sees fall. |
+| `perception.claimOptimism` | `1.4` | How many it claims for each one that really fell: above 1 counts high, as units in a fight do. |
+| `perception.claimNoise` | `0.3` | Spread of each claim, as a share of it. |
+| `perception.claimAimMeters` | `120` | Only men falling this close to where a unit is firing count as its hits. |
 | `perception.facingSeenPerScan` | `0.3` | Chance per scan that a crew sees which way a still squad faces. |
 | `perception.facingNoiseRad` | `0.3` | Error in a seen facing. |
 | `perception.reportCueBoost` | `10` | Spotting multiplier near a position a unit has been told about. |
@@ -132,6 +136,7 @@ rules or the schema.
 | `radio.sitrepIntervalSeconds` | `300` | Seconds between SITREPs in contact. |
 | `radio.contactReportIntervalSeconds` | `120` | Seconds before the same contact is reported again. |
 | `radio.ticRangeMeters` | `350` | Enemy within this distance can make a TIC. |
+| `radio.markRangeMeters` | `400` | A platoon can mark a target with smoke for aircraft out to this distance. |
 | `radio.ticStrengthRatio` | `1.2` | Declares a TIC against an enemy at least this many times its strength. |
 | `radio.ticCasualtyFraction` | `0.1` | …or after losing this share. |
 | `radio.supportStrengthRatio` | `1.5` | Asks for air against an enemy at least this many times its strength. |
@@ -159,7 +164,7 @@ rules or the schema.
 | `display.notFoundShowSeconds` | `120` | How long a not-found contact stays. |
 | `display.friendlySilentSeconds` | `600` | A friendly unit unheard this long shows as silent. |
 | `display.staleSeconds` | `120` | A contact not seen for this long is drawn with a dashed frame and the time it was last seen. |
-| `display.consolidateMaxAgeSeconds` | `120` | Only sightings this fresh absorb older reports. |
+| `display.consolidateMaxAgeSeconds` | `120` | An aircraft sighting this fresh shows a unit is still near an old report, so the report isn't closed as not found. |
 | `display.notFoundMinAgeSeconds` | `60` | A report must be this old before a clear look can close it. |
 | `display.notFoundLookSeconds` | `60` | Seconds of clear look that close a report. |
 | `display.notFoundCoverage` | `0.7` | A clear look covers a report only within this share of the sensor radius. |
@@ -394,6 +399,12 @@ rules or the schema.
 | `air.cueRadiusMeters` | `200` | Recon cues CAS to contacts this close. |
 | `air.cueMaxAgeSeconds` | `180` | Cues this old don't help. |
 | `air.cueDetectionBoost` | `3` | Spotting multiplier from a cue. |
+| `air.markSeconds` | `120` | How long a smoke mark lasts. |
+| `air.markIntervalSeconds` | `180` | Shortest gap between one platoon's marks. |
+| `air.markErrorMeters` | `30` | How far smoke typically lands from where the platoon aimed it. |
+| `air.markRadiusMeters` | `150` | Smoke helps a crew find targets, and warns the enemy, within this distance. |
+| `air.markDetectionBoost` | `4` | Spotting multiplier for a crew looking near smoke. |
+| `air.markIdentifyBoost` | `2` | Identification multiplier for a crew looking near smoke. |
 | `air.blastRadiusMeters` | `120` | Distance over which aiming error spoils a bombing pass. |
 | `air.strikeSplashMeters` | `70` | A bombing pass hits whoever is near the aiming point, falling off over this distance. |
 | `air.gunSplashMeters` | `60` | Same for a gun run. |
@@ -424,6 +435,7 @@ rules or the schema.
 | `air.searchRingShare` | `0.65` | Search pattern radius, as a share of the area's. |
 | `air.suppressSpreadShare` | `0.5` | How far from the center of a Suppress area the crew walks its fire, as a share of the area's radius. |
 | `air.coverAheadMeters` | `400` | How far ahead of a covered platoon the aircraft watches, along its reported heading. |
+| `air.jokerSeconds` | `600` | A crew calls JOKER when it has this much time left on station before it must head home. |
 
 ## weather
 

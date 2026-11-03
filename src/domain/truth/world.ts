@@ -1,5 +1,6 @@
 // Hidden ground truth. Only sim, perception, scenario, debug and cli may import this.
 import type { AircraftId, AircraftOrder, AircraftStatus, AircraftType, AttackRun, FiredOn, RiskLimit, WeaponsControl } from '../public/air';
+import type { CrewCallKind } from '../public/radio';
 import type { Equipment, WeaponType } from '../public/equipment';
 import type { ContactActivity, ContactEstimate } from '../public/estimates';
 import type { Weather } from '../public/weather';
@@ -37,6 +38,8 @@ export type Platoon = {
   morale: number;
   mode: GroundMode;
   returnsUsed: number;
+  /** When it last marked a target for air, so it doesn't throw smoke every few seconds. */
+  lastMarkAt?: number;
   objective: GroundObjective;
   objectiveSchedule: readonly ScheduledObjective[];
   /** Positions in `objectiveSchedule` that have already fired. */
@@ -100,6 +103,9 @@ export type Track = {
   lastSeenPosition: Vec2;
   lastSeenTick: number;
   estimate: ContactEstimate;
+  /** The head count the observer last saw, which its claims are measured against. */
+  seenPersonnel?: number;
+  claimed?: number;
 };
 
 export type Aircraft = {
@@ -119,10 +125,14 @@ export type Aircraft = {
   timerSeconds: number;
   fuelSeconds: number;
   ammunition: number;
+  /** What it is loaded with at the airbase. */
+  bombLoad: number;
   gunBursts: number;
   nextPassTick: number;
   risk: RiskLimit;
   weapons: WeaponsControl;
+  /** Fuel and ordnance calls already made this sortie, so each is said once. */
+  calls: CrewCallKind[];
   manualAltitude: boolean;
   firedOn: readonly FiredOn[];
   breakSeconds: number;
@@ -132,6 +142,8 @@ export type Aircraft = {
   attackRun: AttackRun | null;
   contacts: Record<string, ContactEstimate>;
 };
+
+export type SmokeMark = Readonly<{ position: Vec2; placedAt: number; platoonId: string }>;
 
 export type Outcome = 'running' | 'success' | 'partial' | 'failure';
 
@@ -147,6 +159,8 @@ export type WorldTruth = {
   locatedShare: number | null;
   /** Men lost to their own side's strikes. */
   friendlyFireCasualties: number;
+  /** Smoke thrown on targets for aircraft: a physical thing anyone nearby can see. */
+  marks: SmokeMark[];
   outcome: Outcome;
   endedAtTick: number | null;
 };

@@ -1,5 +1,5 @@
 import type { WeaponType } from './equipment';
-import type { ContactEstimate, PositionEstimate } from './estimates';
+import type { ContactEstimate, PositionEstimate, StrengthEstimate } from './estimates';
 import type { ContactId, DrillKind, GroundMode } from './ground';
 import type { SupportWeapons } from './air';
 import type { Vec2 } from './geometry';
@@ -38,10 +38,14 @@ export type RadioMessage =
         ownPosition: PositionEstimate;
         dangerClose: boolean;
         wants: SupportWeapons;
+        /** The 9-line essentials: where the target is, what it is, and whether it will be marked. */
         target: Vec2 | null;
+        targetStrength: StrengthEstimate | null;
+        marked: boolean;
       }>)
   | (MessageMeta & Readonly<{ kind: 'CHECK_FIRE'; ownPosition: PositionEstimate }>)
   | (MessageMeta & Readonly<{ kind: 'DANGER_CLOSE_HOLD'; aim: Vec2 }>)
+  | (MessageMeta & Readonly<{ kind: 'CREW_CALL'; call: CrewCallKind; minutesLeft: number; gunBursts: number }>)
   | (MessageMeta & Readonly<{ kind: 'DRILL'; ownPosition: PositionEstimate; drill: DrillKind }>)
   | (MessageMeta & Readonly<{ kind: 'COMMAND_UPDATE'; text: string }>)
   | (MessageMeta &
@@ -60,6 +64,12 @@ export type RadioMessage =
       }>)
   | (MessageMeta &
       Readonly<{ kind: 'GROUND_FIRE'; source: PositionEstimate; weapon: WeaponType | null; hit: boolean; damaged: boolean }>);
+
+/**
+ * A crew's fuel and ordnance calls, in brevity words: JOKER means fuel to stay only a little
+ * longer, BINGO fuel for the trip home only, WINCHESTER nothing left to fire.
+ */
+export type CrewCallKind = 'JOKER' | 'BINGO' | 'BOMBS_EXPENDED' | 'WINCHESTER';
 
 /** A suppression mission as air operations announces it on the net: where, and when. */
 export type Suppression = Readonly<{
@@ -91,6 +101,8 @@ export type ReportNeed = Readonly<{
   dangerClose?: boolean;
   wants?: SupportWeapons;
   target?: Vec2;
+  targetStrength?: StrengthEstimate;
+  marked?: boolean;
 }>;
 
 export type RadioTaskPhase = 'queued' | 'preparing' | 'transmitting' | 'interrupted';
@@ -135,6 +147,7 @@ export function reportLevel(message: RadioMessage): ReportLevel {
     case 'DRILL':
     case 'STRIKE_RESULT':
     case 'COMMAND_UPDATE':
+    case 'CREW_CALL':
       return 'main';
     case 'POSITION_REPORT':
     case 'ACKNOWLEDGEMENT':

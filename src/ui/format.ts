@@ -7,7 +7,7 @@ import type { GroundFireEffect } from '../knowledge/player-view';
 import { isAntiAir, type WeaponType } from '../domain/public/equipment';
 import type { ContactEstimate, StrengthEstimate } from '../domain/public/estimates';
 import { distance, type Vec2 } from '../domain/public/geometry';
-import { AIR_OPS, CECON, reportLevel, type RadioMessage, type ReportLevel, type StrikeAssessment } from '../domain/public/radio';
+import { AIR_OPS, CECON, reportLevel, type CrewCallKind, type RadioMessage, type ReportLevel, type StrikeAssessment } from '../domain/public/radio';
 import type { ContactMarker, ContactStatus } from '../knowledge/player-view';
 
 export type Names = Readonly<Record<string, string>>;
@@ -18,10 +18,32 @@ export function displayName(id: string, names: Names): string {
   return names[id] ?? id;
 }
 
+let missionStartSeconds = 0;
+
+/** Sets the local time the mission started, so times read as a 24-hour clock. */
+export function setMissionStart(startTime: string): void {
+  missionStartSeconds = Number(startTime.slice(0, 2)) * 3600 + Number(startTime.slice(2, 4)) * 60;
+}
+
+/** A moment in the mission as military time: 0632. */
 export function clock(tick: number): string {
-  const minutes = Math.floor(tick / 60);
-  const seconds = tick % 60;
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  const seconds = (((missionStartSeconds + Math.floor(tick)) % 86400) + 86400) % 86400;
+  return `${String(Math.floor(seconds / 3600)).padStart(2, '0')}${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}`;
+}
+
+/** The same with seconds, for the header clock: 0632:15. */
+export function clockSeconds(tick: number): string {
+  const seconds = (((missionStartSeconds + Math.floor(tick)) % 86400) + 86400) % 86400;
+  return `${clock(tick)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+/** A span of time: 4:05, or 1:04:05 past an hour. */
+export function duration(seconds: number): string {
+  const whole = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(whole / 3600);
+  const minutes = Math.floor((whole % 3600) / 60);
+  const rest = String(whole % 60).padStart(2, '0');
+  return hours > 0 ? `${hours}:${String(minutes).padStart(2, '0')}:${rest}` : `${minutes}:${rest}`;
 }
 
 /** Grid reference by terrain cell, as column-row. */
@@ -242,6 +264,13 @@ export function triage(
 
 export type RadioLine = Readonly<{ text: string; coordinates: readonly Vec2[] }>;
 
+const CREW_CALL_TEXT: Readonly<Record<CrewCallKind, (minutes: number, bursts: number) => string>> = {
+  JOKER: (minutes) => `JOKER: about ${minutes} minutes left on station.`,
+  BINGO: () => 'BINGO: fuel for the trip home only, returning to base.',
+  BOMBS_EXPENDED: (_, bursts) => `Bombs expended, ${bursts} gun ${bursts === 1 ? 'burst' : 'bursts'} left.`,
+  WINCHESTER: () => 'WINCHESTER: no ordnance left.',
+};
+
 /** Natural-language template for a message, plus the reported points it mentions. */
 export function radioLine(message: RadioMessage, cellSize: number): RadioLine {
   const grid = (point: Vec2): string => `grid ${gridRef(point, cellSize)}`;
@@ -266,6 +295,8 @@ export function radioLine(message: RadioMessage, cellSize: number): RadioLine {
       };
     case 'CHECK_FIRE':
       return { text: `CHECK FIRE! Friendly strike on our position at ${grid(message.ownPosition.center)}.`, coordinates: [message.ownPosition.center] };
+    case 'CREW_CALL':
+      return { text: CREW_CALL_TEXT[message.call](message.minutesLeft, message.gunBursts), coordinates: [] };
     case 'DANGER_CLOSE_HOLD':
       return { text: `Holding: friendlies too close to the target at ${grid(message.aim)}.`, coordinates: [message.aim] };
     case 'DRILL':
@@ -282,8 +313,15 @@ export function radioLine(message: RadioMessage, cellSize: number): RadioLine {
         : `Suppressing ${grid(center)} from ${clock(fromTick)} until ${clock(untilTick)}.`;
       return { text, coordinates: [center] };
     }
-    case 'SUPPORT_REQUEST':
-      return { text: `Requesting air support at ${grid(message.ownPosition.center)}${message.target === null ? '' : `, ${WANTS_TEXT[message.wants]} on ${grid(message.target)}`}${message.target === null && message.wants !== 'both' ? `, ${WANTS_TEXT[message.wants]}` : ''}${message.dangerClose ? ', DANGER CLOSE: commander accepts the risk' : ''}.`, coordinates: [message.ownPosition.center] };
+    case 'SUPPORT_REQUEST': {
+      // In the order of a 9-line: target location and description, mark, then friendlies.
+      const target = message.target === null
+        ? ''
+        : `, ${WANTS_TEXT[message.wants]} on ${message.targetStrength === null ? 'enemy' : strengthText(message.targetStrength)} at ${grid(message.target)}${message.marked ? ', marked by smoke' : ', no mark'}, friendlies at ${grid(message.ownPosition.center)}`;
+      const wants = message.target === null && message.wants !== 'both' ? `, ${WANTS_TEXT[message.wants]}` : '';
+      const coordinates = message.target === null ? [message.ownPosition.center] : [message.ownPosition.center, message.target];
+      return { text: `Requesting air support at ${grid(message.ownPosition.center)}${target}${wants}${message.dangerClose ? ', DANGER CLOSE: commander accepts the risk' : ''}.`, coordinates };
+    }
     case 'COMMAND_UPDATE':
       return { text: message.text, coordinates: [] };
     case 'ACKNOWLEDGEMENT':

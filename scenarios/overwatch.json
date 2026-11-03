@@ -1,0 +1,345 @@
+{
+  "id": "overwatch",
+  "name": "Overwatch",
+  "rules": "standard",
+  "durationSeconds": 7200,
+  "startTime": "0700",
+  "terrain": {
+    "classLayer": "valley-road/terrain.txt",
+    "elevationLayer": "valley-road/elevation.txt"
+  },
+  "mission": {
+    "kind": "ReachArea",
+    "area": {
+      "center": {
+        "x": 2154,
+        "y": 300
+      },
+      "radius": 200
+    },
+    "briefing": "Get the column to the north end of the valley",
+    "areaLabel": "At the destination",
+    "results": {
+      "success": "COLUMN THROUGH: mission success",
+      "partial": "COLUMN THROUGH, heavy losses: mission failed",
+      "failure": "COLUMN STOPPED: mission failed"
+    },
+    "unitIds": [
+      "F-C1",
+      "F-C2"
+    ],
+    "successMinPersonnel": 38,
+    "partialMinPersonnel": 10
+  },
+  "units": [
+    {
+      "id": "F-C1",
+      "name": "Convoy Lead",
+      "side": "friendly",
+      "position": {
+        "x": 2110,
+        "y": 3700
+      },
+      "personnel": 24,
+      "morale": 0.75,
+      "doctrine": "column",
+      "objective": {
+        "kind": "MoveTo",
+        "area": {
+          "center": {
+            "x": 2154,
+            "y": 300
+          },
+          "radius": 200
+        }
+      },
+      "fallback": {
+        "center": {
+          "x": 2110,
+          "y": 3700
+        },
+        "radius": 150
+      },
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 24,
+          "ammunition": 10200.0
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 1,
+          "ammunition": 3000.0
+        }
+      ]
+    },
+    {
+      "id": "F-C2",
+      "name": "Convoy Rear",
+      "side": "friendly",
+      "position": {
+        "x": 2181,
+        "y": 3850
+      },
+      "personnel": 24,
+      "morale": 0.75,
+      "doctrine": "column",
+      "objective": {
+        "kind": "MoveTo",
+        "area": {
+          "center": {
+            "x": 2154,
+            "y": 300
+          },
+          "radius": 200
+        }
+      },
+      "fallback": {
+        "center": {
+          "x": 2110,
+          "y": 3700
+        },
+        "radius": 150
+      },
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 24,
+          "ammunition": 10200.0
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 1,
+          "ammunition": 3000.0
+        }
+      ]
+    },
+    {
+      "id": "E-O1",
+      "name": "East Overwatch",
+      "side": "enemy",
+      "position": {
+        "x": 2005,
+        "y": 2325
+      },
+      "personnel": 22,
+      "morale": 0.75,
+      "doctrine": "assault",
+      "objective": {
+        "kind": "AmbushArea",
+        "area": {
+          "center": {
+            "x": 2005,
+            "y": 2325
+          },
+          "radius": 35
+        },
+        "openFireMeters": 330,
+        "watches": {
+          "x": 1775,
+          "y": 2325
+        }
+      },
+      "fallback": {
+        "center": {
+          "x": 2450,
+          "y": 2000
+        },
+        "radius": 120
+      },
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 22,
+          "ammunition": 8000
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 2,
+          "ammunition": 3000
+        }
+      ]
+    },
+    {
+      "id": "E-O2",
+      "name": "West Overwatch",
+      "side": "enemy",
+      "position": {
+        "x": 1920,
+        "y": 1525
+      },
+      "personnel": 22,
+      "morale": 0.75,
+      "doctrine": "assault",
+      "objective": {
+        "kind": "AmbushArea",
+        "area": {
+          "center": {
+            "x": 1920,
+            "y": 1525
+          },
+          "radius": 35
+        },
+        "openFireMeters": 330,
+        "watches": {
+          "x": 2150,
+          "y": 1525
+        }
+      },
+      "fallback": {
+        "center": {
+          "x": 1450,
+          "y": 1200
+        },
+        "radius": 120
+      },
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 22,
+          "ammunition": 8000
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 2,
+          "ammunition": 3000
+        }
+      ]
+    },
+    {
+      "id": "E-AD",
+      "name": "Air Defense Team",
+      "side": "enemy",
+      "position": {
+        "x": 2500,
+        "y": 1900
+      },
+      "personnel": 4,
+      "morale": 0.75,
+      "doctrine": "antiair",
+      "objective": {
+        "kind": "HoldArea",
+        "area": {
+          "center": {
+            "x": 2500,
+            "y": 1900
+          },
+          "radius": 60
+        }
+      },
+      "fallback": {
+        "center": {
+          "x": 2700,
+          "y": 1700
+        },
+        "radius": 120
+      },
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 4,
+          "ammunition": 800
+        },
+        {
+          "weapon": "MANPADS",
+          "quantity": 1,
+          "ammunition": 4
+        }
+      ]
+    },
+    {
+      "id": "E-O3",
+      "name": "North Overwatch",
+      "side": "enemy",
+      "position": {
+        "x": 2095,
+        "y": 800
+      },
+      "personnel": 22,
+      "morale": 0.75,
+      "doctrine": "assault",
+      "objective": {
+        "kind": "AmbushArea",
+        "area": {
+          "center": {
+            "x": 2095,
+            "y": 800
+          },
+          "radius": 35
+        },
+        "openFireMeters": 330,
+        "watches": {
+          "x": 2325,
+          "y": 800
+        }
+      },
+      "fallback": {
+        "center": {
+          "x": 1700,
+          "y": 600
+        },
+        "radius": 120
+      },
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 22,
+          "ammunition": 8000
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 2,
+          "ammunition": 3000
+        }
+      ]
+    }
+  ],
+  "display": {
+    "hqEnemyEstimate": 70
+  },
+  "links": [
+    [
+      "F-C1",
+      "AIR_OPS"
+    ],
+    [
+      "F-C2",
+      "AIR_OPS"
+    ],
+    [
+      "F-C1",
+      "F-C2"
+    ],
+    [
+      "E-O1",
+      "E-O2"
+    ],
+    [
+      "E-O2",
+      "E-O3"
+    ]
+  ],
+  "ceconMessages": [
+    {
+      "atSeconds": 0,
+      "text": "Column is moving north through the valley. CAS-1 is carrying only two bombs today."
+    }
+  ],
+  "air": {
+    "airbase": {
+      "x": 2000,
+      "y": 30000
+    },
+    "aircraft": [
+      {
+        "id": "RECON-1",
+        "model": "O-1E"
+      },
+      {
+        "id": "CAS-1",
+        "model": "A-1E",
+        "ammunition": 2
+      }
+    ]
+  }
+}

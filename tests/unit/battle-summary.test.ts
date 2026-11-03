@@ -3,6 +3,7 @@ import type { ContactEstimate } from '../../src/domain/public/estimates';
 import type { ContactId } from '../../src/domain/public/ground';
 import { emptyPlayerKnowledge, updateContact, updateFriendly, type PlayerKnowledge } from '../../src/knowledge/player-knowledge';
 import { project } from '../../src/knowledge/player-view';
+import { correlateReports } from '../../src/knowledge/tracks';
 import { sectorOf, strengthRange, summarizeBattle, type SummaryConfig } from '../../src/ui/battle-summary';
 import { forceRatioText, rangeText, statusText } from '../../src/ui/format';
 
@@ -65,6 +66,7 @@ describe('battle summary', () => {
     updateContact(player, report('C-1', 'F-A', 2000, 1800), 100, false);
     updateContact(player, report('C-2', 'F-B', 2020, 1810), 100, false);
     updateContact(player, report('C-3', 'RECON-1', 2010, 1805, 105, 20, 30), 105, true);
+    correlateReports(player, { plausibleSpeedMps: 1, archiveSeconds: 1200, staleSeconds: 120 }, 105);
     const result = summary(player);
     expect(result.known).toEqual({ low: 20, high: 25 });
     expect(result.unconfirmed).toBe(0);

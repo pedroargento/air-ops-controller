@@ -1,4 +1,5 @@
 import type { AircraftTelemetry, AircraftTelemetryEntry } from '../domain/public/air';
+import type { TruthFrame } from '../domain/public/debrief';
 import type { Vec2 } from '../domain/public/geometry';
 import { isAntiAir, type WeaponType } from '../domain/public/equipment';
 import { elevationAt, type TerrainGrid } from '../domain/public/terrain';
@@ -59,7 +60,7 @@ export type WeatherLayer = Readonly<{
   confidence: number;
 }>;
 
-export type MapLayers = Readonly<{ weather: WeatherLayer | null; threats: boolean }>;
+export type MapLayers = Readonly<{ weather: WeatherLayer | null }>;
 
 const HIT_RADIUS_PIXELS = 12;
 const MIN_ZOOM = 0.5;
@@ -172,7 +173,7 @@ export class MapView {
     this.split = split;
   }
 
-  /** What the map draws: consolidated markers, except groups the player has split apart. */
+  /** What the map draws: one marker per track, except tracks the player has split apart. */
   private shownContacts(view: PlayerView): readonly ContactMarker[] {
     return view.contacts.flatMap((marker) =>
       this.split.has(marker.key) ? [{ ...marker, members: [] }, ...marker.members] : [marker],
@@ -224,9 +225,6 @@ export class MapView {
     if (layers.weather !== null) this.drawWeather(layers.weather);
 
     const contacts = this.shownContacts(view);
-    if (layers.threats) {
-      for (const marker of contacts) this.drawThreatRing(marker, threatAltitudeMeters);
-    }
     for (const marker of contacts) {
       const selected = selection?.kind === 'contact' && selection.key === marker.key;
       if (selected) this.drawThreatRing(marker, threatAltitudeMeters);
@@ -234,6 +232,7 @@ export class MapView {
     }
     for (const cluster of view.clusters) this.drawCluster(cluster);
     for (const poi of view.pois) this.drawPoi(poi);
+    for (const mark of view.smoke) this.drawSmoke(mark.position, mark.ageSeconds);
     for (const friendly of view.friendlies) {
       this.drawFriendly(friendly, selection?.kind === 'friendly' && selection.id === friendly.unitId);
     }
@@ -497,6 +496,56 @@ export class MapView {
     haloText(ctx, POI_KINDS[poi.kind].label.toUpperCase(), at.x, at.y + radius + 13, '#a8540a', 'bold 11px sans-serif', 'center');
   }
 
+  /**
+   * After the run: where every squad really was at the moment reviewed, drawn plainly over the
+   * map as it was known, so the two can be compared. Friendly blue, enemy black, dead as crosses.
+   */
+  drawTruth(frame: TruthFrame): void {
+    const { ctx } = this;
+    for (const squad of frame.squads) {
+      const at = this.toScreen({ x: squad.x, y: squad.y });
+      const color = squad.side === 'friendly' ? '#1060ff' : '#111111';
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      if (squad.alive) {
+        ctx.arc(at.x, at.y, 4, 0, Math.PI * 2);
+        ctx.globalAlpha = 0.85;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      } else {
+        ctx.moveTo(at.x - 4, at.y - 4);
+        ctx.lineTo(at.x + 4, at.y + 4);
+        ctx.moveTo(at.x + 4, at.y - 4);
+        ctx.lineTo(at.x - 4, at.y + 4);
+        ctx.stroke();
+      }
+    }
+    haloText(ctx, 'TRUTH: ● where each squad really was, ✕ dead', 14, 52, '#111111', 'bold 12px sans-serif');
+  }
+
+  /** Smoke a platoon threw on a target, as a crew reported seeing it: a drifting grey puff. */
+  private drawSmoke(point: Vec2, ageSeconds: number): void {
+    const { ctx } = this;
+    const at = this.toScreen(point);
+    ctx.globalAlpha = Math.max(0.25, 0.8 - ageSeconds / 200);
+    ctx.fillStyle = '#d8d8d8';
+    ctx.strokeStyle = '#6a6a6a';
+    ctx.lineWidth = 1;
+    for (const [dx, dy, r] of [[0, 0, 7], [6, -4, 5], [-6, -3, 5], [2, -8, 4]] as const) {
+      ctx.beginPath();
+      ctx.arc(at.x + dx, at.y + dy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    haloText(ctx, 'SMOKE', at.x + 10, at.y + 4, '#4a4a4a', 'bold 9px sans-serif');
+  }
+
   /** A dashed ring with a count of reports: distinct from a marker, and never a unit symbol. */
   private drawCluster(cluster: ContactCluster): void {
     const { ctx } = this;
@@ -639,13 +688,8 @@ export class MapView {
         ctx.lineWidth = 2;
         ctx.strokeRect(at.x + 2, at.y + 2, side - 4, side - 4);
       }
-      const hundreds = Math.floor(figure.meters / 100);
-      const tens = Math.round((figure.meters % 100) / 10);
       const color = clear ? '#1d3f8f' : '#c41e1e';
-      const x = at.x + side / 2;
-      const y = at.y + side / 2 + 10;
-      haloText(ctx, String(hundreds), x - 4, y, color, 'bold 26px sans-serif', 'center');
-      haloText(ctx, String(tens), x + 7, y - 12, color, 'bold 13px sans-serif', 'left');
+      haloText(ctx, `${figure.meters}`, at.x + side / 2, at.y + side / 2 + 7, color, 'bold 18px sans-serif', 'center');
     }
   }
 
@@ -711,7 +755,11 @@ export class MapView {
       hollow: false,
       selected,
       headingRad: null,
-      right: [{ text: friendly.unitId, color: '#0b3a6a' }],
+      right: [
+        { text: friendly.unitId, color: '#0b3a6a' },
+        // Cleared for danger close: crews may fire near this unit until then.
+        ...(friendly.dangerCloseUntil === null ? [] : [{ text: `DC until ${clock(friendly.dangerCloseUntil)}`, color: '#c41e1e' }]),
+      ],
     });
     ctx.globalAlpha = 1;
   }

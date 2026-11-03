@@ -31,6 +31,12 @@ export type Observer = Readonly<{
   rangeMeters: number;
   suppression: number;
   detectionBoost: (target: GroundUnit) => number;
+  /** Fired recently, so men it sees fall are men it thinks it hit. */
+  firing?: boolean;
+  /** Where it is firing: only falls near there are taken for its own hits. */
+  aim?: Vec2 | null;
+  /** A mark near the target helps tell what it is. */
+  identifyBoost?: (target: GroundUnit) => number;
 }>;
 
 function concealmentAt(observer: Observer, target: GroundUnit, terrain: TerrainGrid): number {
@@ -118,7 +124,7 @@ function rollIdentification(
   label: string,
   config: PerceptionConfig,
 ): Identification {
-  const chance = config.identifyPerScan * observer.quality * (1 - range / observer.rangeMeters);
+  const chance = config.identifyPerScan * observer.quality * (1 - range / observer.rangeMeters) * (observer.identifyBoost?.(target) ?? 1);
   if (!nextBool(rng, label, Math.min(1, chance))) return 'unidentified';
   if (target.side !== observer.side) return 'hostile';
   // From the air one group of men looks much like another, and more so from far off.
@@ -311,7 +317,40 @@ export function observeTarget(
   tracks[target.id] = current;
   const facing = seenFacing(observer, target, range, current.estimate, rng, config, tick);
   if (facing !== null) current.estimate = { ...current.estimate, facingRad: facing };
+  claimLosses(observer, target, track, current, rng, config);
   return current.estimate;
+}
+
+/**
+ * A unit that has been firing and sees men in front of it fall believes it hit them. It counts
+ * them as best it can and, like any unit in a fight, tends to count high. Fall it didn't cause
+ * is claimed too, because it can't tell its own hits from anyone else's.
+ */
+function claimLosses(observer: Observer, target: GroundUnit, previous: Track | null, current: Track, rng: RngState, config: PerceptionConfig): void {
+  const seen = previous?.seenPersonnel ?? target.personnel;
+  let claimed = previous?.claimed ?? 0;
+  const fallen = seen - target.personnel;
+  const aimedAt = observer.aim !== undefined && observer.aim !== null && distance(observer.aim, target.position) <= config.claimAimMeters;
+  if (observer.medium === 'ground' && observer.firing === true && aimedAt && fallen > 0) {
+    const noise = 1 + nextGaussian(rng, `claim/${observer.id}/${target.id}`) * config.claimNoise;
+    claimed += Math.max(0, Math.round(fallen * config.claimOptimism * noise));
+  }
+  current.seenPersonnel = target.personnel;
+  current.claimed = claimed;
+  if (claimed > 0) current.estimate = { ...current.estimate, claimedLosses: claimed };
+}
+
+/**
+ * A position it was firing on has gone quiet: the unit claims the men it last saw there. Its
+ * report keeps the old sighting time, because nobody is left to be seen.
+ */
+function claimTheLast(truth: WorldTruth, observer: Observer, target: GroundUnit, terrain: TerrainGrid, rng: RngState, config: PerceptionConfig): ContactEstimate | null {
+  const track = truth.tracks[observer.id]?.[target.id];
+  if (track === undefined || (track.seenPersonnel ?? 0) <= 0) return null;
+  if (!hasLineOfSight(observer, target, terrain)) return null;
+  const before = track.estimate;
+  claimLosses(observer, target, track, track, rng, config);
+  return track.estimate === before ? null : track.estimate;
 }
 
 /** Being told where to look is what a report gives a unit: it finds what it would have missed. */
@@ -332,6 +371,7 @@ function groundObserver(
   weather: Weather,
   detectionBoost: (target: GroundUnit) => number,
   tick: number,
+  claimWindowSeconds: number,
 ): Observer {
   // Every squad feeds the platoon's one picture (§4.0.1).
   return {
@@ -350,6 +390,8 @@ function groundObserver(
     rangeMeters: unit.doctrine.detectRangeMeters,
     suppression: unit.suppression,
     detectionBoost,
+    firing: unit.lastFiredAtTick !== null && tick - unit.lastFiredAtTick <= claimWindowSeconds,
+    aim: unit.intent.kind === 'engage' ? unit.intent.aim : null,
   };
 }
 
@@ -368,14 +410,19 @@ export function updatePerception(
     let observer: Observer | null = null;
     const reach = unit.doctrine.detectRangeMeters;
     for (const target of truth.units) {
-      if (target.side === unit.side || target.personnel <= 0) continue;
+      if (target.side === unit.side) continue;
       // Most pairs are far apart, so skip them before any costly work.
       const dx = target.position.x - unit.position.x;
       const dy = target.position.y - unit.position.y;
       if (dx * dx + dy * dy > reach * reach) continue;
       const cue = cues.get(unit.platoonId) ?? reportCue(belief, unit.doctrine.reportMemorySeconds, config, tick);
       cues.set(unit.platoonId, cue);
-      observer ??= groundObserver(unit, truth.weather, cue, tick);
+      observer ??= groundObserver(unit, truth.weather, cue, tick, config.claimWindowSeconds);
+      if (target.personnel <= 0) {
+        const claimed = claimTheLast(truth, observer, target, terrain, rng, config);
+        if (claimed !== null) belief.contacts[claimed.contactId] = claimed;
+        continue;
+      }
       const estimate = observeTarget(truth, observer, target, terrain, rng, config, tick);
       if (estimate !== null) belief.contacts[estimate.contactId] = estimate;
     }

@@ -42,6 +42,7 @@ export function createInitialState(scenario: Scenario, seed: number): SimState {
       captureProgressSeconds: 0,
       locatedShare: null,
       friendlyFireCasualties: 0,
+      marks: [],
       outcome: 'running',
       endedAtTick: null,
     },

@@ -16,11 +16,13 @@ import { cellAt, hasGroundLos, type TerrainGrid } from '../domain/public/terrain
 import { AIR_OPS, CECON, type MessageId } from '../domain/public/radio';
 import type { GroundUnit, Platoon, WorldTruth } from '../domain/truth/world';
 import { reviewContacts } from '../knowledge/player-knowledge';
+import { correlateReports } from '../knowledge/tracks';
+import { placeMarks } from './marks';
 import { updatePerception } from '../perception/observe';
 import { nextGaussian, type RngState } from '../rng/streams';
 import type { Scenario } from '../scenario/load';
 import type { PerceptionConfig } from '../scenario/schema';
-import { advanceAircraft, updateCrews, resolveCas, sensorCoverage, updateAircraftNotice, updateAircraftPerception } from './air';
+import { advanceAircraft, crewCalls, updateCrews, resolveCas, sensorCoverage, updateAircraftNotice, updateAircraftPerception } from './air';
 import { resolveGroundFire } from './ground-fire';
 import { issueForecast } from './weather';
 import { resolveCombat } from './combat';
@@ -375,6 +377,8 @@ export function step(state: SimState, commands: readonly PlayerCommand[], scenar
     if (tactical) driftNavigation(unit, file.perception, rng);
   }
   for (const aircraft of truth.aircraft) advanceAircraft(aircraft, file.air, terrain);
+  if (tactical) crewCalls(truth, state.player, state.radio, file.air, state.tick);
+  if (tactical) placeMarks(truth, state.unitKnowledge, scenario, rng, state.tick);
 
   resolveCas(truth, state.player, state.radio, terrain, file.air, file.combat, file.display, file.perception.engageMemorySeconds, rng, state.tick);
 
@@ -386,6 +390,8 @@ export function step(state: SimState, commands: readonly PlayerCommand[], scenar
 
   advanceRadio(radioUnits(truth), lazySelves(state, scenario), state.unitKnowledge, state.radio, state.player, scenario, state.tick);
   advanceOutbound(state);
+  // Whatever reached air operations this second goes on a track before anyone looks at the map.
+  correlateReports(state.player, file.display, state.tick);
   if (tactical) reviewPromises(state, scenario);
 
   state.tick += 1;

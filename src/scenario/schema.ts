@@ -131,6 +131,10 @@ const perception = z.object({
   postureConcealment: z.object({ moving: unit, firing: unit, defending: unit, prone: unit, hidden: unit }).describe('Concealment from each posture.'),
   hiddenAirConcealment: unit.describe('Concealment of a hidden unit from the air, which is less than from the ground.'),
   misidentifyChance: unit.describe('Chance at full range that a crew takes friendly troops for hostile.'),
+  claimWindowSeconds: z.number().positive().describe('A unit that fired this recently claims the men it sees fall.'),
+  claimOptimism: z.number().positive().describe('How many it claims for each one that really fell: above 1 counts high, as units in a fight do.'),
+  claimNoise: z.number().nonnegative().describe('Spread of each claim, as a share of it.'),
+  claimAimMeters: z.number().positive().describe('Only men falling this close to where a unit is firing count as its hits.'),
   facingSeenPerScan: unit.describe('Chance per scan that a crew sees which way a still squad faces.'),
   facingNoiseRad: z.number().nonnegative().describe('Error in a seen facing.'),
   reportCueBoost: z.number().min(1).describe('Spotting multiplier near a position a unit has been told about.'),
@@ -169,6 +173,7 @@ const radio = z.object({
   sitrepIntervalSeconds: z.number().int().positive().describe('Seconds between SITREPs in contact.'),
   contactReportIntervalSeconds: z.number().int().positive().describe('Seconds before the same contact is reported again.'),
   ticRangeMeters: z.number().positive().describe('Enemy within this distance can make a TIC.'),
+  markRangeMeters: z.number().positive().describe('A platoon can mark a target with smoke for aircraft out to this distance.'),
   ticStrengthRatio: z.number().positive().describe('Declares a TIC against an enemy at least this many times its strength.'),
   ticCasualtyFraction: unit.describe('…or after losing this share.'),
   supportStrengthRatio: z.number().positive().describe('Asks for air against an enemy at least this many times its strength.'),
@@ -194,7 +199,7 @@ const display = z.object({
   notFoundShowSeconds: z.number().positive().describe('How long a not-found contact stays.'),
   friendlySilentSeconds: z.number().positive().describe('A friendly unit unheard this long shows as silent.'),
   staleSeconds: z.number().positive().describe('A contact not seen for this long is drawn with a dashed frame and the time it was last seen.'),
-  consolidateMaxAgeSeconds: z.number().positive().describe('Only sightings this fresh absorb older reports.'),
+  consolidateMaxAgeSeconds: z.number().positive().describe('An aircraft sighting this fresh shows a unit is still near an old report, so the report isn\'t closed as not found.'),
   notFoundMinAgeSeconds: z.number().positive().describe('A report must be this old before a clear look can close it.'),
   notFoundLookSeconds: z.number().positive().describe('Seconds of clear look that close a report.'),
   notFoundCoverage: unit.describe('A clear look covers a report only within this share of the sensor radius.'),
@@ -247,13 +252,27 @@ const air = z.object({
   groundFireWeaponSeenChance: unit.describe('Chance a crew makes out the weapon firing at it.'),
   groundFireReportSeconds: z.number().int().positive().describe('Shortest gap between a crew\'s reports of being fired on.'),
   models: z.record(z.string(), aircraftModel).describe('Aircraft types.'),
-  aircraft: z.array(z.object({ id: z.string(), model: z.string() })).describe('Aircraft in a scenario.'),
+  aircraft: z
+    .array(
+      z.object({
+        id: z.string(),
+        model: z.string(),
+        ammunition: z.number().int().min(0).optional().describe('Bombing passes it carries here, if not the model\'s usual load.'),
+      }),
+    )
+    .describe('Aircraft in a scenario.'),
   groundNoticeRangeMeters: z.number().positive().describe('How far ground units notice aircraft.'),
   groundNoticePerScan: unit.describe('Chance per scan that a unit notices one.'),
   sightingDedupeMeters: z.number().positive().describe('An air sighting this close to a known one isn\'t announced.'),
   cueRadiusMeters: z.number().positive().describe('Recon cues CAS to contacts this close.'),
   cueMaxAgeSeconds: z.number().positive().describe('Cues this old don\'t help.'),
   cueDetectionBoost: z.number().min(1).describe('Spotting multiplier from a cue.'),
+  markSeconds: z.number().positive().describe('How long a smoke mark lasts.'),
+  markIntervalSeconds: z.number().positive().describe('Shortest gap between one platoon\'s marks.'),
+  markErrorMeters: z.number().nonnegative().describe('How far smoke typically lands from where the platoon aimed it.'),
+  markRadiusMeters: z.number().positive().describe('Smoke helps a crew find targets, and warns the enemy, within this distance.'),
+  markDetectionBoost: z.number().min(1).describe('Spotting multiplier for a crew looking near smoke.'),
+  markIdentifyBoost: z.number().min(1).describe('Identification multiplier for a crew looking near smoke.'),
   blastRadiusMeters: z.number().positive().describe('Distance over which aiming error spoils a bombing pass.'),
   strikeSplashMeters: z.number().positive().describe('A bombing pass hits whoever is near the aiming point, falling off over this distance.'),
   gunSplashMeters: z.number().positive().describe('Same for a gun run.'),
@@ -284,6 +303,7 @@ const air = z.object({
   searchRingShare: unit.describe('Search pattern radius, as a share of the area\'s.'),
   suppressSpreadShare: unit.describe('How far from the center of a Suppress area the crew walks its fire, as a share of the area\'s radius.'),
   coverAheadMeters: z.number().nonnegative().describe('How far ahead of a covered platoon the aircraft watches, along its reported heading.'),
+  jokerSeconds: z.number().positive().describe('A crew calls JOKER when it has this much time left on station before it must head home.'),
 });
 
 const weather = z.object({
@@ -374,6 +394,7 @@ export const scenarioFileSchema = z.object({
   id: z.string(),
   name: z.string(),
   durationSeconds: z.number().int().positive(),
+  startTime: z.string().regex(/^([01]\d|2[0-3])[0-5]\d$/).default('0600').describe('Local time the mission starts, as a 24-hour clock: 0600.'),
   terrain: z.object({
     cellSizeMeters: z.number().positive().describe('Width of one terrain cell, in metres.'),
     elevationStepMeters: z.number().positive().describe('Height of one step in the elevation layer, in metres.'),

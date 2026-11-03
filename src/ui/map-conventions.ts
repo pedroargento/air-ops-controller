@@ -38,8 +38,13 @@ export function estimatedEchelon(strength: StrengthEstimate): Echelon | null {
   return strength.kind === 'unknown' ? null : echelonOf(strength.max);
 }
 
-/** APP-6 operational condition, shown as a bar under the symbol. */
-export type Condition = 'capable' | 'damaged' | 'badlyDamaged';
+/**
+ * APP-6 operational condition, shown as a bar under the symbol, with NATO's fire-effect terms:
+ * about a tenth lost neutralizes a unit for a while, about three tenths leaves it
+ * combat-ineffective, which doctrine calls destroyed. The game keeps "destroyed" for a unit
+ * nobody is left in.
+ */
+export type Condition = 'capable' | 'neutralized' | 'combatIneffective';
 
 export type ConditionEstimate = Readonly<{
   /** Share of the unit believed lost: claims against claims plus what's still thought to be there. */
@@ -49,12 +54,12 @@ export type ConditionEstimate = Readonly<{
   probablyDestroyed: boolean;
 }>;
 
-const DAMAGED_SHARE = 1 / 3;
-const BADLY_DAMAGED_SHARE = 2 / 3;
+const NEUTRALIZED_SHARE = 0.1;
+const INEFFECTIVE_SHARE = 0.3;
 const PROBABLY_DESTROYED_SHARE = 0.9;
 
 function conditionFromShare(lostShare: number): ConditionEstimate {
-  const condition: Condition = lostShare >= BADLY_DAMAGED_SHARE ? 'badlyDamaged' : lostShare >= DAMAGED_SHARE ? 'damaged' : 'capable';
+  const condition: Condition = lostShare >= INEFFECTIVE_SHARE ? 'combatIneffective' : lostShare >= NEUTRALIZED_SHARE ? 'neutralized' : 'capable';
   return { lostShare, condition, probablyDestroyed: lostShare >= PROBABLY_DESTROYED_SHARE };
 }
 
@@ -73,8 +78,8 @@ export function friendlyCondition(reported: number, initial: number): ConditionE
 
 export const CONDITION_COLORS: Readonly<Record<Condition, string>> = {
   capable: '#2e9e44',
-  damaged: '#e0b020',
-  badlyDamaged: '#d22c2c',
+  neutralized: '#e0b020',
+  combatIneffective: '#d22c2c',
 };
 
 /**

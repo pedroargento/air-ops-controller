@@ -146,6 +146,15 @@ export type AircraftTelemetryEntry = Readonly<{
   manualAltitude: boolean;
   etaSeconds: number | null;
   availableInSeconds: number;
+  /** Time it can stay once there before it must head home, while airborne and not already going. */
+  stationSeconds: number | null;
+  /** Flying time back to base from where it is. */
+  homeSeconds: number;
+  /** Time on the ground before it can fly again: rearming, or repair if damaged. */
+  turnaroundSeconds: number;
+  speedMps: number;
+  /** Time still to take off: the whole takeoff while ready, what's left during it, then none. */
+  takeoffSeconds: number;
 }>;
 
 export type AircraftTelemetry = readonly AircraftTelemetryEntry[];

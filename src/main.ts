@@ -3,6 +3,7 @@ import { AIR_OPS } from './domain/public/radio';
 import { GameSession } from './game/session';
 import { DEFAULT_SCENARIO_NAME, loadBundledScenario } from './scenario/catalog';
 import { App } from './ui/app';
+import { setMissionStart } from './ui/format';
 
 const SPEEDS = [1, 2, 4, 8] as const;
 const MAX_TICKS_PER_FRAME = 20;
@@ -11,6 +12,7 @@ const search = new URLSearchParams(location.search);
 const scenario = loadBundledScenario(search.get('scenario') ?? DEFAULT_SCENARIO_NAME);
 const { mission } = scenario.file;
 document.title = scenario.file.name;
+setMissionStart(scenario.file.startTime);
 const seed = Number(search.get('seed') ?? Math.floor(Math.random() * 1_000_000));
 const session = new GameSession(scenario, seed);
 
@@ -74,6 +76,7 @@ const app = new App({
   },
   speeds: SPEEDS,
   onAction: (action) => session.issue(action),
+  transmitSeconds: scenario.file.radio.transmitSeconds,
   onSpeed: (value) => {
     speed = value;
   },
@@ -81,6 +84,7 @@ const app = new App({
     paused = !paused;
   },
   onExportLog: exportLog,
+  truthHistory: () => session.truthHistory(),
 });
 
 // A hook for end-to-end tests. It exposes what the player already has, never truth.

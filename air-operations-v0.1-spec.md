@@ -306,7 +306,7 @@ Maintain `WorldTruth` and `PlayerKnowledge` as separate states. Only a deliberat
 
 **Contacts:** Store reported locations, strength ranges, heading, identification, source, confidence and age; avoid merging contradictory observations into ground truth. A new observation supersedes older ones within the same source track, and unidentified contacts stay unidentified on the map.
 
-**Consolidation:** A fresh, confident aircraft sighting absorbs older reports that could be the same unit, judged only from their positions, ages and strength estimates. Age alone never merges anything. Consolidation can be wrong, because two close units can merge, so it happens only in the projection: stored reports stay unchanged, the marker lists its sources, and the player can split them. Weapons seen by any report carry over.
+**Tracks (§7.2):** Air operations keeps one track per suspected enemy group, and the map shows one marker per track.
 
 **Contact status:** A contact is active, hit, destroyed or not found, based only on reported evidence. A strike with an observed effect adds the crew's noisy casualty estimate and marks it hit or destroyed, and a kill closes reports likely to be the same unit. An aircraft that has had a clear look at a reported position and found nothing marks it not found. That can be wrong, because concealed units are missed, and any new sighting reopens the contact.
 
@@ -322,6 +322,41 @@ Maintain `WorldTruth` and `PlayerKnowledge` as separate states. Only a deliberat
 - **The map draws no region of where it might be now.** Earlier versions drew a growing circle, or a cone along the heading. They suggested a knowledge the game doesn't have and weren't much help. Estimating where a unit has gone, from its last position, heading and time, is the controller's own judgment, as it is for a real operator.
 - Aircraft positions, routes, mission states, fuel and ammunition are crisp and continuously updated for the player.
 - Selected aircraft can show an approximate observation footprint; normal view hides all such footprints to reduce clutter. Terrain masking is computed without exposing hidden unit locations.
+
+
+### 7.2 Tracks, claims and source ratings
+
+Air operations works like a track manager: it decides which reports describe one enemy group, from the estimates alone, and it can be wrong.
+
+- **Correlation:** Each report that reaches air operations is matched, once, against the live tracks. It joins the nearest track it could belong to, and opens a new track if there is none. The gate a report must pass:
+  - **Position:** within three times the two estimates' combined error, plus how far the unit could have moved at a plausible speed since the track was last seen. Estimates from different sources err independently, so a tighter gate splits one unit into two.
+  - **Side:** no hostile report joins a friendly track, or the reverse. Unidentified joins either.
+  - **Size:** head counts within a factor of two of each other, since a squad near the edge of a size band often lands in the next one. A report of several squads as one group joins only a track of the same kind.
+  - **Same source:** a track that already holds a different contact from the same source is ruled out, because that source could already tell the two apart.
+- **Ambiguity:** If more than one track could take the report, it joins the nearest and the track is flagged as possibly two groups.
+- **Track numbers:** Tracks are numbered from TN 4001, as on a tactical data link, and the number stays with the track.
+- **Each part from the best source:**
+
+  | Part | Comes from |
+  |---|---|
+  | Position, heading, activity | The most precise report once its age is counted: usually an aircraft overhead, and the ground again once the aircraft has gone |
+  | Strength | A platoon in a firefight with it, in the last five minutes, since it counts the men shooting at it. Otherwise the same report as the position. |
+  | Side | Hostile if any source in contact, or any confident source, says so |
+  | Weapons | Everything anyone saw |
+  | Status | Destroyed only if nobody has seen it since it was reported destroyed. Not found only if every report was looked for and missed. |
+- **Position from several reports:** A track's position is the average of its comparable reports, those within twice the best one's error once age is counted, each weighted by the inverse square of its error, as a Gaussian update would. Two good sightings that agree beat either alone, and the track's stated error shrinks accordingly.
+- **Merging:** Every five seconds air operations revisits its tracks. Two fresh tracks that pass each other's gate, with no source in common, are merged. A stale track is merged into a fresh one only if exactly one fresh track is within reach of where its unit could have gone; with two or more, it stays as a last known position. The older number survives and lists the ones merged into it.
+- **Never deleted:** Stored reports are never changed or deleted. A track lists its reports, and the player can split it apart on the map.
+- **Casualty claims:** A ground unit that has fired in the last `claimWindowSeconds` and sees men fall within `claimAimMeters` of where it is firing believes it hit them. It claims `claimOptimism` men for each one that fell, with noise. It can't tell its own hits from anyone else's, so it claims those too. A position it was firing on that goes quiet is claimed in full. Claims travel in its contact reports, and a report of a group carries the group's claims.
+- **Deconflicting claims:** On a track, each source counts once, at its highest claim. The track takes the largest ground claim rather than the sum, because units watching one fight claim the same men. Aircrews' strike assessments are separate passes, so they add. Even so, claims run high, as they do in real fighting.
+- **Condition:** NATO's fire-effect terms set the bar under the symbol. Under a tenth of the estimated strength claimed is green. From a tenth to three tenths is yellow, **neutralized**. Three tenths or more is red, **combat-ineffective**, which doctrine calls destroyed. The game keeps "destroyed" for a unit nobody is left in.
+- **Source ratings:** Each contact shows an Admiralty rating (§9). After the run, the debrief rates every source on its real record:
+  - how far off its estimates were, on average,
+  - how many friendly units it reported as hostile,
+  - what it claimed, counted once per enemy squad, which only the debrief can do,
+  - a reliability letter: A within 60 m on average, B within 120 m, C within 250 m, D beyond that, and E for any friendly reported as hostile.
+
+  The debrief also sets aircrew and ground claims against the enemy's real losses.
 
 ## 8. Aircraft simulation and orders
 
@@ -386,7 +421,7 @@ Strikes hit whoever is near the aiming point, on either side. Ground fire doesn'
 - **Clearing:** The controller approves or denies. Approval lasts `dangerCloseClearanceSeconds` and covers that unit only.
 - **Mistaken identity:** A crew sometimes takes friendly troops for hostile, at `misidentifyChance`, more often at long range. The contact looks like any other, so the map check is the safeguard.
 - **Check fire:** A unit hit by its own side's strike calls it in as urgent.
-- **The map:** The controller's map is the reference for all of this. Aircraft sightings of friendly units update their markers directly, and only enemy reports are consolidated.
+- **The map:** The controller's map is the reference for all of this. Aircraft sightings of friendly units update their markers directly, and only enemy reports go on tracks.
 
 ### 8.1.2 Fire missions: Suppress and Strike
 
@@ -398,11 +433,39 @@ Both fire on a place the controller chose, not on something the crew identified,
 - **Telling the ground:** When the controller orders a suppression, air operations announces it to every platoon it can reach, with the place and the times: from the aircraft's ETA until the end of the window. Giving the aircraft another task calls it off, which is also announced. Platoons know only what they were told, not whether the aircraft is really there. A platoon whose route runs past an announced suppression, or that is fired on from inside one, pushes through (§4.0.2).
 - **Results:** The crew reports each pass as fire on an area, with the effect it saw. Nothing is credited to a contact.
 
+### 8.1.3 Requests and marks
+
+- **9-line requests:** A support request carries what a real 9-line does, as far as the platoon knows it:
+  - where the enemy firing on it is,
+  - how big it is,
+  - whether the platoon will mark it,
+  - and where the platoon itself is, the friendlies.
+
+  The radio reads it in that order, and the request panel shows the target and the mark.
+- **Smoke:** A friendly platoon that expects air marks the hostile it knows of nearest to it, within `markRangeMeters`. It expects air when its promised aircraft is due, or when a suppression has been announced.
+  - The smoke is aimed at the platoon's own estimate, so a wrong estimate puts it in the wrong place, and it lands with an error of about `markErrorMeters`.
+  - It lasts `markSeconds`, and a platoon marks again only after `markIntervalSeconds`.
+- **Who sees it:**
+  - A crew looking near smoke, within `markRadiusMeters`, spots targets `markDetectionBoost` times as readily and identifies them `markIdentifyBoost` times as readily.
+  - A crew that can see smoke reports it, and it shows on the controller's map while it lasts.
+  - The enemy sees it too: units near it know an air attack is coming and react as their doctrine says.
+
 ### 8.2 Fuel, turnaround and aircraft presence
 
 Aircraft return to base automatically before fuel runs out. Refueling/rearming uses simple fixed turnaround timers, configurable per aircraft type.
 
 Enemy ground units react to aircraft through their own AI, and only if they detect the aircraft. There is no automatic suppression aura around an orbiting aircraft: a formation that notices aircraft goes to ground briefly, then carries on, and won't take cover again for a doctrine-configured time unless it is actually attacked.
+
+**Crew calls:** Each crew tells air operations when fuel and ordnance run low, once each per sortie:
+
+| Call | When |
+|---|---|
+| JOKER | `jokerSeconds` of station time left |
+| BINGO | Fuel for the trip home only; it heads home |
+| Bombs expended | Heavy ordnance gone, with the gun bursts left |
+| WINCHESTER | Nothing left to fire |
+
+These give the controller time to plan a relief.
 
 ### 8.3 Altitude and ground fire
 
@@ -468,27 +531,29 @@ Desktop-browser layout:
 
 Interaction requirements:
 
+- **The map key** is hidden until the player opens it with the Key button. It draws every symbol with the map's own code, on map paper, and says what each means: unit frames, icons and marks, size marks, condition and destroyed marks, and map features. It also explains the radio's brevity words and crew calls, the aircraft task codes, track numbers, Admiralty ratings, spot reports, 9-line requests and claims.
 - The map always shows a north arrow and a scale bar that follows the zoom; north is always up, because the map doesn't rotate.
 - **Unit symbols follow NATO APP-6 conventions**, drawn in a simple style of our own:
   - **Frame by side:** a blue rectangle is friendly, a red diamond hostile, a yellow quatrefoil unknown (unidentified). A low-confidence hostile is a **suspect**: a paler diamond marked "?". A dashed frame means not seen lately (§7.1), or for a friendly unit, gone quiet. Looked for and not found means no fill and "NOT FOUND".
   - **Icon inside:** a cross for infantry, an oval for vehicles, and a dome at the bottom for air defense.
   - **Size mark above:** ø team, • squad, •• section, ••• platoon, | company, from the strength estimate at its largest. Unknown strength has no mark. Symbols are all one size; the mark says how big.
-  - **Losses:** (−) beside the size mark once losses are claimed, and an operational-condition bar under the symbol: green while claims are under a third of the estimated strength, yellow to two thirds, red above. The share is claims against claims plus the current estimate. A friendly unit's bar comes from its own last SITREP against its starting strength.
+  - **Losses:** (−) beside the size mark once losses are claimed, and an operational-condition bar under the symbol: green under a tenth of the estimated strength, yellow (neutralized) to three tenths, red (combat-ineffective) above (§7.2). The share is claims against claims plus the current estimate. A friendly unit's bar comes from its own last SITREP against its starting strength.
   - **Destroyed:** a solid ✕ when a crew reports it destroyed, a dashed ✕ when claims reach nine tenths of the estimate but nobody has seen it dead.
   - **Movement and facing:** an arrow from the bottom of the frame on a short staff when it's seen moving, and a short line the way a still squad faces.
-  - **Text beside it:** weapons seen (`MG`, and `AAA` or `MP` in magenta), `×3` for consolidated reports, and the time it was last seen once it is stale. A friendly symbol carries its designation.
+  - **Text beside it:** weapons seen (`MG`, and `AAA` or `MP` in magenta), `×3` for a track built from three reports, and the time it was last seen once it is stale. A friendly symbol carries its designation.
 - Aircraft are friendly blue silhouettes with a **data block**, as on an air controller's display: callsign, altitude and task, and what the crew says it's doing in brevity words (NO JOY, TALLY, IN HOT, DEFENDING, WINCHESTER and so on). The fleet list uses the same words.
 - Contact reports read as **spot reports in SALUTE order**: size and unit, activity, location, time seen, equipment, then confidence. Each contact has an **Admiralty rating**: B for an aircraft or C for a ground report, then 1 if another source confirms it, otherwise 2, 3 or 4 by confidence.
+- The Summary tab ends with an **air status board**: for each aircraft, its next hour as telemetry predicts it with no new order, in transit, on station, returning, rearming and ready. Hovering a bar gives the times.
 - A Summary tab beside the radio gives a report-based picture: known enemy strength as a range, HQ's starting estimate, reported losses, what is unlocated, strength by sector, air threats, friendly status, the force ratio at the outpost and air activity. Its high end counts every report as a separate unit and its low end counts possible duplicates once, so good reconnaissance shows up as a narrower range. Everything comes from the `PlayerView`.
 - When a run ends, the Summary tab adds a debrief comparing estimates with what really happened. This is the only time the player sees truth.
-- Map layers can be switched on and off. **Weather** is drawn as a forecaster's chart: bands of cloud base, with red where the base is under the selected aircraft's altitude, and rain marks. Each storm has a track from now to where it dies out, with time marks, and a dashed likely path that widens with forecast error, so the player can see where it's coming from and when it arrives. A slider looks ahead up to the end of the mission and a button jumps to the selected aircraft's ETA. Far-ahead forecasts are drawn fainter, and the altitude profile shows the forecast cloud base. **Threats** shows the rings of every observed anti-aircraft contact at once.
+- The **Weather** layer can be switched on and off. It is drawn as a forecaster's chart: bands of cloud base, with red where the base is under the selected aircraft's altitude, and rain marks. Each storm has a track from now to where it dies out, with time marks, and a dashed likely path that widens with forecast error, so the player can see where it's coming from and when it arrives. A slider looks ahead up to the end of the mission and a button jumps to the selected aircraft's ETA. Far-ahead forecasts are drawn fainter, and the altitude profile shows the forecast cloud base.
 - **The base map is drawn like a 1:50,000 topographic sheet.** Each kind of information keeps its own channel, so none hides another:
   - land cover is color: off-white open ground, green woods, darker green jungle, grey built-up,
   - relief is light and shade: light hillshading lit from the northwest, brown contours every 20 m with bolder labeled index contours every 100 m, and spot heights on summits,
   - roads and streams are smooth lines, not filled squares: roads red with a dark casing, streams blue,
   - a 1 km grid is labeled along the top and left in the same figures as grid references,
   - the weather layer and symbols sit on top.
-- Selecting an aircraft shows **maximum elevation figures** as aviation charts print them: the highest ground in each grid square, rounded up, hundreds large and tens small. Squares whose ground is above the aircraft's set altitude are outlined and lettered in red. Height uses no color, so it never competes with land cover or weather.
+- Selecting an aircraft shows **maximum elevation figures** as aviation charts print them: the highest ground in each grid square, rounded up to 10 m, in plain meters. Squares whose ground is above the aircraft's set altitude are outlined and lettered in red. Height uses no color, so it never competes with land cover or weather.
 - Hovering the map shows the grid reference and elevation under the cursor, and nothing off the map.
 - Selecting an aircraft shows a terrain profile along its path to its destination, with its altitude and any ridges in the way.
 - The radio shows **Main** by default, with a switch to **All**. Messages are urgent (TIC, support request, ground fire), main (contact, SITREP, drill, strike result, command update) or routine (position, acknowledgement, the player's own forwards). A contact report counts as routine if it repeats a place heard from in the last `repeatContactSeconds` without a stronger estimate. Nothing is lost: **All** and the unit history show every message.
@@ -499,8 +564,16 @@ Interaction requirements:
 - Selecting an anti-aircraft contact shows a threat ring where the chance of a hit stays above a configured risk per minute, at the altitude of the most recently selected aircraft. It reflects the weapons observed and the last reported position, so it is an estimate, not a guarantee of safety outside it.
 - Ground fire leaves a fading mark at the estimated source for a configured time, tagged with the weapon if the crew saw it. Marks close together merge into one, keeping the newest time and any hit or weapon reported. Marks show details on hover and aren't selectable.
 - Click a radio coordinate → pan/center map on that **reported** coordinate.
-- Select aircraft → choose mission → click point/area → aircraft starts tasking.
-- Select friendly ground marker → see reports and permitted outgoing radio interactions; **no move/attack orders**.
+- **Support request cards:** Each request is a card with what the unit asked for (target, size, mark, friendlies, weapons wanted), one button per strike aircraft that can go ("Send CAS-1 · ETA 14:05"), the reason for each one that can't (rearming until, returning, damaged, nothing left to fire), and "No air available". Sending tasks the aircraft over the unit and promises it in one action. A status line follows the answer: waiting, inbound with a live ETA, over them with the crew's brevity word, or called off if the aircraft was given something else. Answered cards stay ten minutes, and longer while the aircraft is still on its way.
+- **Danger close:** The card offers Approve for 10 minutes or Deny. Once approved it shows "cleared until" with a Revoke button, and the unit's symbol carries "DC until" on the map.
+- **Feedback:** Everything the controller sends is written into the radio log as its own transmission, with when a message reaches a unit, and shows briefly as a blue pop-over.
+- **Aircraft panel:** The current task and what the crew is doing come first. Below them, the new task buttons (Watch, Cover, Suppress, Strike, Return to base), each with a tooltip; a task's own settings, such as radius and minutes, appear only once it's picked. Last come the standing settings, weapons, risk and altitude, each explained on hover. While a task waits for a place, a banner over the map says what it's for and that Esc cancels. Cover waits for a click on a friendly unit.
+- **Right-click** offers what can be done where it lands. On a friendly unit: send support if it has an open request, or cover it, and ask for its position, a SITREP or a contact update. On a contact: its details and forwarding, and splitting a track. Anywhere: Watch, Suppress or Strike there for each aircraft that can take a task, and points of interest.
+- **Shortcuts:** 1–9 select an aircraft, then W watch, C cover, S suppress, K strike, R return to base. Space pauses, Esc cancels or closes, T opens the timeline and ? the key.
+- **Military time:** Each scenario has a local start time (`startTime`, 0600 by default), and every time shown is a 24-hour clock: 0632. The header shows the clock with seconds, the time since the start and, prominently, the time left.
+- **Track list:** A Tracks tab beside Radio and Summary lists every enemy and unidentified track: number, what it is, weapons, condition, when last seen, rating and grid. It sorts by threat (air defense first, then units seen firing, then by side and size), by newest sighting, or by least damaged. Destroyed tracks go last. A row selects the track and centers the map on it.
+- **Timeline:** Opened from the header or with T, during the run or after it. While it's open the battle pauses, and closing it returns to live and resumes. A slider runs over the battle so far, with every non-routine radio message marked along it, urgent ones in red. The map shows the battle as the controller knew it at that moment, from snapshots of the player's own view kept every 30 seconds. The radio messages within three minutes are listed, and clicking one jumps there and centers the map. Previous and Next step from event to event. After the run, a toggle adds where every squad really was at that moment, recorded by the session every 30 seconds and released only once the run is over, like the debrief.
+- Select friendly ground marker → see its request, air cover, the reports it can be asked for, and what it said last; **no move/attack orders**.
 - Select contact → see its details, choose recipients, review the transmission preview and transmit.
 - Marker tooltip displays source, observation time, identification, confidence/strength category and whether the position is reported or aircraft-observed.
 - Map never gives hidden enemy identities, true positions, or actual ground casualties that the player has not learned.
@@ -664,6 +737,16 @@ The engine doesn't assume the outpost. A scenario is a file naming its map, unit
 - **Hidden threats:** A briefing and its results state the mission only. They never name a threat or say what to do about it, which is for the player to discover through recon.
 - **Policies:** Each scenario has its own scripted test policies. Like the player, they read only the `PlayerView`.
 - **Terrain:** Each map has a recipe that writes its layers, so a stored map can be rebuilt exactly. Maps can differ in size, but stay square.
+- **Aircraft:** A scenario lists its aircraft by model, and can give one a different bomb load than its model's usual.
+
+The scenarios so far:
+
+| Scenario | What it asks | What it tests |
+|---|---|---|
+| Outpost Under Pressure | Hold the outpost for 75 minutes | Recon, CAS and forwarding against a deliberate assault |
+| Valley Road | Get a column through a valley with ambushes beside the road | Route recon, kill zones, drills and danger close |
+| Overwatch | The same valley, with three strong positions set back on the slopes and an air defense team; the strike aircraft carries two bombs | Whether guns and suppression matter where bombs are scarce and the enemy is out of danger-close range |
+| Find Them | Locate an infiltrating force | Recon alone, scored on how close the picture was |
 
 ## 12. Testing and acceptance criteria
 
@@ -698,7 +781,7 @@ The engine doesn't assume the outpost. A scenario is a file naming its map, unit
 - Cloud blocks sensing, noticing, ground fire and strikes for aircraft above it, and visibility falls smoothly approaching the base.
 - Stronger rain always means shorter visibility, for ground observers and aircraft alike.
 - Forecast error grows with lead time, and the view holds forecasts, never the true weather.
-- Consolidation changes the map, never the stored reports, and needs a fresh, confident aircraft sighting.
+- Tracks change the map, never the stored reports.
 - A clear look that finds nothing closes a report, and a new sighting reopens it.
 - Battle summary figures come only from the `PlayerView`, and the debrief is unavailable until a run ends.
 - Hit chance falls with altitude, reaches zero above a weapon's maximum altitude, and is zero beyond three-dimensional range.

@@ -33,6 +33,8 @@ export type ContactEstimate = Readonly<{
   facingRad?: number;
   /** A radio report of several contacts as one, already holding their combined strength. */
   grouped?: boolean;
+  /** Casualties this observer believes its own fire caused. Its estimate, which runs high. */
+  claimedLosses?: number;
 }>;
 
 const STRENGTH_CATEGORIES: readonly (readonly [min: number, max: number])[] = [

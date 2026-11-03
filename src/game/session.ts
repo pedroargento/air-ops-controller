@@ -1,5 +1,9 @@
 import type { PlayerAction, PlayerCommand } from '../domain/public/commands';
-import type { Debrief } from '../domain/public/debrief';
+import type { Debrief, TruthFrame } from '../domain/public/debrief';
+
+/** How often the true positions are kept for the after-action timeline. */
+const HISTORY_INTERVAL_TICKS = 30;
+import { sourceScorecard } from '../sim/scorecard';
 import { hashState } from '../domain/public/hash';
 import type { Outcome, Platoon } from '../domain/truth/world';
 import { project, type PlayerView } from '../knowledge/player-view';
@@ -25,6 +29,7 @@ export class GameSession {
   private readonly log: PlayerCommand[] = [];
   private pending: PlayerAction[] = [];
   private stepsTaken = 0;
+  private readonly frames: TruthFrame[] = [];
 
   constructor(
     private readonly scenario: Scenario,
@@ -45,6 +50,25 @@ export class GameSession {
     this.log.push(...commands);
     step(this.state, commands, this.scenario);
     this.stepsTaken += 1;
+    if (this.state.tick % HISTORY_INTERVAL_TICKS === 0) this.record();
+  }
+
+  private record(): void {
+    this.frames.push({
+      tick: this.state.tick,
+      squads: this.state.truth.units.map((unit) => ({
+        id: unit.id,
+        side: unit.side === 'friendly' ? 'friendly' : 'enemy',
+        x: unit.position.x,
+        y: unit.position.y,
+        alive: unit.personnel > 0,
+      })),
+    });
+  }
+
+  /** Where everyone really was through the run: only once it's over, like the debrief. */
+  truthHistory(): readonly TruthFrame[] | null {
+    return this.outcome === 'running' ? null : this.frames;
   }
 
   get outcome(): Outcome {
@@ -62,6 +86,7 @@ export class GameSession {
     const units = truth.units;
     const platoons = sortedPlatoons(truth);
     const lost = (platoon: Platoon): boolean => platoonPersonnel(platoon) <= 0;
+    const sources = sourceScorecard(truth, this.state.player);
     const count = (side: 'friendly' | 'enemy', read: (u: (typeof units)[number]) => number): number =>
       units.filter((u) => u.side === side).reduce((sum, u) => sum + read(u), 0);
     return {
@@ -75,7 +100,14 @@ export class GameSession {
       friendlyDestroyed: platoons.filter((p) => p.side === 'friendly' && lost(p)).length,
       locatedShare: truth.locatedShare,
       friendlyFireCasualties: truth.friendlyFireCasualties,
+      airClaims: this.state.player.estimatedLosses,
+      groundClaims: sources.filter((source) => !this.isAircraft(source.sourceId)).reduce((sum, source) => sum + source.claimed, 0),
+      sources,
     };
+  }
+
+  private isAircraft(id: string): boolean {
+    return this.state.truth.aircraft.some((aircraft) => aircraft.id === id);
   }
 
   view(): PlayerView {

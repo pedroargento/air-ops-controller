@@ -17,7 +17,10 @@ import {
   type Suppression,
 } from '../domain/public/radio';
 import type { Aircraft } from '../domain/truth/world';
+import type { ContactEstimate } from '../domain/public/estimates';
+import { trackEstimate } from '../knowledge/tracks';
 import { receiveByUnit } from '../knowledge/unit-knowledge';
+import type { RequestAnswer } from '../knowledge/player-knowledge';
 import type { Scenario } from '../scenario/load';
 import { aircraftTelemetry, applyOrder, setTargetAltitude } from './air';
 import { enqueue, linkedNodes, type PendingTransmission, type RadioState } from './radio';
@@ -90,13 +93,24 @@ function acknowledge(
     state.radio.promises[unitId] = support;
   }
   const request = state.player.supportRequests[unitId];
-  if (request !== undefined) state.player.supportRequests[unitId] = { ...request, acknowledged: true };
+  const answer: RequestAnswer =
+    support === null
+      ? { kind: 'none', answeredAt: state.tick }
+      : { kind: 'inbound', aircraftId: support.aircraftId, etaAt: support.etaAt, answeredAt: state.tick };
+  if (request !== undefined) state.player.supportRequests[unitId] = { ...request, acknowledged: true, answer };
   transmit(state, scenario, { kind: 'message', recipient: unitId, message: acknowledgement(state, scenario, support, false) });
 }
 
+/** What the controller would read out for a map marker: a track as fused, or a single report. */
+function forwardedEstimate(state: SimState, scenario: Scenario, key: string): ContactEstimate | null {
+  if (state.player.tracks[key] !== undefined) return trackEstimate(state.player, key, scenario.file.display, state.tick)?.contact ?? null;
+  return state.player.contacts[key]?.contact ?? null;
+}
+
 function forwardContact(state: SimState, scenario: Scenario, contactKey: string, recipients: readonly string[]): void {
-  const entry = state.player.contacts[contactKey];
-  if (entry === undefined) return;
+  const contact = forwardedEstimate(state, scenario, contactKey);
+  if (contact === null) return;
+  const entry = { contact };
   const { tick } = state;
   for (const recipient of [...new Set(recipients)].sort()) {
     if (!canReach(scenario, recipient)) continue;
@@ -191,8 +205,12 @@ function announceSuppression(state: SimState, scenario: Scenario, aircraft: Airc
   }
 }
 
-/** Clearing it is the controller's call, and only on a unit's own request (§8.1.1). */
+/**
+ * Clearing it is the controller's call, and only on a unit's own request (§8.1.1). Denying a
+ * clearance already given revokes it at once.
+ */
 function answerDangerClose(state: SimState, scenario: Scenario, unitId: string, approved: boolean): void {
+  if (!approved) delete state.player.dangerCloseClearedUntil[unitId];
   const request = state.player.supportRequests[unitId];
   if (request === undefined || !request.dangerClose) return;
   state.player.supportRequests[unitId] = { ...request, dangerClose: false };
@@ -306,8 +324,12 @@ export function reviewPromises(state: SimState, scenario: Scenario): void {
     if (promise === undefined) continue;
     const entry = telemetry.find((aircraft) => aircraft.aircraftId === promise.aircraftId);
     const reported = state.player.friendlies[unitId]?.position.center;
+    const request = state.player.supportRequests[unitId];
     if (!qualifyingSupport(entry, reported, scenario) || entry === undefined) {
       delete promises[unitId];
+      if (request !== undefined) {
+        state.player.supportRequests[unitId] = { ...request, answer: { kind: 'cancelled', aircraftId: promise.aircraftId, answeredAt: state.tick } };
+      }
       transmit(state, scenario, { kind: 'message', recipient: unitId, message: acknowledgement(state, scenario, null, true) });
     } else if (entry.status === 'onStation') {
       delete promises[unitId];
@@ -315,6 +337,9 @@ export function reviewPromises(state: SimState, scenario: Scenario): void {
       const revised = supportFor(entry, state.tick, scenario);
       if (Math.abs(revised.etaAt - promise.etaAt) >= scenario.file.air.supportEtaSlipSeconds) {
         promises[unitId] = revised;
+        if (request?.answer?.kind === 'inbound') {
+          state.player.supportRequests[unitId] = { ...request, answer: { ...request.answer, etaAt: revised.etaAt } };
+        }
         transmit(state, scenario, { kind: 'message', recipient: unitId, message: acknowledgement(state, scenario, revised, false) });
       }
     }

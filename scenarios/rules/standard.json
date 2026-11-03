@@ -639,7 +639,11 @@
     "reportCueMeters": 200,
     "facingSeenPerScan": 0.3,
     "facingNoiseRad": 0.3,
-    "misidentifyChance": 0.02
+    "misidentifyChance": 0.02,
+    "claimWindowSeconds": 60,
+    "claimOptimism": 1.4,
+    "claimNoise": 0.3,
+    "claimAimMeters": 120
   },
   "radio": {
     "prepareSeconds": 15,
@@ -653,6 +657,7 @@
     "sitrepCasualtyStep": 0.15,
     "contactReportIntervalSeconds": 120,
     "ticRangeMeters": 350,
+    "markRangeMeters": 400,
     "sitrepIntervalSeconds": 300,
     "ticStrengthRatio": 1.2,
     "ticCasualtyFraction": 0.1,
@@ -692,6 +697,12 @@
     "cueRadiusMeters": 200,
     "cueMaxAgeSeconds": 180,
     "cueDetectionBoost": 3,
+    "markSeconds": 120,
+    "markIntervalSeconds": 180,
+    "markErrorMeters": 30,
+    "markRadiusMeters": 150,
+    "markDetectionBoost": 4,
+    "markIdentifyBoost": 2,
     "blastRadiusMeters": 120,
     "strikeSplashMeters": 70,
     "supportAckDistanceMeters": 300,
@@ -955,6 +966,7 @@
     "searchRingShare": 0.65,
     "suppressSpreadShare": 0.5,
     "coverAheadMeters": 400,
+    "jokerSeconds": 600,
     "splashReach": 2,
     "gunHeightTolerance": 1.5
   },

@@ -34,6 +34,7 @@ function valleyRoadPolicies(scenario: Scenario): PolicySet {
     routeReconNoForward: () => reconInformed(route, false),
     routeReconMark: () => markingKillZones(reconInformed(route, true)),
     routeReconSuppress: () => suppressingKillZones(markingKillZones(reconInformed(route, true))),
+    routeReconLinger: () => lingeringOnGuns(markingKillZones(reconInformed(route, true))),
     routeReconCover: () => coveringLead(reconInformed(route, true), scenario.file.mission.area.center),
     reactiveSuppress: () => reactiveCas(600),
     routeReconAnswer: () => answeringRequests(reconInformed(route, true)),
@@ -73,6 +74,7 @@ const SCENARIO_POLICIES: Readonly<Record<string, (scenario: Scenario) => PolicyS
   'find-them': findThemPolicies,
   'outpost-under-pressure': outpostPolicies,
   'valley-road': valleyRoadPolicies,
+  overwatch: valleyRoadPolicies,
 };
 
 // Shared by the batch runner and the debug page, so it must stay free of Node imports.

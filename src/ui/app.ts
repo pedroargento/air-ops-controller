@@ -1,7 +1,7 @@
 import { qualifiesForSupport, type AircraftId, type AircraftOrder, type AircraftTelemetryEntry, type RiskLimit, type WeaponsControl } from '../domain/public/air';
 import type { PlayerAction, ReportRequest } from '../domain/public/commands';
-import type { Debrief } from '../domain/public/debrief';
-import type { WeaponType } from '../domain/public/equipment';
+import type { Debrief, TruthFrame } from '../domain/public/debrief';
+import { isAntiAir, type WeaponType } from '../domain/public/equipment';
 import { distance, type Vec2 } from '../domain/public/geometry';
 import { elevationAt, type TerrainGrid } from '../domain/public/terrain';
 import { weatherAt } from '../domain/public/weather';
@@ -10,6 +10,8 @@ import {
   aircraftMission,
   aircraftSummary,
   clock,
+  clockSeconds,
+  duration,
   cursorGrid,
   displayName,
   forwardPreview,
@@ -25,18 +27,24 @@ import {
   type ContactMemory,
   type Names,
   type TriageParameters,
+  weaponTag,
 } from './format';
 import { AltitudeProfile } from './altitude-profile';
 import { PathProfile } from './path-profile';
 import { summarizeBattle, type BattleSummary, type SummaryConfig } from './battle-summary';
 import { MapView, type Selection, type WeatherLayer } from './map-view';
 import { ToastQueue } from './toasts';
-import { admiraltyRating, contactCondition } from './map-conventions';
+import { admiraltyRating, BREVITY, contactCondition } from './map-conventions';
+import { boardSegments, type BoardPhase } from './status-board';
+import { sortedTracks, type TrackSort } from './track-list';
+import { neighbourEvent, Snapshots, SNAPSHOT_SECONDS, timelineEvents } from './timeline';
+import { etaTo, requestStatus, showRequest, supportOptions } from './requests';
+import { legendHtml, paintLegend } from './legend';
 import { POI_KINDS, type PoiKind } from '../domain/public/poi';
 import { morphHtml } from './morph';
 import { stormMovement, type ForecastError } from './weather-chart';
 
-type AreaOrderKind = 'Watch' | 'Suppress' | 'Strike';
+type AreaOrderKind = 'Watch' | 'Cover' | 'Suppress' | 'Strike';
 
 export type UiConfig = Readonly<{
   terrain: TerrainGrid;
@@ -55,32 +63,54 @@ export type UiConfig = Readonly<{
   forecastError: ForecastError;
   speeds: readonly number[];
   onAction: (action: PlayerAction) => void;
+  /** How long a message to a unit takes, so the outgoing log can say when it arrives. */
+  transmitSeconds: number;
   onSpeed: (speed: number) => void;
   onTogglePause: () => void;
   onExportLog: () => void;
+  /** Where everyone really was, through the run: null until the run is over. */
+  truthHistory: () => readonly TruthFrame[] | null;
 }>;
 
 export type RunState = Readonly<{ paused: boolean; speed: number; result: string | null; debrief: Debrief | null }>;
 
 const ORDER_LABELS: Readonly<Record<AreaOrderKind, string>> = {
   Watch: 'Watch',
+  Cover: 'Cover',
   Suppress: 'Suppress',
   Strike: 'Strike',
 };
 
+/** What each task does, for the button's tooltip and the picking banner. */
+const ORDER_HELP: Readonly<Record<AreaOrderKind, string>> = {
+  Watch: 'Watch an area: recon searches it; a strike aircraft engages what it finds there, as weapons control allows.',
+  Cover: 'Cover a friendly platoon: watch the ground ahead of it and follow it.',
+  Suppress: 'Gun runs on an area until a set time, with no target needed.',
+  Strike: 'One bomb pass on a place, then watch it.',
+};
+
+const WEAPONS_HELP: Readonly<Record<WeaponsControl, string>> = {
+  hold: 'Picks no targets of its own. Suppress and Strike still fire.',
+  heavy: 'May use bombs on targets it finds.',
+  guns: 'May use guns on targets it finds, spreading bursts over its time on station.',
+  both: 'May use bombs and guns on targets it finds.',
+};
+
+const RISK_HELP: Readonly<Record<RiskLimit, string>> = {
+  cautious: 'Stays above every weapon it knows of and breaks off at any ground fire.',
+  normal: 'Breaks off when hit or fired on by air defense.',
+  pressOn: 'Never breaks off, and attacks where it was shot at.',
+};
+
+const STRIKE_RADIUS = 300;
+
 /** From the map menu there's no radius field, so a fire mission covers about a platoon's ground. */
 const MENU_FIRE_RADIUS = 150;
+/** An aircraft sent to answer a request watches this far around the unit. */
+const SUPPORT_RADIUS = 500;
 const DEFAULT_SUPPRESS_MINUTES = 5;
 
 const WEAPONS_LABELS: Readonly<Record<WeaponsControl, string>> = { hold: 'Hold', heavy: 'Bombs', guns: 'Guns', both: 'Both' };
-
-const ORDER_NAMES: Readonly<Record<AircraftOrder['kind'], string>> = {
-  Watch: 'watching',
-  Cover: 'covering',
-  Suppress: 'suppressing',
-  Strike: 'striking',
-  ReturnToBase: 'returning',
-};
 
 /** Fire missions are for strike aircraft that can take an order now. */
 const canFire = (aircraft: AircraftTelemetryEntry): boolean =>
@@ -107,6 +137,34 @@ function aircraftDestination(aircraft: AircraftTelemetryEntry): Vec2 | null {
   return order === null || order.kind === 'ReturnToBase' ? null : order.center;
 }
 
+const BOARD_HORIZON_SECONDS = 3600;
+const BOARD_LABELS: Readonly<Record<BoardPhase, string>> = {
+  transit: 'en route',
+  station: 'on station',
+  return: 'returning',
+  turnaround: 'rearming',
+  ready: 'ready',
+};
+
+/** The next hour for each aircraft, as an operations room's status board shows it. */
+function statusBoardHtml(view: PlayerView): string {
+  const rows = view.aircraft.map((aircraft) => {
+    const bars = boardSegments(aircraft, BOARD_HORIZON_SECONDS)
+      .map((segment) => {
+        const left = (segment.fromSeconds / BOARD_HORIZON_SECONDS) * 100;
+        const width = ((segment.toSeconds - segment.fromSeconds) / BOARD_HORIZON_SECONDS) * 100;
+        const until = segment.toSeconds >= BOARD_HORIZON_SECONDS ? '' : ` until ${clock(view.tick + segment.toSeconds)}`;
+        return `<span class="board-${segment.phase}" style="left:${left.toFixed(1)}%;width:${width.toFixed(1)}%" title="${BOARD_LABELS[segment.phase]}${until}"></span>`;
+      })
+      .join('');
+    return `<div class="board-row"><b>${escapeHtml(aircraft.aircraftId)}</b><div class="board-track">${bars}</div></div>`;
+  });
+  return (
+    `<div class="board"><div class="board-row"><span></span><div class="board-scale"><span>now</span><span>+15</span><span>+30</span><span>+45</span><span>+60 min</span></div></div>${rows.join('')}` +
+    '<p class="hint-quiet">Blue en route · green on station · grey returning · amber rearming · clear ready. Hover a bar for times.</p></div>'
+  );
+}
+
 /** Claimed losses and what they suggest, as the condition bar shows them. */
 function conditionLine(marker: ContactMarker): string {
   const condition = contactCondition(marker.estimatedLosses, marker.contact.strength);
@@ -115,10 +173,44 @@ function conditionLine(marker: ContactMarker): string {
   return `<p>Condition: ${words}, about ${marker.estimatedLosses} casualties claimed (${Math.round(condition.lostShare * 100)}% of its estimated strength)</p>`;
 }
 
-const CONDITION_WORDS = { capable: 'still capable', damaged: 'damaged', badlyDamaged: 'badly damaged' } as const;
+const CONDITION_WORDS = { capable: 'still capable', neutralized: 'neutralized', combatIneffective: 'combat-ineffective' } as const;
+
+/** An order as the controller would read it back. */
+function describeOrder(order: AircraftOrder, names: Names, cellSize: number): string {
+  switch (order.kind) {
+    case 'Watch':
+      return `watch ${gridRef(order.center, cellSize)}, ${order.radius} m around`;
+    case 'Cover':
+      return `cover ${displayName(order.unitId, names)}`;
+    case 'Suppress':
+      return `suppress ${gridRef(order.center, cellSize)} until ${clock(order.untilTick)}`;
+    case 'Strike':
+      return `one bomb pass on ${gridRef(order.center, cellSize)}`;
+    case 'ReturnToBase':
+      return 'return to base';
+  }
+}
 
 function findContact(view: PlayerView, key: string): ContactMarker | undefined {
   return view.contacts.flatMap((marker) => [marker, ...marker.members]).find((marker) => marker.key === key);
+}
+
+/** Each source's real record, so the player learns whose reports to trust next time. */
+function sourcesTable(debrief: Debrief): string {
+  if (debrief.sources.length === 0) return '';
+  const rows = [...debrief.sources]
+    .sort((a, b) => a.reliability.localeCompare(b.reliability) || b.reports - a.reports)
+    .map(
+      (source) =>
+        `<tr><td>${escapeHtml(source.sourceId)}</td><td>${source.reliability}</td><td>${source.reports}</td>` +
+        `<td>${source.meanErrorMeters} m</td><td>${source.misidentified}</td><td>${source.claimed}</td></tr>`,
+    )
+    .join('');
+  return (
+    `<h3>How good the reports were</h3><table class="scorecard"><tr><th>Source</th><th>Reliability</th><th>Reports</th>` +
+    `<th>Average error</th><th>Wrong side</th><th>Claimed</th></tr>${rows}</table>` +
+    '<p class="hint-quiet">Reliability A is completely reliable, E unreliable: any friendly reported as hostile gives an E.</p>'
+  );
 }
 
 /** The one place the truth appears, once the run is over: what really happened against the estimates. */
@@ -130,7 +222,9 @@ function debriefHtml(debrief: Debrief, summary: BattleSummary): string {
     `<p>Formations: ${debrief.enemyFormations}, of which ${debrief.enemyDestroyed} destroyed and ${debrief.enemyBroken} broken.</p>` +
     (debrief.locatedShare === null ? '' : `<p>Your picture had ${Math.round(debrief.locatedShare * 100)}% of the enemy's squads about right.</p>`) +
     (debrief.friendlyFireCasualties === 0 ? '' : `<p>${debrief.friendlyFireCasualties} of your men were hit by your own strikes.</p>`) +
-    `<p>Friendly: ${debrief.friendlyStart} at start, ${debrief.friendlyLeft} left, ${debrief.friendlyDestroyed} formations lost.</p>`
+    `<p>Friendly: ${debrief.friendlyStart} at start, ${debrief.friendlyLeft} left, ${debrief.friendlyDestroyed} formations lost.</p>` +
+    `<p>Enemy casualties claimed: ${debrief.airClaims} by aircrews, ${debrief.groundClaims} by ground units. Really lost: ${enemyLost}. Claims from different sources can count the same men.</p>` +
+    sourcesTable(debrief)
   );
 }
 
@@ -142,13 +236,23 @@ export class App {
   private selection: Selection = null;
   private lastAircraftId: string | null = null;
   private readonly split = new Set<string>();
-  private sideTab: 'radio' | 'summary' = 'radio';
+  private sideTab: 'radio' | 'summary' | 'tracks' = 'radio';
+  private trackSort: TrackSort = 'threat';
+  private readonly snapshots = new Snapshots();
+  /** Looking back through the timeline: the map shows the battle as known at reviewTick. */
+  private reviewing = false;
+  private reviewTick = 0;
+  private resumeAfterReview = false;
+  private showTruth = false;
+  private run: RunState | null = null;
   private radioFilter: 'main' | 'all' = 'main';
   private heardContacts: readonly ContactMemory[] = [];
   private readonly toasts = new ToastQueue();
   private lastFrameAt: number | null = null;
   private menuPoint: Vec2 | null = null;
-  private readonly layers = new Set<'weather' | 'threats'>();
+  private readonly layers = new Set<'weather'>();
+  /** The map key stays out of the way until asked for. */
+  private legendShown = false;
   private forecastLeadSeconds = 0;
   private readonly profile: AltitudeProfile;
   private readonly pathProfile: PathProfile;
@@ -177,10 +281,127 @@ export class App {
     element('forecast-lead').addEventListener('input', (event) => {
       this.forecastLeadSeconds = Number((event.target as HTMLInputElement).value);
     });
-    for (const panel of ['controls', 'aircraft', 'selection', 'requests', 'radio-log', 'side-tabs', 'map-layers', 'forecast', 'map-toasts', 'map-menu']) {
+    document.addEventListener('keydown', (event) => this.onKey(event));
+    element('timeline-slider').addEventListener('input', (event) => {
+      this.reviewTick = Number((event.target as HTMLInputElement).value);
+    });
+    for (const panel of ['controls', 'aircraft', 'selection', 'requests', 'radio-log', 'side-tabs', 'map-layers', 'forecast', 'map-toasts', 'map-menu', 'legend', 'tracks', 'timeline']) {
       element(panel).addEventListener('click', (event) => this.onPanelClick(event));
       element(panel).addEventListener('change', (event) => this.onPanelChange(event));
     }
+  }
+
+  /**
+   * Shortcuts: Esc cancels, Space pauses, 1–9 pick an aircraft, then W watch, C cover, S
+   * suppress, K strike, R return to base. T opens the timeline, ? the key. Ignored while typing.
+   */
+  private onKey(event: KeyboardEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (target !== null && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+    const view = this.view;
+    const chosen = this.selection;
+    const selected = chosen?.kind === 'aircraft' ? view?.aircraft.find((a) => a.aircraftId === chosen.id) : undefined;
+    const start = (kind: AreaOrderKind): void => {
+      if (selected === undefined) return;
+      if ((kind === 'Suppress' || kind === 'Strike') && selected.aircraftType !== 'cas') return;
+      this.pendingOrder = { aircraftId: selected.aircraftId as AircraftId, kind };
+    };
+    switch (event.key) {
+      case 'Escape':
+        this.pendingOrder = null;
+        this.closeMapMenu();
+        this.legendShown = false;
+        break;
+      case ' ':
+        this.config.onTogglePause();
+        break;
+      case 'w':
+        start('Watch');
+        break;
+      case 'c':
+        start('Cover');
+        break;
+      case 's':
+        start('Suppress');
+        break;
+      case 'k':
+        start('Strike');
+        break;
+      case 'r':
+        if (selected !== undefined) this.order(selected.aircraftId, { kind: 'ReturnToBase' });
+        break;
+      case '?':
+        this.legendShown = !this.legendShown;
+        break;
+      case 't':
+        this.toggleTimeline();
+        break;
+      default: {
+        const index = Number(event.key);
+        const aircraft = Number.isInteger(index) && index >= 1 ? view?.aircraft[index - 1] : undefined;
+        if (aircraft === undefined) return;
+        this.select({ kind: 'aircraft', id: aircraft.aircraftId });
+      }
+    }
+    event.preventDefault();
+  }
+
+  /** Opening the timeline pauses the battle; closing it goes back to live and resumes if it was running. */
+  private toggleTimeline(): void {
+    const run = this.run;
+    if (!this.reviewing) {
+      this.reviewing = true;
+      this.reviewTick = this.view?.tick ?? 0;
+      this.resumeAfterReview = run !== null && !run.paused && run.result === null;
+      if (this.resumeAfterReview) this.config.onTogglePause();
+    } else {
+      this.reviewing = false;
+      if (this.resumeAfterReview && this.run?.paused === true) this.config.onTogglePause();
+      this.resumeAfterReview = false;
+    }
+  }
+
+  private reviewAt(tick: number, point: Vec2 | null): void {
+    this.reviewTick = Math.max(0, tick);
+    element<HTMLInputElement>('timeline-slider').value = String(this.reviewTick);
+    if (point !== null) this.map.centerOn(point);
+  }
+
+  /** The timeline over the map: the moment shown, a slider with event marks, and what happened near it. */
+  private renderTimeline(view: PlayerView, run: RunState): void {
+    const panel = element('timeline');
+    panel.hidden = !this.reviewing;
+    if (!this.reviewing) return;
+    const end = Math.max(SNAPSHOT_SECONDS, view.tick);
+    const slider = element<HTMLInputElement>('timeline-slider');
+    slider.max = String(end);
+    if (document.activeElement !== slider) slider.value = String(this.reviewTick);
+    const events = timelineEvents(view.log, this.config.terrain.cellSize);
+    const truth = run.result === null
+      ? '<span class="hint-quiet">Where units really were shows here after the run.</span>'
+      : `<label><input type="checkbox" data-action="review-truth"${this.showTruth ? ' checked' : ''} /> Show where everyone really was</label>`;
+    morphHtml(
+      element('timeline-head'),
+      `<span class="review-time">${clock(this.reviewTick)}</span><span>The map as you knew it then${run.result === null ? '; the battle is paused' : ''}.</span>` +
+        `<button data-action="review-step" data-kind="back">◀ Previous event</button><button data-action="review-step" data-kind="next">Next event ▶</button>` +
+        `${truth}<button class="primary" data-action="timeline">Back to live</button>`,
+    );
+    morphHtml(
+      element('timeline-marks'),
+      events.map((event) => `<span class="${event.level}" style="left:${((event.tick / end) * 100).toFixed(2)}%" title="${clock(event.tick)} ${escapeHtml(event.text)}"></span>`).join(''),
+    );
+    const near = events.filter((event) => Math.abs(event.tick - this.reviewTick) <= 180);
+    morphHtml(
+      element('timeline-events'),
+      near.length === 0
+        ? '<p class="hint-quiet">Nothing on the radio within three minutes of this moment.</p>'
+        : near
+            .map((event) => {
+              const at = event.point === null ? '' : ` data-x="${event.point.x}" data-y="${event.point.y}"`;
+              return `<button class="${event.level}" data-action="review-event" data-id="${event.tick}"${at}>${clock(event.tick)} <b>${escapeHtml(displayName(event.senderId, this.config.names))}</b> ${escapeHtml(event.text)}</button>`;
+            })
+            .join(''),
+    );
   }
 
   private fitCanvas(): void {
@@ -233,35 +454,72 @@ export class App {
   }
 
   /** Things the player can report at a place. New kinds of mark appear here by themselves. */
+  /**
+   * Right-click: what can be done right here. On a friendly unit, support and reports for it; on
+   * a contact, fire on it or forward it; anywhere, tasks for aircraft at that place and marks.
+   */
   private openMapMenu(pixel: Vec2): void {
     const { recipients, names, terrain } = this.config;
-    const point = this.map.toWorld(pixel);
+    const view = this.view;
+    let point = this.map.toWorld(pixel);
+    const hit = view === null ? undefined : this.map.hitsAt(pixel, view).find((entry) => entry.kind !== 'aircraft');
+    const sections: string[] = [];
+    const aircraft = view?.aircraft ?? [];
+    const available = (entry: AircraftTelemetryEntry): boolean => !entry.damaged && entry.status !== 'turnaround' && entry.status !== 'returning';
+    if (hit?.kind === 'friendly' && view !== null) {
+      const friendly = view.friendlies.find((entry) => entry.unitId === hit.id);
+      const name = escapeHtml(displayName(hit.id, names));
+      const id = escapeHtml(hit.id);
+      const request = view.supportRequests.find((entry) => entry.unitId === hit.id && (entry.answer === null || entry.answer.kind === 'cancelled'));
+      const support = aircraft.filter((entry) => canFire(entry)).map((entry) =>
+        request === undefined
+          ? `<button data-action="cover" data-id="${id}" data-kind="${escapeHtml(entry.aircraftId)}">Cover with ${escapeHtml(entry.aircraftId)}</button>`
+          : `<button class="primary" data-action="send-support" data-id="${id}" data-kind="${escapeHtml(entry.aircraftId)}">Send ${escapeHtml(entry.aircraftId)} to support</button>`,
+      );
+      sections.push(
+        `<h3>${name}</h3>${support.join('')}` +
+          `<button data-action="request" data-id="${id}" data-kind="position">Ask for position</button>` +
+          `<button data-action="request" data-id="${id}" data-kind="sitrep">Ask for a SITREP</button>` +
+          `<button data-action="request" data-id="${id}" data-kind="contact">Ask for a contact update</button>` +
+          `<button data-action="select-friendly" data-id="${id}">Show details</button>`,
+      );
+      if (friendly !== undefined) point = friendly.position.center;
+    } else if (hit?.kind === 'contact' && view !== null) {
+      const marker = view.contacts.flatMap((entry) => [entry, ...entry.members]).find((entry) => entry.key === hit.key);
+      if (marker !== undefined) {
+        point = marker.contact.position.center;
+        const key = escapeHtml(marker.key);
+        sections.push(
+          `<h3>${marker.trackNumber === null ? 'Report' : `Track TN ${marker.trackNumber}`}</h3>` +
+            `<button data-action="select-contact" data-id="${key}">Details and forward to units</button>` +
+            (marker.members.length > 0 ? `<button data-action="split" data-id="${key}">Split into its ${marker.members.length + 1} reports</button>` : ''),
+        );
+      }
+    }
     this.menuPoint = point;
-    const near = this.view?.pois.filter((poi) => distance(poi.center, point) <= poi.radiusMeters) ?? [];
+    const near = view?.pois.filter((poi) => distance(poi.center, point) <= poi.radiusMeters) ?? [];
     const cancels = near.map(
       (poi) => `<button data-action="cancel-poi" data-id="${poi.id}">Cancel ${escapeHtml(POI_KINDS[poi.kind].label.toLowerCase())}</button>`,
     );
+    const tasks = aircraft.filter(available).map((entry) => {
+      const id = escapeHtml(entry.aircraftId);
+      const fire = canFire(entry)
+        ? `<button data-action="menu-fire" data-id="${id}" data-kind="Suppress" title="${escapeHtml(ORDER_HELP.Suppress)}">Suppress</button>` +
+          `<button data-action="menu-fire" data-id="${id}" data-kind="Strike" title="${escapeHtml(ORDER_HELP.Strike)}">Strike</button>`
+        : '';
+      return `<div class="menu-fire"><b>${id}</b><button data-action="menu-watch" data-id="${id}" title="${escapeHtml(ORDER_HELP.Watch)}">Watch</button>${fire}</div>`;
+    });
+    const minutes = aircraft.some(canFire) ? `<label>Suppress for <input id="menu-minutes" type="number" value="${DEFAULT_SUPPRESS_MINUTES}" min="1" step="1" /> min</label>` : '';
     const boxes = recipients.map(
       (id) => `<label><input type="checkbox" data-poi-recipient="${escapeHtml(id)}" checked /> ${escapeHtml(displayName(id, names))}</label>`,
     );
     const kinds = Object.entries(POI_KINDS).map(
       ([kind, { label }]) => `<button data-action="report-poi" data-id="${kind}">Report ${escapeHtml(label.toLowerCase())}</button>`,
     );
-    const strikers = (this.view?.aircraft ?? []).filter(canFire);
-    const fire = strikers.map((aircraft) => {
-      const id = escapeHtml(aircraft.aircraftId);
-      return (
-        `<div class="menu-fire">${id}` +
-        `<button data-action="menu-fire" data-id="${id}" data-kind="Suppress">Suppress</button>` +
-        `<button data-action="menu-fire" data-id="${id}" data-kind="Strike">Strike</button></div>`
-      );
-    });
-    const minutes = strikers.length === 0 ? '' : `<label>Suppress for <input id="menu-minutes" type="number" value="${DEFAULT_SUPPRESS_MINUTES}" min="1" step="1" /> min</label>`;
+    sections.push(`<h3>Aircraft to grid ${gridRef(point, terrain.cellSize)}</h3>${tasks.join('') || '<p class="hint-quiet">No aircraft can take a task now.</p>'}${minutes}`);
+    sections.push(`<h3>Mark this place for</h3><div class="menu-recipients">${boxes.join('')}</div>${kinds.join('')}${cancels.join('')}`);
     const menu = element('map-menu');
-    menu.innerHTML =
-      `<h3>Grid ${gridRef(point, terrain.cellSize)}</h3>${cancels.join('')}` +
-      `<div class="menu-recipients">${boxes.join('')}</div>${kinds.join('')}${minutes}${fire.join('')}` +
-      `<button data-action="close-menu">Close</button>`;
+    menu.innerHTML = `${sections.join('<hr />')}<button data-action="close-menu">Close</button>`;
     menu.hidden = false;
     // Measured once shown: near an edge the menu opens back towards the map.
     const holder = element('map-holder');
@@ -280,7 +538,12 @@ export class App {
     const boxes = element('map-menu').querySelectorAll<HTMLInputElement>('input[data-poi-recipient]');
     const recipients = [...boxes].flatMap((box) => (box.checked ? [box.dataset['poiRecipient'] as string] : []));
     if (recipients.length === 0) return;
-    this.config.onAction({ kind: 'reportPoi', poiKind: kind, center, radiusMeters: POI_KINDS[kind].radiusMeters, recipients });
+    const names = recipients.map((id) => displayName(id, this.config.names)).join(', ');
+    this.issue(
+      { kind: 'reportPoi', poiKind: kind, center, radiusMeters: POI_KINDS[kind].radiusMeters, recipients },
+      `${POI_KINDS[kind].label} at ${gridRef(center, this.config.terrain.cellSize)}, to ${names}.`,
+      true,
+    );
     this.closeMapMenu();
   }
 
@@ -289,7 +552,7 @@ export class App {
     const center = this.menuPoint;
     if (center === null) return;
     const minutes = Number((document.getElementById('menu-minutes') as HTMLInputElement | null)?.value ?? DEFAULT_SUPPRESS_MINUTES);
-    this.config.onAction({ kind: 'aircraftOrder', aircraftId: aircraftId as AircraftId, order: this.fireOrder(kind, center, MENU_FIRE_RADIUS, minutes) });
+    this.order(aircraftId, this.fireOrder(kind, center, MENU_FIRE_RADIUS, minutes));
     this.closeMapMenu();
   }
 
@@ -302,11 +565,14 @@ export class App {
   private onMapClick(pixel: Vec2): void {
     const pending = this.pendingOrder;
     if (pending !== null) {
-      this.config.onAction({
-        kind: 'aircraftOrder',
-        aircraftId: pending.aircraftId,
-        order: this.buildOrder(pending.kind, this.map.toWorld(pixel)),
-      });
+      if (pending.kind === 'Cover') {
+        // Cover needs a friendly platoon: the click has to land on one.
+        const friendly = this.view === null ? undefined : this.map.hitsAt(pixel, this.view).find((hit) => hit.kind === 'friendly');
+        if (friendly?.kind !== 'friendly') return;
+        this.coverWith(pending.aircraftId, friendly.id);
+      } else {
+        this.order(pending.aircraftId, this.buildOrder(pending.kind, this.map.toWorld(pixel)));
+      }
       this.pendingOrder = null;
       return;
     }
@@ -317,10 +583,10 @@ export class App {
     this.select(hits[(current + 1) % hits.length] ?? null);
   }
 
-  private buildOrder(kind: AreaOrderKind, point: Vec2): AircraftOrder {
+  private buildOrder(kind: Exclude<AreaOrderKind, 'Cover'>, point: Vec2): AircraftOrder {
     const input = document.getElementById('order-radius') as HTMLInputElement | null;
     const typed = Number(input?.value ?? 0);
-    const radius = typed > 0 ? typed : 500;
+    const radius = kind === 'Strike' ? STRIKE_RADIUS : typed > 0 ? typed : 500;
     if (kind === 'Watch') return { kind, center: point, radius };
     const minutes = Number((document.getElementById('order-minutes') as HTMLInputElement | null)?.value ?? DEFAULT_SUPPRESS_MINUTES);
     return this.fireOrder(kind, point, radius, minutes);
@@ -333,9 +599,9 @@ export class App {
     this.pendingOrder = null;
   }
 
-  private toggleLayer(layer: 'weather' | 'threats'): void {
+  private toggleLayer(layer: 'weather'): void {
     if (!this.layers.delete(layer)) this.layers.add(layer);
-    if (layer === 'weather') this.setForecastLead(0);
+    this.setForecastLead(0);
   }
 
   private setForecastLead(seconds: number): void {
@@ -372,9 +638,16 @@ export class App {
   }
 
   private renderLayers(view: PlayerView): void {
-    const button = (id: 'weather' | 'threats', label: string): string =>
+    const button = (id: 'weather', label: string): string =>
       `<button data-action="layer" data-id="${id}"${this.layers.has(id) ? ' class="active"' : ''}>${label}</button>`;
-    morphHtml(element('map-layers'), button('weather', 'Weather') + button('threats', 'Threats'));
+    const key = `<button data-action="legend"${this.legendShown ? ' class="active"' : ''}>Key</button>`;
+    morphHtml(element('map-layers'), button('weather', 'Weather') + key);
+    const legend = element('legend');
+    if (this.legendShown && legend.childElementCount === 0) {
+      legend.innerHTML = legendHtml();
+      paintLegend(legend);
+    }
+    legend.hidden = !this.legendShown;
     const shown = this.layers.has('weather');
     element('forecast').hidden = !shown;
     if (!shown) return;
@@ -408,7 +681,7 @@ export class App {
     const input = event.target as HTMLElement;
     if (input.id === 'order-altitude' && input instanceof HTMLInputElement && this.selection?.kind === 'aircraft') {
       const aircraftId = this.selection.id as AircraftId;
-      this.config.onAction({ kind: 'setAltitude', aircraftId, meters: Number(input.value) });
+      this.issue({ kind: 'setAltitude', aircraftId, meters: Number(input.value) }, `${aircraftId}: altitude ${Number(input.value)} m, set by hand.`);
       return;
     }
     const recipient = input.dataset['recipient'];
@@ -426,7 +699,10 @@ export class App {
         this.config.onTogglePause();
         return;
       case 'layer':
-        this.toggleLayer(id === 'weather' ? 'weather' : 'threats');
+        if (id === 'weather') this.toggleLayer('weather');
+        return;
+      case 'legend':
+        this.legendShown = !this.legendShown;
         return;
       case 'forecast-now':
         this.setForecastLead(0);
@@ -435,7 +711,10 @@ export class App {
         this.setForecastLead(this.etaOfSelected());
         return;
       case 'tab':
-        this.sideTab = id === 'summary' ? 'summary' : 'radio';
+        this.sideTab = id === 'summary' || id === 'tracks' ? id : 'radio';
+        return;
+      case 'track-sort':
+        if (id === 'threat' || id === 'age' || id === 'condition') this.trackSort = id;
         return;
       case 'radio-filter':
         this.radioFilter = id === 'all' ? 'all' : 'main';
@@ -443,9 +722,26 @@ export class App {
       case 'split':
         if (id !== undefined) this.split.add(id);
         this.map.showSplit(this.split);
+        this.closeMapMenu();
         return;
       case 'speed':
         this.config.onSpeed(Number(id));
+        return;
+      case 'timeline':
+        this.toggleTimeline();
+        return;
+      case 'review-step': {
+        const view = this.view;
+        if (view === null) return;
+        const next = neighbourEvent(timelineEvents(view.log, this.config.terrain.cellSize), this.reviewTick, kind === 'back' ? -1 : 1);
+        if (next !== null) this.reviewAt(next.tick, next.point);
+        return;
+      }
+      case 'review-event':
+        this.reviewAt(Number(id), x === undefined || y === undefined ? null : { x: Number(x), y: Number(y) });
+        return;
+      case 'review-truth':
+        this.showTruth = !this.showTruth;
         return;
       case 'export':
         this.config.onExportLog();
@@ -461,37 +757,59 @@ export class App {
         return;
       case 'weapons':
         if (this.selection?.kind === 'aircraft' && (id === 'hold' || id === 'heavy' || id === 'guns' || id === 'both')) {
-          this.config.onAction({ kind: 'setWeapons', aircraftId: this.selection.id as AircraftId, weapons: id });
+          this.issue({ kind: 'setWeapons', aircraftId: this.selection.id as AircraftId, weapons: id }, `${this.selection.id}: weapons ${WEAPONS_LABELS[id].toLowerCase()}.`);
         }
         return;
       case 'menu-fire':
         if (id !== undefined && (kind === 'Suppress' || kind === 'Strike')) this.fireFromMenu(id, kind);
         return;
+      case 'menu-watch': {
+        const center = this.menuPoint;
+        const entry = this.view?.aircraft.find((a) => a.aircraftId === id);
+        if (center !== null && entry !== undefined) this.order(entry.aircraftId, { kind: 'Watch', center, radius: entry.aircraftType === 'recon' ? 1000 : SUPPORT_RADIUS });
+        this.closeMapMenu();
+        return;
+      }
+      case 'select-track':
+        if (id !== undefined) this.select({ kind: 'contact', key: id });
+        if (x !== undefined && y !== undefined) this.map.centerOn({ x: Number(x), y: Number(y) });
+        return;
+      case 'select-contact':
+        if (id !== undefined) this.select({ kind: 'contact', key: id });
+        this.closeMapMenu();
+        return;
       case 'cover':
-        if (id !== undefined && kind !== undefined) {
-          const center = this.view?.friendlies.find((friendly) => friendly.unitId === id)?.position.center;
-          const radius = Number((document.getElementById('order-radius') as HTMLInputElement | null)?.value ?? 0) || 500;
-          if (center !== undefined) this.config.onAction({ kind: 'aircraftOrder', aircraftId: kind as AircraftId, order: { kind: 'Cover', unitId: id, center, radius } });
-        }
+        if (id !== undefined && kind !== undefined) this.coverWith(kind, id);
+        this.closeMapMenu();
+        return;
+      case 'cancel-order':
+        this.pendingOrder = null;
         return;
       case 'risk':
         if (this.selection?.kind === 'aircraft') {
-          this.config.onAction({ kind: 'setRisk', aircraftId: this.selection.id as AircraftId, risk: id as RiskLimit });
+          this.issue({ kind: 'setRisk', aircraftId: this.selection.id as AircraftId, risk: id as RiskLimit }, `${this.selection.id}: risk ${id === 'pressOn' ? 'press on' : id}.`);
         }
         return;
       case 'crew-altitude':
         if (this.selection?.kind === 'aircraft') {
-          this.config.onAction({ kind: 'releaseAltitude', aircraftId: this.selection.id as AircraftId });
+          this.issue({ kind: 'releaseAltitude', aircraftId: this.selection.id as AircraftId }, `${this.selection.id}: crew chooses its own altitude again.`);
         }
         return;
       case 'danger-close':
-        if (id !== undefined) this.config.onAction({ kind: 'answerDangerClose', unitId: id, approved: kind === 'approve' });
+        if (id !== undefined) {
+          const name = displayName(id, this.config.names);
+          const approved = kind === 'approve';
+          this.issue(
+            { kind: 'answerDangerClose', unitId: id, approved },
+            approved ? `Danger close cleared for ${name} for 10 minutes. Crews may now fire near them.` : `Danger close not cleared for ${name}. Crews keep their distance.`,
+          );
+        }
         return;
       case 'report-poi':
         this.reportPoi(id as PoiKind);
         return;
       case 'cancel-poi':
-        if (id !== undefined) this.config.onAction({ kind: 'cancelPoi', poiId: id });
+        if (id !== undefined) this.issue({ kind: 'cancelPoi', poiId: id }, 'Mark cancelled; the units who had it are told.', true);
         this.closeMapMenu();
         return;
       case 'close-menu':
@@ -508,30 +826,39 @@ export class App {
         return;
       case 'rtb':
         if (this.selection?.kind === 'aircraft') {
-          this.config.onAction({
-            kind: 'aircraftOrder',
-            aircraftId: this.selection.id as AircraftId,
-            order: { kind: 'ReturnToBase' },
-          });
+          this.order(this.selection.id, { kind: 'ReturnToBase' });
         }
         return;
       case 'request':
-        this.config.onAction({ kind: 'requestReport', unitId: id ?? '', report: kind as ReportRequest });
+        this.issue(
+          { kind: 'requestReport', unitId: id ?? '', report: kind as ReportRequest },
+          `To ${displayName(id ?? '', this.config.names)}: send ${kind === 'sitrep' ? 'a SITREP' : kind === 'position' ? 'your position' : 'a contact update'}.`,
+          true,
+        );
         return;
       case 'ack':
-        this.config.onAction({
-          kind: 'acknowledge',
-          unitId: id ?? '',
-          casAircraftId: kind === undefined || kind === '' ? null : (kind as AircraftId),
-        });
+        this.issue(
+          { kind: 'acknowledge', unitId: id ?? '', casAircraftId: kind === undefined || kind === '' ? null : (kind as AircraftId) },
+          `To ${displayName(id ?? '', this.config.names)}: ${kind === undefined || kind === '' ? 'request acknowledged.' : `${kind} inbound.`}`,
+          true,
+        );
+        return;
+      case 'send-support':
+        if (id !== undefined && kind !== undefined) this.sendSupport(id, kind);
+        return;
+      case 'no-air':
+        if (id !== undefined) {
+          this.issue({ kind: 'acknowledge', unitId: id, casAircraftId: null }, `To ${displayName(id, this.config.names)}: no air available.`, true);
+        }
         return;
       case 'forward':
         if (this.selection?.kind === 'contact' && this.recipients.size > 0) {
-          this.config.onAction({
-            kind: 'forwardContact',
-            contactKey: this.selection.key,
-            recipients: [...this.recipients].sort(),
-          });
+          const to = [...this.recipients].sort();
+          this.issue(
+            { kind: 'forwardContact', contactKey: this.selection.key, recipients: to },
+            `Intelligence forwarded to ${to.map((unit) => displayName(unit, this.config.names)).join(', ')}.`,
+            true,
+          );
           this.recipients = new Set();
         }
         return;
@@ -575,12 +902,12 @@ export class App {
       if (marker === undefined) return null;
       const { contact } = marker;
       return [
-        `${contact.identification} ${contact.activity}`,
+        `${marker.trackNumber === null ? 'Report' : `Track TN ${marker.trackNumber}`}: ${contact.identification} ${contact.activity}`,
         `Source: ${displayName(contact.provenance.sourceId, names)} (${marker.viaAircraft ? 'aircraft-observed' : 'reported'})`,
         `Observed ${clock(contact.position.observedAt)}, ${marker.ageSeconds}s ago`,
         `${strengthText(contact.strength)}, ${contact.confidence} confidence, rated ${admiraltyRating(marker)}`,
         weaponsText(contact.observedWeapons),
-        ...(marker.members.length > 0 ? [`${marker.members.length + 1} reports consolidated`] : []),
+        ...(marker.members.length > 0 ? [`${marker.members.length + 1} reports on this track`] : []),
         ...(statusText(marker.status, marker.estimatedLosses) === null ? [] : [statusText(marker.status, marker.estimatedLosses) as string]),
         `Grid ${gridRef(contact.position.center, terrain.cellSize)}`,
       ].join('\n');
@@ -600,10 +927,18 @@ export class App {
 
   update(view: PlayerView, run: RunState): void {
     this.view = view;
-    this.map.render(view, this.selection, this.threatAltitude(view), {
-      weather: this.weatherLayer(view),
-      threats: this.layers.has('threats'),
+    this.run = run;
+    this.snapshots.record(view);
+    const shown = this.reviewing ? (this.snapshots.at(this.reviewTick) ?? view) : view;
+    this.map.render(shown, this.selection, this.threatAltitude(view), {
+      weather: this.reviewing ? null : this.weatherLayer(view),
     });
+    if (this.reviewing && this.showTruth) {
+      const frames = this.config.truthHistory();
+      const frame = frames === null ? undefined : [...frames].reverse().find((entry) => entry.tick <= this.reviewTick) ?? frames[0];
+      if (frame !== undefined) this.map.drawTruth(frame);
+    }
+    this.renderTimeline(view, run);
     this.renderControls(view, run);
     this.renderAircraft(view);
     this.renderRequests(view);
@@ -613,6 +948,17 @@ export class App {
     this.renderSideTab(view, run);
     this.renderLayers(view);
     element('map-holder').classList.toggle('picking', this.pendingOrder !== null);
+    this.renderBanner();
+  }
+
+  /** While a task waits for a place, say so over the map: what, for whom, and how to cancel. */
+  private renderBanner(): void {
+    const banner = element('map-banner');
+    const pending = this.pendingOrder;
+    banner.hidden = pending === null;
+    if (pending === null) return;
+    const where = pending.kind === 'Cover' ? 'Click a friendly unit' : 'Click the map';
+    morphHtml(banner, `${where} to set <b>${ORDER_LABELS[pending.kind].toUpperCase()}</b> for <b>${escapeHtml(pending.aircraftId)}</b> · Esc to cancel`);
   }
 
   private renderControls(view: PlayerView, run: RunState): void {
@@ -626,8 +972,11 @@ export class App {
     morphHtml(
       element('controls'),
       `<button id="pause" data-action="pause">${run.paused ? 'Resume' : 'Pause'}</button>${speeds}` +
-        `<span id="clock">${clock(view.tick)}</span><span id="status">${escapeHtml(status)}</span>` +
+        `<span id="clock" title="Local time">${clockSeconds(view.tick)}</span>` +
+        `<span id="mission-time">T+${duration(view.tick)} · <b>${duration(Math.max(0, this.config.durationSeconds - view.tick))} left</b></span>` +
+        `<span id="status">${escapeHtml(status)}</span>` +
         `<span id="objective">${escapeHtml(this.config.objective)}</span>` +
+        `<button data-action="timeline"${this.reviewing ? ' class="active"' : ''} title="Look back through the battle as you knew it (T).">Timeline</button>` +
         `<button data-action="export">Export log</button>`,
     );
   }
@@ -635,7 +984,7 @@ export class App {
   private renderAircraft(view: PlayerView): void {
     const rows = view.aircraft.map((a) => {
       const selected = this.selection?.kind === 'aircraft' && this.selection.id === a.aircraftId;
-      const eta = a.etaSeconds === null ? '' : ` ${clock(Math.ceil(a.etaSeconds))}`;
+      const eta = a.etaSeconds === null ? '' : ` ${duration(a.etaSeconds)}`;
       return (
         `<button class="aircraft-row${selected ? ' active' : ''}" data-action="select-aircraft" data-id="${a.aircraftId}" title="${escapeHtml(aircraftSummary(a))}">` +
         `<b>${a.aircraftId}</b><b>${a.damaged ? 'DAMAGED' : a.status}</b>` +
@@ -650,19 +999,97 @@ export class App {
     this.pathProfile.render(aircraft, aircraft === null ? null : aircraftDestination(aircraft));
   }
 
+  /**
+   * Each support request as a card: what the unit asked for, one click to answer it with any
+   * strike aircraft that can go, why the others can't, and where the answer stands since.
+   */
   private renderRequests(view: PlayerView): void {
-    const rows = view.supportRequests
-      .filter((r) => !r.acknowledged || r.dangerClose)
-      .map((r) => {
-        const unit = escapeHtml(r.unitId);
-        const answer = r.dangerClose
-          ? ` <b class="danger">DANGER CLOSE</b> <button data-action="danger-close" data-id="${unit}" data-kind="approve">Approve</button>` +
-            `<button data-action="danger-close" data-id="${unit}" data-kind="deny">Deny</button>`
-          : '';
-        const wants = r.wants === 'both' ? '' : ` <span class="hint-quiet">wants ${r.wants === 'guns' ? 'guns' : 'bombs'}</span>`;
-        return `<div><button data-action="select-friendly" data-id="${unit}">${escapeHtml(displayName(r.unitId, this.config.names))}</button>${wants}${answer}</div>`;
+    const { names, terrain } = this.config;
+    const cards = view.supportRequests
+      .filter((request) => showRequest(request, view.aircraft, view.tick))
+      .map((request) => {
+        const unit = escapeHtml(request.unitId);
+        const name = escapeHtml(displayName(request.unitId, names));
+        const ask =
+          request.target === null
+            ? `Wants ${request.wants === 'both' ? 'air support' : request.wants === 'guns' ? 'guns' : 'bombs'} at ${gridRef(request.position.center, terrain.cellSize)}.`
+            : `${request.targetStrength === null ? 'Enemy' : escapeHtml(strengthText(request.targetStrength))} at ${gridRef(request.target, terrain.cellSize)}` +
+              `${request.marked ? ', marked by smoke' : ''}. Friendlies at ${gridRef(request.position.center, terrain.cellSize)}.` +
+              `${request.wants === 'both' ? '' : ` Wants ${request.wants === 'guns' ? 'guns' : 'bombs'}.`}`;
+        const answering = request.answer === null || request.answer.kind === 'cancelled';
+        const options = answering ? supportOptions(request, view.aircraft, clock, view.tick) : [];
+        const sends = options
+          .filter((option) => option.available)
+          .map(
+            (option) =>
+              `<button class="primary" data-action="send-support" data-id="${unit}" data-kind="${escapeHtml(option.aircraftId)}">` +
+              `Send ${escapeHtml(option.aircraftId)} · ETA ${clock(view.tick + Math.ceil(option.etaSeconds ?? 0))}</button>`,
+          )
+          .join('');
+        const cannot = options
+          .filter((option) => !option.available)
+          .map((option) => `<div class="hint-quiet">${escapeHtml(option.aircraftId)}: ${escapeHtml(option.reason ?? '')}</div>`)
+          .join('');
+        const none = answering ? `<button data-action="no-air" data-id="${unit}">No air available</button>` : '';
+        const danger = request.dangerClose
+          ? `<div class="danger-row"><b class="danger">DANGER CLOSE requested</b>: friendlies close enough to be hit. ` +
+            `<button data-action="danger-close" data-id="${unit}" data-kind="approve">Approve for 10 min</button>` +
+            `<button data-action="danger-close" data-id="${unit}" data-kind="deny">Deny</button></div>`
+          : request.dangerCloseUntil !== null
+            ? `<div class="danger-row"><b class="danger">Danger close cleared until ${clock(request.dangerCloseUntil)}</b>. ` +
+              `<button data-action="danger-close" data-id="${unit}" data-kind="deny">Revoke</button></div>`
+            : '';
+        return (
+          `<div class="request-card${request.answer === null ? ' open' : ''}">` +
+          `<div><button data-action="select-friendly" data-id="${unit}">${name}</button> <span class="hint-quiet">${Math.floor(request.ageSeconds / 60)} min ago</span></div>` +
+          `<div>${ask}</div>${danger}` +
+          (sends === '' && none === '' ? '' : `<div class="buttons">${sends}${none}</div>`) +
+          cannot +
+          `<div class="request-status">${escapeHtml(requestStatus(request, view.aircraft, clock, view.tick))}</div></div>`
+        );
       });
-    morphHtml(element('requests'), `<h2>Support requests</h2>${rows.join('') || '<p>None pending</p>'}`);
+    morphHtml(element('requests'), `<h2>Support requests</h2>${cards.join('') || '<p>None pending</p>'}`);
+  }
+
+  /**
+   * Sends one thing to the simulation and, when it says something, records it in the radio log
+   * as the controller's own transmission, with a brief pop-over, so no click goes unanswered.
+   */
+  private issue(action: PlayerAction, said: string | null = null, toUnit = false): void {
+    this.config.onAction(action);
+    if (said === null || this.view === null) return;
+    const tick = this.view.tick;
+    const arrives = toUnit ? ` (reaches them about ${clock(tick + this.config.transmitSeconds)})` : '';
+    this.toasts.add({ senderId: 'YOU', level: 'sent', sender: 'Sent', text: said, point: null });
+    const row = document.createElement('div');
+    row.className = 'log-row outgoing main';
+    row.innerHTML = `<span class="time">${clock(tick)}</span> <b>Air Ops (you)</b> <span class="kind">SENT</span><br />${escapeHtml(said + arrives)}`;
+    this.log.prepend(row);
+  }
+
+  private coverWith(aircraftId: string, unitId: string): void {
+    const center = this.view?.friendlies.find((friendly) => friendly.unitId === unitId)?.position.center;
+    const radius = Number((document.getElementById('order-radius') as HTMLInputElement | null)?.value ?? 0) || 500;
+    if (center !== undefined) this.order(aircraftId, { kind: 'Cover', unitId, center, radius });
+  }
+
+  /** Gives an aircraft a task, and says so in the log. */
+  private order(aircraftId: string, order: AircraftOrder): void {
+    this.issue({ kind: 'aircraftOrder', aircraftId: aircraftId as AircraftId, order }, `${aircraftId}: ${describeOrder(order, this.config.names, this.config.terrain.cellSize)}.`);
+  }
+
+  /** Answers a request with an aircraft in one go: tasks it over the unit, then promises it. */
+  private sendSupport(unitId: string, aircraftId: string): void {
+    const view = this.view;
+    const request = view?.supportRequests.find((entry) => entry.unitId === unitId);
+    const aircraft = view?.aircraft.find((entry) => entry.aircraftId === aircraftId);
+    if (view === undefined || view === null || request === undefined || aircraft === undefined) return;
+    const name = displayName(unitId, this.config.names);
+    if (!qualifiesForSupport(aircraft, request.position.center, this.config.ackDistanceMeters)) {
+      this.order(aircraftId, { kind: 'Watch', center: request.position.center, radius: SUPPORT_RADIUS });
+    }
+    const eta = clock(view.tick + Math.ceil(etaTo(aircraft, request.position.center)));
+    this.issue({ kind: 'acknowledge', unitId, casAircraftId: aircraftId as AircraftId }, `${aircraftId} to ${name}: ${aircraftId} inbound, ETA ${eta}.`, true);
   }
 
   private threatLine(weapons: readonly WeaponType[]): string {
@@ -689,85 +1116,124 @@ export class App {
     }
   }
 
+  /**
+   * The selected aircraft: what it is doing now at the top, then the tasks it can be given, with
+   * a task's settings shown only once it is picked, then the standing settings that outlast tasks.
+   */
   private aircraftPanel(aircraft: AircraftTelemetryEntry): string {
     const strike = aircraft.aircraftType === 'cas';
-    const kinds: readonly AreaOrderKind[] = strike ? ['Watch', 'Suppress', 'Strike'] : ['Watch'];
-    const buttons = kinds
-      .map((kind) => {
-        const picking = this.pendingOrder?.kind === kind;
-        return `<button data-action="order" data-kind="${kind}"${picking ? ' class="active"' : ''}>${ORDER_LABELS[kind]}</button>`;
-      })
+    const view = this.view;
+    const tick = view?.tick ?? 0;
+    const pending = this.pendingOrder?.aircraftId === aircraft.aircraftId ? this.pendingOrder.kind : null;
+    const kinds: readonly AreaOrderKind[] = strike ? ['Watch', 'Cover', 'Suppress', 'Strike'] : ['Watch', 'Cover'];
+    const taskButtons = kinds
+      .map((kind) => `<button data-action="order" data-kind="${kind}" title="${escapeHtml(ORDER_HELP[kind])}"${pending === kind ? ' class="active"' : ''}>${ORDER_LABELS[kind]}</button>`)
       .join('');
-    const hint = this.pendingOrder === null ? '' : '<p class="hint">Click the map to set the point.</p>';
-    const minutesField = document.getElementById('order-minutes') as HTMLInputElement | null;
-    const minutes = minutesField?.value ?? String(DEFAULT_SUPPRESS_MINUTES);
-    const radiusField = document.getElementById('order-radius') as HTMLInputElement | null;
-    const radius = radiusField?.value ?? '500';
+    const field = (id: string, label: string, fallback: string, min: number, step: number): string => {
+      const current = (document.getElementById(id) as HTMLInputElement | null)?.value ?? fallback;
+      return `<label>${label} <input id="${id}" type="number" value="${current}" min="${min}" step="${step}" /></label> `;
+    };
+    const fields =
+      pending === null
+        ? ''
+        : `<div class="task-fields">` +
+          (pending === 'Strike' ? '' : field('order-radius', 'Radius (m)', aircraft.aircraftType === 'recon' ? '1000' : '500', 100, 100)) +
+          (pending === 'Suppress' ? field('order-minutes', 'For (min)', String(DEFAULT_SUPPRESS_MINUTES), 1, 1) : '') +
+          `<span class="hint">${pending === 'Cover' ? 'Click a friendly unit on the map.' : 'Click the map to set the place.'}</span> ` +
+          `<button data-action="cancel-order">Cancel</button></div>`;
     const altitudeField = document.getElementById('order-altitude') as HTMLInputElement | null;
     const editing = altitudeField !== null && document.activeElement === altitudeField;
     const altitude = editing ? altitudeField.value : String(aircraft.targetAltitudeMeters);
-    const weapons = (['hold', 'heavy', 'guns', 'both'] as const)
-      .map((choice) => {
-        const active = aircraft.weapons === choice ? ' class="active"' : '';
-        return `<button data-action="weapons" data-id="${choice}"${active}>${WEAPONS_LABELS[choice]}</button>`;
-      })
-      .join('');
-    const task = aircraft.order === null ? 'no mission' : ORDER_NAMES[aircraft.order.kind];
-    const covered = aircraft.order?.kind === 'Cover' ? ` ${escapeHtml(displayName(aircraft.order.unitId, this.config.names))}` : '';
-    const until = aircraft.order?.kind === 'Suppress' ? ` until ${clock(aircraft.order.untilTick)}` : '';
-    const risk = (['cautious', 'normal', 'pressOn'] as const)
-      .map((level) => {
-        const active = aircraft.risk === level ? ' class="active"' : '';
-        return `<button data-action="risk" data-id="${level}"${active}>${level === 'pressOn' ? 'Press on' : level[0]?.toUpperCase()}${level === 'pressOn' ? '' : level.slice(1)}</button>`;
-      })
-      .join('');
+    const choices = <T extends string>(action: string, values: readonly T[], current: T, label: (value: T) => string, help: Readonly<Record<T, string>>): string =>
+      values
+        .map((value) => `<button data-action="${action}" data-id="${value}" title="${escapeHtml(help[value])}"${current === value ? ' class="active"' : ''}>${label(value)}</button>`)
+        .join('');
+    const weapons = choices('weapons', ['hold', 'heavy', 'guns', 'both'] as const, aircraft.weapons, (value) => WEAPONS_LABELS[value], WEAPONS_HELP);
+    const risk = choices('risk', ['cautious', 'normal', 'pressOn'] as const, aircraft.risk, (value) => (value === 'pressOn' ? 'Press on' : `${value[0]?.toUpperCase()}${value.slice(1)}`), RISK_HELP);
+    const station = aircraft.stationSeconds === null ? '' : ` · ${Math.floor(aircraft.stationSeconds / 60)} min on station left`;
     return (
-      `<h2>${aircraft.aircraftId} · ${escapeHtml(aircraft.model)}</h2><p>${aircraft.status} · ${task}${covered}${until}` +
-      `${aircraft.casPhase === null ? '' : ` · ${aircraft.casPhase}`}</p>` +
-      `<p>Fuel ${Math.round(aircraft.fuelFraction * 100)}% · ordnance ${aircraft.ammunition} · guns ${aircraft.gunBursts} · altitude ${Math.round(aircraft.altitudeMeters)} m · visibility ${visibilityText(aircraft.visibilityMeters)}${aircraft.damaged ? ' · damaged, returning for repair' : ''}${aircraft.aboveCloud ? ' · above cloud, cannot see the ground' : ''}</p>` +
-      `<label>Radius (m) <input id="order-radius" type="number" value="${radius}" min="100" step="100" /></label> ` +
-      `<label>Altitude (m) <input id="order-altitude" type="number" value="${altitude}" min="100" step="100" /></label>` +
-      (strike ? ` <label>Suppress (min) <input id="order-minutes" type="number" value="${minutes}" min="1" step="1" /></label>` : '') +
-      `<div class="buttons">${buttons}<button data-action="rtb">Return to base</button></div>` +
-      (strike ? `<div class="buttons">Weapons ${weapons}</div>` : '') +
-      `<div class="buttons">Risk ${risk}${aircraft.manualAltitude ? '<button data-action="crew-altitude">Crew altitude</button>' : ''}</div>${hint}`
+      `<h2>${aircraft.aircraftId} · ${escapeHtml(aircraft.model)}</h2>` +
+      `<p class="task-now">${escapeHtml(this.taskLine(aircraft, tick))}</p>` +
+      `<p>${strike ? `Bombs ${aircraft.ammunition} · gun bursts ${aircraft.gunBursts} · ` : ''}fuel ${Math.round(aircraft.fuelFraction * 100)}%${station} · ` +
+      `altitude ${Math.round(aircraft.altitudeMeters)} m · visibility ${visibilityText(aircraft.visibilityMeters)}` +
+      `${aircraft.damaged ? ' · damaged, returning for repair' : ''}${aircraft.aboveCloud ? ' · above cloud, cannot see the ground' : ''}</p>` +
+      `<h3>New task</h3><div class="buttons">${taskButtons}<button data-action="rtb" title="Head home now.">Return to base</button></div>${fields}` +
+      `<h3>Standing settings</h3>` +
+      (strike ? `<div class="setting-row"><span>Weapons</span><div class="buttons">${weapons}</div></div>` : '') +
+      `<div class="setting-row"><span>Risk</span><div class="buttons">${risk}</div></div>` +
+      `<div class="setting-row"><span>Altitude</span><div class="buttons"><input id="order-altitude" type="number" value="${altitude}" min="100" step="100" /> m ` +
+      (aircraft.manualAltitude ? '<button data-action="crew-altitude" title="Let the crew choose again.">Crew altitude</button>' : '<span class="hint-quiet">crew chooses</span>') +
+      `</div></div>`
     );
   }
 
+  /** What the aircraft is doing, in one line: its task and, on station, what the crew says. */
+  private taskLine(aircraft: AircraftTelemetryEntry, tick: number): string {
+    const { names, terrain } = this.config;
+    switch (aircraft.status) {
+      case 'ready':
+        return 'Ready at base.';
+      case 'turnaround':
+        return `${aircraft.damaged ? 'Under repair' : 'Rearming'} until ${clock(tick + aircraft.availableInSeconds)}.`;
+      case 'returning':
+        return `Returning to base, ready about ${clock(tick + aircraft.availableInSeconds)}.`;
+      default: {
+        const order = aircraft.order;
+        const task = order === null ? 'No task' : describeOrder(order, names, terrain.cellSize);
+        const doing = aircraft.status === 'onStation'
+          ? aircraft.casPhase === null ? 'on station' : BREVITY[aircraft.casPhase]
+          : `${aircraft.status === 'takeoff' ? 'taking off' : 'en route'}${aircraft.etaSeconds === null ? '' : `, there at ${clock(tick + Math.ceil(aircraft.etaSeconds))}`}`;
+        return `${task[0]?.toUpperCase()}${task.slice(1)} · ${doing}.`;
+      }
+    }
+  }
+
+  /**
+   * A friendly unit: where it is, its open request with the same answers as its card, air to
+   * cover it, the reports it can be asked for, and what it said last.
+   */
   private friendlyPanel(unitId: string, view: PlayerView): string {
-    const { names, ackDistanceMeters, terrain } = this.config;
+    const { names, terrain } = this.config;
     const marker: FriendlyMarkerView | undefined = view.friendlies.find((f) => f.unitId === unitId);
     const name = escapeHtml(displayName(unitId, names));
+    const id = escapeHtml(unitId);
     const position =
       marker === undefined
         ? '<p>No position report.</p>'
-        : `<p>Last reported grid ${gridRef(marker.position.center, terrain.cellSize)}, ${marker.ageSeconds}s ago.</p>`;
+        : `<p>Last reported grid ${gridRef(marker.position.center, terrain.cellSize)}, ${marker.ageSeconds}s ago.` +
+          `${marker.statusReport === null ? '' : ` ${marker.statusReport.personnel} effectives, ammunition ${Math.round(marker.statusReport.ammunitionFraction * 100)}%.`}</p>`;
     const history = view.log
       .filter((m) => m.senderId === unitId)
       .slice(-4)
       .map((m) => `<li>${clock(m.receivedAt)} ${escapeHtml(radioLine(m, terrain.cellSize).text)}</li>`)
       .join('');
-    const inbound = view.aircraft
-      .filter((a) => qualifiesForSupport(a, marker?.position.center, ackDistanceMeters))
-      .map(
-        (a) =>
-          `<button data-action="ack" data-id="${escapeHtml(unitId)}" data-kind="${a.aircraftId}">` +
-          `${a.aircraftId} inbound${a.etaSeconds === null ? '' : `, ETA ${clock(Math.ceil(a.etaSeconds))}`}</button>`,
-      )
-      .join('');
-    const id = escapeHtml(unitId);
+    const request = view.supportRequests.find((entry) => entry.unitId === unitId);
+    const open = request !== undefined && (request.answer === null || request.answer.kind === 'cancelled');
+    const support =
+      request === undefined
+        ? ''
+        : `<h3>Support request</h3><p class="request-status">${escapeHtml(requestStatus(request, view.aircraft, clock, view.tick))}</p>` +
+          (open
+            ? `<div class="buttons">${supportOptions(request, view.aircraft, clock, view.tick)
+                .filter((option) => option.available)
+                .map((option) => `<button class="primary" data-action="send-support" data-id="${id}" data-kind="${escapeHtml(option.aircraftId)}">Send ${escapeHtml(option.aircraftId)}</button>`)
+                .join('')}<button data-action="no-air" data-id="${id}">No air available</button></div>`
+            : '');
+    const danger = marker?.dangerCloseUntil === null || marker === undefined
+      ? ''
+      : `<p><b class="danger">Danger close cleared until ${clock(marker.dangerCloseUntil)}</b> <button data-action="danger-close" data-id="${id}" data-kind="deny">Revoke</button></p>`;
     const cover = view.aircraft
       .filter((a) => canFire(a) && !(a.order?.kind === 'Cover' && a.order.unitId === unitId))
-      .map((a) => `<button data-action="cover" data-id="${id}" data-kind="${escapeHtml(a.aircraftId)}">Cover with ${escapeHtml(a.aircraftId)}</button>`)
+      .map((a) => `<button data-action="cover" data-id="${id}" data-kind="${escapeHtml(a.aircraftId)}" title="${escapeHtml(ORDER_HELP.Cover)}">Cover with ${escapeHtml(a.aircraftId)}</button>`)
       .join('');
     return (
-      `<h2>${name}</h2>${position}<div class="buttons">` +
-      `<button data-action="request" data-id="${id}" data-kind="position">Request position</button>` +
-      `<button data-action="request" data-id="${id}" data-kind="sitrep">Request SITREP</button>` +
-      `<button data-action="request" data-id="${id}" data-kind="contact">Request contact update</button>` +
-      `<button data-action="ack" data-id="${id}" data-kind="">Acknowledge</button>${inbound}</div>` +
-      (marker === undefined || cover === '' ? '' : `<div class="buttons">${cover}</div>`) +
-      `<ul class="history">${history}</ul>`
+      `<h2>${name}</h2>${position}${danger}${support}` +
+      (marker === undefined || cover === '' ? '' : `<h3>Air cover</h3><div class="buttons">${cover}</div>`) +
+      `<h3>Ask for</h3><div class="buttons">` +
+      `<button data-action="request" data-id="${id}" data-kind="position">Position</button>` +
+      `<button data-action="request" data-id="${id}" data-kind="sitrep">SITREP</button>` +
+      `<button data-action="request" data-id="${id}" data-kind="contact">Contact update</button></div>` +
+      `<h3>Last heard</h3><ul class="history">${history}</ul>`
     );
   }
 
@@ -777,7 +1243,7 @@ export class App {
     const merged =
       marker.members.length === 0
         ? ''
-        : `<p>Consolidated with ${marker.members.length} other ${marker.members.length === 1 ? 'report' : 'reports'}: ${escapeHtml(sources.join(', '))}</p>` +
+        : `<p>On this track with ${marker.members.length} other ${marker.members.length === 1 ? 'report' : 'reports'}, from ${escapeHtml(sources.join(', '))}</p>` +
           `<button data-action="split" data-id="${escapeHtml(marker.key)}">Split reports</button>`;
     return `${status === null ? '' : `<p>${escapeHtml(status)}</p>`}${merged}`;
   }
@@ -793,7 +1259,8 @@ export class App {
       .join('');
     const preview = forwardPreview(marker, [...this.recipients].sort(), names, terrain.cellSize);
     return (
-      `<h2>Contact ${escapeHtml(contact.contactId)}</h2>` +
+      `<h2>${marker.trackNumber === null ? `Report ${escapeHtml(contact.contactId)}` : `Track TN ${marker.trackNumber}`}</h2>` +
+      (marker.ambiguous ? '<p class="hint">Another track could also have taken one of these reports: it may be two groups.</p>' : '') +
       `<p>${marker.viaAircraft ? 'Air observation' : 'Ground report'} · ${escapeHtml(displayName(contact.provenance.sourceId, names))}</p>` +
       `<p>Grid ${gridRef(contact.position.center, terrain.cellSize)} · ${strengthText(contact.strength)} · ${contact.identification}</p>` +
       `<p>${contact.confidence} confidence · rated ${admiraltyRating(marker)} · observed ${clock(contact.position.observedAt)}</p>` +
@@ -813,13 +1280,57 @@ export class App {
     const filter = (id: 'main' | 'all', label: string): string =>
       `<button data-action="radio-filter" data-id="${id}"${this.radioFilter === id ? ' class="active"' : ''}>${label}</button>`;
     element('summary').hidden = showing !== 'summary';
+    element('tracks').hidden = showing !== 'tracks';
     morphHtml(
       element('side-tabs'),
       `<button data-action="tab" data-id="radio"${showing === 'radio' ? ' class="active"' : ''}>Radio</button>` +
+        `<button data-action="tab" data-id="tracks"${showing === 'tracks' ? ' class="active"' : ''}>Tracks</button>` +
         `<button data-action="tab" data-id="summary"${showing === 'summary' ? ' class="active"' : ''}>Summary</button>` +
         (showing === 'radio' ? `<span class="radio-filter">${filter('main', 'Main')}${filter('all', 'All')}</span>` : ''),
     );
     if (showing === 'summary') morphHtml(element('summary'), this.summaryHtml(view, run));
+    if (showing === 'tracks') morphHtml(element('tracks'), this.tracksHtml(view));
+  }
+
+  /** Every track in one table, sorted as asked. A row selects the track and centers the map on it. */
+  private tracksHtml(view: PlayerView): string {
+    const { terrain } = this.config;
+    const sort = (id: TrackSort, label: string): string =>
+      `<button data-action="track-sort" data-id="${id}"${this.trackSort === id ? ' class="active"' : ''}>${label}</button>`;
+    const selected = this.selection?.kind === 'contact' ? this.selection.key : null;
+    const rows = sortedTracks(view.contacts, this.trackSort).map((marker) => {
+      const { contact } = marker;
+      const condition = contactCondition(marker.estimatedLosses, contact.strength);
+      const state = marker.status === 'destroyed'
+        ? 'destroyed'
+        : marker.status === 'not-found'
+          ? 'not found'
+          : condition === null
+            ? ''
+            : condition.probablyDestroyed
+              ? 'probably destroyed'
+              : condition.condition === 'combatIneffective'
+                ? 'combat-ineffective'
+                : condition.condition;
+      const what = `${contact.identification === 'hostile' ? (contact.confidence === 'low' ? 'suspect' : 'hostile') : 'unknown'} ${strengthText(contact.strength).replace('-sized', '')}`;
+      const weapons = weaponTag(contact.observedWeapons) ?? '';
+      const antiAir = contact.observedWeapons.some(isAntiAir);
+      const classes = ['track-row', marker.stale ? 'stale' : '', marker.status === 'destroyed' ? 'destroyed' : '', selected === marker.key ? 'active' : ''].filter((c) => c !== '').join(' ');
+      const center = contact.position.center;
+      return (
+        `<tr class="${classes}" data-action="select-track" data-id="${escapeHtml(marker.key)}" data-x="${center.x}" data-y="${center.y}">` +
+        `<td>${marker.trackNumber === null ? '—' : marker.trackNumber}</td><td>${escapeHtml(what)}${marker.engaging ? ' · firing' : ''}</td>` +
+        `<td class="${antiAir ? 'aa' : ''}">${escapeHtml(weapons)}</td><td>${escapeHtml(state)}</td>` +
+        `<td>${clock(contact.position.observedAt)}${marker.stale ? ' ⏲' : ''}</td><td>${admiraltyRating(marker)}</td>` +
+        `<td>${gridRef(center, terrain.cellSize)}</td></tr>`
+      );
+    });
+    const count = view.contacts.filter((marker) => marker.contact.identification !== 'friendly').length;
+    return (
+      `<div class="buttons">Sort by ${sort('threat', 'Threat')}${sort('age', 'Newest')}${sort('condition', 'Least damaged')}</div>` +
+      `<p class="hint-quiet">${count} tracks. Air defense first under Threat. ⏲ not seen for two minutes or more. Click a row to select it and center the map.</p>` +
+      `<table><tr><th>TN</th><th>What</th><th>Weapons</th><th>Condition</th><th>Seen</th><th>Rating</th><th>Grid</th></tr>${rows.join('')}</table>`
+    );
   }
 
   private summaryHtml(view: PlayerView, run: RunState): string {
@@ -847,7 +1358,8 @@ export class App {
       `<p>Known forces: ${summary.groups} groups, est. ${rangeText(summary.known)}` +
       `${summary.unconfirmed > 0 ? ` (${summary.unconfirmed} reports unconfirmed)` : ''}</p>` +
       `<p>HQ estimate at start: about ${summary.hqEstimate}</p>` +
-      `<p>Reported losses: est. ${rangeText(summary.losses)} · ${summary.confirmedDestroyed} confirmed destroyed</p>` +
+      `<p>Reported losses: est. ${rangeText(summary.losses)} from aircrews · ${summary.confirmedDestroyed} confirmed destroyed</p>` +
+      `<p>Claimed by ground units: ${view.groundClaims} on the tracks shown. Units in a fight count high.</p>` +
       `<p>Unlocated: est. ${rangeText(summary.unlocated)}</p>` +
       (sectors === '' ? '' : `<table>${sectors}</table>`) +
       `<p>Air threat: ${threats === '' ? 'none observed' : escapeHtml(threats)}</p>` +
@@ -855,6 +1367,7 @@ export class App {
       `<h3>${escapeHtml(this.config.summary.areaLabel)}</h3><p>Within ${this.config.summary.ratioRadiusMeters / 1000} km: enemy ${rangeText(summary.threatened)} ` +
       `against ${summary.defenders} defenders${ratio === null ? '' : ` (${ratio})`}</p>` +
       `<h3>Air</h3><p>${summary.strikes} strikes · ${summary.aircraftHits} hits taken · ${summary.damagedNow} damaged now</p>` +
+      statusBoardHtml(view) +
       `<p class="hint-quiet">${summary.archived} old reports archived; they remain in the radio log.</p>` +
       (run.debrief === null ? '' : debriefHtml(run.debrief, summary))
     );

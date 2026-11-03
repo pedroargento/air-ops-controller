@@ -12,7 +12,7 @@ import { atan2, cos, exp, hypot, PI, sin } from '../domain/public/det-math';
 import type { ContactEstimate } from '../domain/public/estimates';
 import { distance, type Vec2 } from '../domain/public/geometry';
 import { emptyKnowledge, type UnitKnowledge } from '../domain/public/ground';
-import type { MessageId, RadioMessage, StrikeAssessment } from '../domain/public/radio';
+import type { CrewCallKind, MessageId, RadioMessage, StrikeAssessment } from '../domain/public/radio';
 import { cellAt, elevationAt, type TerrainGrid } from '../domain/public/terrain';
 import { airSightClear, airVisibilityMeters, rangeInVisibility, weatherAt, type Weather } from '../domain/public/weather';
 import type { Aircraft, GroundUnit, WorldTruth } from '../domain/truth/world';
@@ -22,6 +22,7 @@ import { nextBinomial, nextBool, nextFloat, nextGaussian, type RngState } from '
 import type { Scenario } from '../scenario/load';
 import type { AircraftModelConfig, AirConfig, CombatConfig, DisplayConfig, PerceptionConfig } from '../scenario/schema';
 import { applyEffects, type CombatEffect } from './combat';
+import { smokeNear } from './marks';
 import { enqueue, type RadioState } from './radio';
 
 export function createAircraft(scenario: Scenario): Aircraft[] {
@@ -46,11 +47,13 @@ export function createAircraft(scenario: Scenario): Aircraft[] {
         order: null,
         timerSeconds: 0,
         fuelSeconds: type.fuelSeconds,
-        ammunition: type.ammunition,
+        ammunition: entry.ammunition ?? type.ammunition,
+        bombLoad: entry.ammunition ?? type.ammunition,
         gunBursts: type.gunBursts,
         nextPassTick: 0,
         risk: 'normal',
         weapons: 'both',
+        calls: [],
         manualAltitude: false,
         firedOn: [],
         breakSeconds: 0,
@@ -321,10 +324,47 @@ function flyAircraft(aircraft: Aircraft, air: AirConfig): void {
         aircraft.status = 'ready';
         aircraft.damaged = false;
         aircraft.fuelSeconds = type.fuelSeconds;
-        aircraft.ammunition = type.ammunition;
+        aircraft.ammunition = aircraft.bombLoad;
         aircraft.gunBursts = type.gunBursts;
+        aircraft.calls = [];
       }
       return;
+  }
+}
+
+/**
+ * The crew tells air operations when fuel and ordnance run low, once each per sortie, so the
+ * controller can plan a relief rather than find out from the fleet list.
+ */
+export function crewCalls(truth: WorldTruth, player: PlayerKnowledge, radio: RadioState, air: AirConfig, tick: number): void {
+  for (const aircraft of truth.aircraft) {
+    if (!isAirborne(aircraft)) continue;
+    const type = typeOf(aircraft, air);
+    const endurance = aircraft.fuelSeconds - secondsToBase(aircraft, type, air) - type.bingoMarginSeconds;
+    const strike = aircraft.aircraftType === 'cas';
+    const due: CrewCallKind[] = [];
+    if (endurance <= 0 && !aircraft.damaged) due.push('BINGO');
+    else if (endurance <= air.jokerSeconds && aircraft.status !== 'returning') due.push('JOKER');
+    if (strike && aircraft.ammunition <= 0 && aircraft.gunBursts > 0) due.push('BOMBS_EXPENDED');
+    if (strike && aircraft.ammunition <= 0 && aircraft.gunBursts <= 0) due.push('WINCHESTER');
+    for (const call of due) {
+      // Bingo says Joker too: a crew that skipped straight to going home doesn't then call Joker.
+      if (aircraft.calls.includes(call)) continue;
+      aircraft.calls.push(call);
+      if (call === 'BINGO' && !aircraft.calls.includes('JOKER')) aircraft.calls.push('JOKER');
+      if (call === 'WINCHESTER' && !aircraft.calls.includes('BOMBS_EXPENDED')) aircraft.calls.push('BOMBS_EXPENDED');
+      player.log.push({
+        id: nextId(radio),
+        kind: 'CREW_CALL',
+        senderId: aircraft.id,
+        observedAt: tick,
+        sentAt: tick,
+        receivedAt: tick,
+        call,
+        minutesLeft: Math.max(0, Math.floor(endurance / 60)),
+        gunBursts: aircraft.gunBursts,
+      });
+    }
   }
 }
 
@@ -418,7 +458,14 @@ export function updateAircraftPerception(
 ): void {
   for (const aircraft of truth.aircraft) {
     if (!isAirborne(aircraft)) continue;
-    const observer = aircraftObserver(aircraft, air, terrain, truth.weather, cuedBoost(aircraft, player, air, tick), tick);
+    // Smoke on the ground helps a crew both find and identify what's next to it (§8.1.3).
+    const cue = cuedBoost(aircraft, player, air, tick);
+    const nearSmoke = (target: GroundUnit): boolean => smokeNear(truth, target.position, air.markRadiusMeters);
+    const observer = {
+      ...aircraftObserver(aircraft, air, terrain, truth.weather, (target: GroundUnit) => cue(target) * (nearSmoke(target) ? air.markDetectionBoost : 1), tick),
+      identifyBoost: (target: GroundUnit) => (nearSmoke(target) ? air.markIdentifyBoost : 1),
+    };
+    seeSmoke(truth, player, aircraft, air, tick);
     let tracked: Vec2[] | null = null;
     for (const target of truth.units) {
       if (target.personnel <= 0) continue;
@@ -449,6 +496,17 @@ export function updateAircraftPerception(
     for (const [id, contact] of Object.entries(aircraft.contacts)) {
       if (tick - contact.position.observedAt > perception.contactMemorySeconds) delete aircraft.contacts[id];
     }
+  }
+}
+
+/** A crew that can see smoke reports it, so the controller's map shows where the ground marked. */
+function seeSmoke(truth: WorldTruth, player: PlayerKnowledge, aircraft: Aircraft, air: AirConfig, tick: number): void {
+  const reach = typeOf(aircraft, air).sensorRadiusMeters;
+  player.smoke = player.smoke.filter((seen) => tick - seen.placedAt <= air.markSeconds);
+  for (const mark of truth.marks) {
+    if (distance(mark.position, aircraft.position) > reach) continue;
+    const known = player.smoke.find((seen) => seen.placedAt === mark.placedAt && seen.platoonId === mark.platoonId);
+    if (known === undefined) player.smoke.push({ position: mark.position, placedAt: mark.placedAt, platoonId: mark.platoonId, seenAt: tick });
   }
 }
 
@@ -825,6 +883,14 @@ export function aircraftTelemetry(truth: WorldTruth, air: AirConfig, tick = 0): 
           : aircraft.status === 'returning'
             ? secondsToBase(aircraft, type, air) + (aircraft.damaged ? type.repairSeconds : type.turnaroundSeconds)
             : 0,
+      stationSeconds:
+        aircraft.status === 'onStation' || aircraft.status === 'enroute' || aircraft.status === 'takeoff'
+          ? Math.max(0, aircraft.fuelSeconds - secondsToBase(aircraft, type, air) - type.bingoMarginSeconds - (flying && destination !== null ? distance(aircraft.position, destination) / type.speedMps : 0))
+          : null,
+      homeSeconds: isAirborne(aircraft) ? secondsToBase(aircraft, type, air) : 0,
+      turnaroundSeconds: aircraft.damaged ? type.repairSeconds : type.turnaroundSeconds,
+      speedMps: type.speedMps,
+      takeoffSeconds: aircraft.status === 'ready' ? type.takeoffSeconds : aircraft.status === 'takeoff' ? aircraft.timerSeconds : 0,
     };
   });
 }

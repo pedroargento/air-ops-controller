@@ -27,7 +27,9 @@ export function groupStrength(knowledge: UnitKnowledge, contact: ContactEstimate
 /** The contact as the platoon reports it: one group, with its combined strength. */
 export function groupedContact(knowledge: UnitKnowledge, contact: ContactEstimate, radius: number): ContactEstimate {
   if (!membersOf(knowledge, contact, radius).some((member) => member.contactId !== contact.contactId)) return contact;
-  return { ...contact, strength: strengthCategory(groupStrength(knowledge, contact, radius)), grouped: true };
+  // Claims go with the group: what the platoon thinks it did to all of them.
+  const claimed = membersOf(knowledge, contact, radius).reduce((sum, member) => sum + (member.claimedLosses ?? 0), 0);
+  return { ...contact, strength: strengthCategory(groupStrength(knowledge, contact, radius)), grouped: true, ...(claimed > 0 ? { claimedLosses: claimed } : {}) };
 }
 
 /**

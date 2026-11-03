@@ -44,11 +44,40 @@
         background: rgba(0, 0, 0, 0.7); padding: 4px 8px; border-radius: 3px; font: 13px monospace; color: #fff;
       }
       #legend {
-        position: absolute; left: 130px; bottom: 12px; max-width: calc(100% - 270px); pointer-events: none; color: #fff;
-        background: rgba(0, 0, 0, 0.65); padding: 4px 8px; border-radius: 3px; font: 11px monospace;
+        position: absolute; left: 12px; top: 44px; z-index: 30; width: min(860px, calc(100% - 40px)); max-height: calc(100% - 70px);
+        overflow-y: auto; padding: 8px 12px; background: rgba(18, 24, 27, 0.97); border: 1px solid #3a464b; border-radius: 4px;
+        color: #e6ece8; font: 12px sans-serif;
       }
-      #legend b { color: #ff3df0; }
+      #legend h2 { margin: 0; font-size: 14px; }
+      #legend h3 { margin: 10px 0 4px; font-size: 12px; color: #9fb0a8; }
+      .legend-head { display: flex; justify-content: space-between; align-items: center; }
+      .legend-columns { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 18px; }
+      .legend-row { display: flex; align-items: center; gap: 8px; margin: 2px 0; }
+      .legend-sample { flex: none; border-radius: 2px; }
+      .legend-term { flex: none; width: 128px; font-family: monospace; color: #ffd24a; }
+      #legend[hidden] { display: none; }
+      .scorecard { border-collapse: collapse; font-size: 11px; }
+      .board-row { display: grid; grid-template-columns: 76px 1fr; align-items: center; gap: 6px; margin: 2px 0; font-size: 11px; }
+      .board-track { position: relative; height: 10px; background: #1a2024; border: 1px solid #333c41; }
+      .board-track span { position: absolute; top: 0; bottom: 0; }
+      .board-scale { display: flex; justify-content: space-between; font-size: 10px; color: #9fb0a8; }
+      .board-transit { background: #4a8fd8; }
+      .board-station { background: #3fae5a; }
+      .board-return { background: #8a9499; }
+      .board-turnaround { background: #d8a03a; }
+      .board-ready { background: transparent; }
+      .scorecard td, .scorecard th { padding: 1px 6px; text-align: left; border-bottom: 1px solid #333c41; }
       #summary { overflow-y: auto; flex: 1; font-size: 12px; min-height: 0; }
+      #tracks { overflow-y: auto; flex: 1; font-size: 11px; min-height: 0; }
+      #tracks table { width: 100%; border-collapse: collapse; }
+      #tracks td, #tracks th { padding: 2px 4px; text-align: left; border-bottom: 1px solid #2a3236; }
+      #tracks tr.track-row { cursor: pointer; }
+      #tracks tr.track-row:hover { background: #20282b; }
+      #tracks tr.active { background: #24323a; }
+      #tracks tr.stale td { color: #8a9499; }
+      #tracks tr.destroyed td { color: #6a7277; text-decoration: line-through; }
+      #tracks .aa { color: #ff3df0; font-weight: bold; }
+      #mission-time { font: 12px monospace; color: #cfd8d3; margin-right: 10px; }
       #summary h3 { margin: 8px 0 2px; font-size: 12px; color: #9fb0a8; }
       #summary p { margin: 2px 0; }
       #summary ul { margin: 2px 0; padding-left: 16px; }
@@ -67,12 +96,42 @@
         background: rgba(18, 24, 27, 0.92); border: 1px solid #3a464b; border-left: 4px solid #9fb0a8; border-radius: 4px; cursor: pointer;
       }
       .danger { color: #ff6b5a; font-size: 11px; }
+      .request-card { border: 1px solid #333c41; border-left: 3px solid #57636a; border-radius: 3px; padding: 5px 7px; margin: 5px 0; font-size: 12px; }
+      .request-card.open { border-left-color: #ff6b5a; background: rgba(255, 107, 90, 0.07); }
+      .request-card .buttons { margin-top: 4px; }
+      .request-status { margin-top: 4px; color: #9fd3a8; font-size: 11px; }
+      .danger-row { margin-top: 3px; }
+      button.primary { background: #2b5f8a; border-color: #4a8fd8; color: #fff; }
+      .log-row.outgoing { border-left: 3px solid #4a8fd8; background: rgba(74, 143, 216, 0.08); }
+      .toast.sent { background: rgba(30, 60, 95, 0.92); border-color: #4a8fd8; }
       .toast.urgent { border-left-color: #ff6b5a; background: rgba(60, 22, 20, 0.94); }
       #map-menu {
         position: absolute; z-index: 5; min-width: 190px; padding: 8px; display: flex; flex-direction: column; gap: 5px;
         background: rgba(18, 24, 27, 0.96); border: 1px solid #3a464b; border-radius: 4px; font-size: 12px;
       }
       #map-menu[hidden] { display: none; }
+      #map-menu hr { border: none; border-top: 1px solid #3a464b; margin: 4px 0; width: 100%; }
+      #map-banner { position: absolute; left: 50%; bottom: 46px; transform: translateX(-50%); z-index: 6; padding: 6px 12px;
+        background: rgba(43, 95, 138, 0.95); border: 1px solid #4a8fd8; border-radius: 4px; color: #fff; font-size: 13px; pointer-events: none; }
+      #map-banner[hidden] { display: none; }
+      #timeline { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 25; padding: 8px 10px; max-height: 42%;
+        display: flex; flex-direction: column; gap: 6px; background: rgba(18, 24, 27, 0.96); border: 1px solid #4a8fd8; border-radius: 4px; font-size: 12px; }
+      #timeline[hidden] { display: none; }
+      #timeline-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      #timeline-head .review-time { font: 600 16px monospace; color: #ffd24a; }
+      #timeline-track { position: relative; height: 26px; }
+      #timeline-slider { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; margin: 0; }
+      #timeline-marks { position: absolute; left: 0; right: 0; top: 0; height: 10px; }
+      #timeline-marks span { position: absolute; top: 0; width: 3px; height: 10px; margin-left: -1px; background: #9fb0a8; }
+      #timeline-marks span.urgent { background: #ff6b5a; }
+      #timeline-events { overflow-y: auto; min-height: 0; }
+      #timeline-events button { display: block; width: 100%; text-align: left; margin: 1px 0; font-size: 11px; }
+      #timeline-events button.urgent { border-left: 3px solid #ff6b5a; }
+      .task-now { font-weight: bold; color: #ffd24a; margin: 2px 0 4px; }
+      .task-fields { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; padding: 5px; border: 1px dashed #4a8fd8; border-radius: 3px; }
+      .setting-row { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 6px; margin-top: 4px; }
+      .setting-row .buttons { margin-top: 0; }
+      #selection h3 { margin: 8px 0 2px; font-size: 12px; color: #9fb0a8; }
       #map-menu h3 { margin: 0; font-size: 12px; color: #9fb0a8; }
       .menu-recipients { display: flex; flex-direction: column; gap: 2px; }
       .menu-fire { display: flex; align-items: center; gap: 4px; }
@@ -102,6 +161,10 @@
       .recipient { display: block; }
       .history { margin: 6px 0 0; padding-left: 16px; font-size: 12px; }
       #radio { display: flex; flex-direction: column; min-height: 0; }
+      /* The bottom tabs always keep room: the panels above scroll instead of crowding them out. */
+      #selection { max-height: 38vh; overflow-y: auto; }
+      #requests { max-height: 26vh; overflow-y: auto; }
+      #radio { min-height: 160px; }
       #radio-log { overflow-y: auto; flex: 1; min-height: 0; }
       .log-row { padding: 4px 0; border-bottom: 1px solid #2a3236; font-size: 12px; }
       .log-row .time { font-family: monospace; color: #9fb0a8; }
@@ -124,6 +187,12 @@
       <div id="map-layers" class="buttons"></div>
       <div id="map-toasts"></div>
       <div id="map-menu" hidden></div>
+      <div id="map-banner" hidden></div>
+      <div id="timeline" hidden>
+        <div id="timeline-head"></div>
+        <div id="timeline-track"><div id="timeline-marks"></div><input id="timeline-slider" type="range" min="0" max="0" step="30" value="0" /></div>
+        <div id="timeline-events"></div>
+      </div>
       <div id="forecast" hidden>
         <input id="forecast-lead" type="range" min="0" max="4500" step="300" value="0" />
         <span id="forecast-label"></span>
@@ -135,7 +204,7 @@
         </span>
       </div>
       <canvas id="path-profile" height="70" hidden></canvas>
-      <div id="legend">◆ hostile · ◆? suspect · ✤ unknown · ▭ friendly · dashed = not seen lately, at its last known position · • squad ••• platoon above · (−) losses claimed · bar = condition · ✕ destroyed, dashed ✕ probably · arrow = moving · <b>AAA MP</b> anti-air, dome = air defense · ×3 merged · 14:05 = when last seen · big figures = highest ground in the square, red = above the aircraft</div>
+      <div id="legend" hidden></div>
     </main>
     <aside id="sidebar">
       <section id="fleet">
@@ -148,6 +217,7 @@
       <section id="radio">
         <div id="side-tabs" class="buttons"></div>
         <div id="summary" hidden></div>
+        <div id="tracks" hidden></div>
         <div id="radio-log"></div>
       </section>
     </aside>

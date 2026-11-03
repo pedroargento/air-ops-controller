@@ -130,10 +130,10 @@ export function decideReports(
   // Guns keep heads down while a platoon moves; close in, they're also all that's safe.
   const moving = self.drill !== null && MOVING_DRILLS.has(self.drill.kind);
   if (closeDue) {
-    needs.push({ kind: 'SUPPORT_REQUEST', contactId: null, dangerClose: true, wants: 'guns' });
+    needs.push({ kind: 'SUPPORT_REQUEST', contactId: null, dangerClose: true, wants: 'guns', ...nineLine(self, threat, config) });
     next = { ...next, lastSupportRequestAt: tick, lastDangerCloseAt: tick };
   } else if (inContact && needsSupport(self, knowledge, threat, config) && canRequestSupport && requestDue && !acknowledged) {
-    needs.push({ kind: 'SUPPORT_REQUEST', contactId: null, wants: moving ? 'guns' : 'both' });
+    needs.push({ kind: 'SUPPORT_REQUEST', contactId: null, wants: moving ? 'guns' : 'both', ...nineLine(self, threat, config) });
     next = { ...next, lastSupportRequestAt: tick };
   } else if (self.drill?.kind === 'waitForAir' && canRequestSupport && requestDue && !acknowledged) {
     // Holding short of a position for air: guns on it, so the platoon can pass.
@@ -240,6 +240,8 @@ export function composeReport(
         dangerClose: need.dangerClose === true,
         wants: need.wants ?? 'both',
         target: need.target ?? null,
+        targetStrength: need.targetStrength ?? null,
+        marked: need.marked === true,
       };
     case 'CHECK_FIRE':
       return { ...meta, kind: 'CHECK_FIRE', observedAt: ownPosition.observedAt, ownPosition };
@@ -248,4 +250,13 @@ export function composeReport(
         ? null
         : { ...meta, kind: 'DRILL', observedAt: ownPosition.observedAt, ownPosition, drill: need.drill };
   }
+}
+
+/**
+ * What a 9-line request carries, as far as a platoon knows it: where the enemy firing on it
+ * is, how big, and whether it will mark it with smoke, which it can only do within reach.
+ */
+function nineLine(self: UnitSelf, threat: ContactEstimate, config: RadioConfig): Pick<ReportNeed, 'target' | 'targetStrength' | 'marked'> {
+  const target = threat.position.center;
+  return { target, targetStrength: threat.strength, marked: distance(self.position, target) <= config.markRangeMeters };
 }

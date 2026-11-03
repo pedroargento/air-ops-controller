@@ -54,16 +54,18 @@ describe('condition', () => {
 
   it('weighs claims against claims plus what is still thought to be there', () => {
     const light = contactCondition(2, { kind: 'range', min: 6, max: 14 });
-    expect(light?.condition).toBe('capable');
+    expect(light?.condition).toBe('neutralized');
+    expect(contactCondition(1, { kind: 'range', min: 15, max: 50 })?.condition).toBe('capable');
     const heavy = contactCondition(10, { kind: 'range', min: 1, max: 5 });
-    expect(heavy?.condition).toBe('badlyDamaged');
+    expect(heavy?.condition).toBe('combatIneffective');
     expect(heavy?.probablyDestroyed).toBe(false);
     expect(contactCondition(40, { kind: 'range', min: 1, max: 5 })?.probablyDestroyed).toBe(true);
   });
 
   it('reads a friendly unit from its own report', () => {
-    expect(friendlyCondition(14, 24)?.condition).toBe('damaged');
-    expect(friendlyCondition(5, 24)?.condition).toBe('badlyDamaged');
+    expect(friendlyCondition(22, 24)?.condition).toBe('capable');
+    expect(friendlyCondition(20, 24)?.condition).toBe('neutralized');
+    expect(friendlyCondition(14, 24)?.condition).toBe('combatIneffective');
   });
 });
 

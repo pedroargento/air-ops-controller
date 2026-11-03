@@ -1,6 +1,6 @@
 import type { Vec2 } from '../domain/public/geometry';
 
-export type ToastLevel = 'urgent' | 'main';
+export type ToastLevel = 'urgent' | 'main' | 'sent';
 
 export type Toast = Readonly<{
   id: number;
@@ -13,7 +13,7 @@ export type Toast = Readonly<{
 }>;
 
 const MAX_TOASTS = 4;
-const SECONDS_ON_SCREEN: Readonly<Record<ToastLevel, number>> = { urgent: 12, main: 6 };
+const SECONDS_ON_SCREEN: Readonly<Record<ToastLevel, number>> = { urgent: 12, main: 6, sent: 4 };
 
 /**
  * Pop-overs on the map, timed in real seconds so they can be read at any game speed.

@@ -3,7 +3,7 @@ import type { ContactEstimate } from '../../src/domain/public/estimates';
 import type { MessageId, RadioMessage } from '../../src/domain/public/radio';
 import type { ContactMarker } from '../../src/knowledge/player-view';
 import type { ContactId } from '../../src/domain/public/ground';
-import { clock, compassDirection, cursorGrid, distanceText, forwardPreview, gridRef, radioLine, triage, scaleBarMeters, strengthText } from '../../src/ui/format';
+import { clock, clockSeconds, duration, setMissionStart, compassDirection, cursorGrid, distanceText, forwardPreview, gridRef, radioLine, triage, scaleBarMeters, strengthText } from '../../src/ui/format';
 
 const names = { 'F-N': 'Viper 2-1' };
 const contact: ContactEstimate = {
@@ -20,8 +20,15 @@ const contact: ContactEstimate = {
 const meta = { id: 'M-1' as MessageId, senderId: 'F-N', observedAt: 100, sentAt: 110, receivedAt: 130 };
 
 describe('formatting', () => {
-  it('formats the clock and grid references', () => {
-    expect(clock(125)).toBe('02:05');
+  it('formats military time from the mission start, durations, and grid references', () => {
+    setMissionStart('0545');
+    expect(clock(0)).toBe('0545');
+    expect(clock(125)).toBe('0547');
+    expect(clockSeconds(125)).toBe('0547:05');
+    expect(clock(19 * 3600)).toBe('0045');
+    setMissionStart('0000');
+    expect(duration(65)).toBe('1:05');
+    expect(duration(3725)).toBe('1:02:05');
     expect(gridRef({ x: 2120, y: 4060 }, 50)).toBe('042-081');
   });
 

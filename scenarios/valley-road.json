@@ -3,6 +3,7 @@
   "name": "Valley Road",
   "rules": "standard",
   "durationSeconds": 7200,
+  "startTime": "0700",
   "terrain": {
     "classLayer": "valley-road/terrain.txt",
     "elevationLayer": "valley-road/elevation.txt"

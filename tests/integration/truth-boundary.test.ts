@@ -143,6 +143,9 @@ describe('friendly fire and danger close', () => {
       dangerClose: true,
       wants: 'guns',
       target: null,
+      targetStrength: null,
+      marked: false,
+      answer: null,
     };
   };
 
