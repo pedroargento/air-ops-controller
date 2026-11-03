@@ -24,6 +24,9 @@ export function receiveByUnit(knowledge: UnitKnowledge, message: RadioMessage): 
       if (message.cancelled) delete knowledge.pois[message.poi.id];
       else knowledge.pois[message.poi.id] = message.poi;
       return;
+    case 'PICKUP_POINT':
+      knowledge.pickup = message.point;
+      return;
     case 'SUPPRESSION': {
       const { aircraftId } = message.suppression;
       if (message.cancelled) delete knowledge.suppressions[aircraftId];

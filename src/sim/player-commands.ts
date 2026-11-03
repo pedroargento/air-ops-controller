@@ -263,6 +263,20 @@ export function applyCommand(state: SimState, command: PlayerCommand, scenario: 
     case 'cancelPoi':
       cancelPoi(state, scenario, command.poiId);
       return;
+    case 'sendPickupPoint':
+      if (canReach(scenario, command.unitId)) {
+        const message: RadioMessage = {
+          id: nextId(state.radio),
+          kind: 'PICKUP_POINT',
+          senderId: AIR_OPS,
+          observedAt: state.tick,
+          sentAt: state.tick,
+          receivedAt: state.tick + scenario.file.radio.transmitSeconds,
+          point: command.point,
+        };
+        transmit(state, scenario, { kind: 'message', recipient: command.unitId, message });
+      }
+      return;
     case 'forwardContact':
       forwardContact(state, scenario, command.contactKey, command.recipients);
       return;

@@ -16,7 +16,9 @@ export type GroundObjective =
   | Readonly<{ kind: 'PatrolArea'; waypoints: readonly Vec2[] }>
   | Readonly<{ kind: 'WithdrawTo'; area: Area }>
   | Readonly<{ kind: 'AssaultArea'; area: Area }>
-  | Readonly<{ kind: 'AmbushArea'; area: Area; openFireMeters: number; watches?: Vec2 | undefined }>;
+  | Readonly<{ kind: 'AmbushArea'; area: Area; openFireMeters: number; watches?: Vec2 | undefined }>
+  | Readonly<{ kind: 'Evade'; area: Area; pickup: Vec2 | null; boardAt: Vec2 | null }>
+  | Readonly<{ kind: 'SearchArea'; area: Area }>;
 
 /** Objectives that keep a platoon on its ground. */
 export function holdsGround(objective: GroundObjective): objective is Extract<GroundObjective, { kind: 'HoldArea' | 'AmbushArea' }> {
@@ -82,6 +84,7 @@ export type Doctrine = Readonly<{
   airCoverRepeatSeconds: number;
   illuminationRounds: number;
   waitForAirStrengthRatio: number;
+  radioSilent: boolean;
   airRefusedMemorySeconds: number;
   standoffMeters: number;
   observeBias: number;
@@ -172,6 +175,8 @@ export type UnitKnowledge = {
   reports: Record<string, ContactEstimate>;
   // Places the player has marked, keyed by mark.
   pois: Record<string, Poi>;
+  /** Where air operations told a downed aircrew to be picked up. */
+  pickup?: Vec2;
   /** Suppression missions announced on the net, by aircraft. */
   suppressions: Record<string, Suppression>;
   expectedSupport: ExpectedSupport | null;

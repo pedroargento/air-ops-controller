@@ -17,6 +17,7 @@ export type AircraftStatus = 'ready' | 'takeoff' | 'enroute' | 'onStation' | 're
  * - Suppress: gun runs on the area until `untilTick`, with no target needed.
  * - Strike: one heavy pass on the center, then watch it.
  * - Illuminate: keep a flare burning over the center until `untilTick`, then watch it (§8.7).
+ * - Pickup: land on the center and wait while survivors board (§8.8). Helicopters with seats only.
  */
 export type AircraftOrder =
   | Readonly<{ kind: 'Watch'; center: Vec2; radius: number }>
@@ -24,6 +25,7 @@ export type AircraftOrder =
   | Readonly<{ kind: 'Suppress'; center: Vec2; radius: number; untilTick: number }>
   | Readonly<{ kind: 'Strike'; center: Vec2; radius: number }>
   | Readonly<{ kind: 'Illuminate'; center: Vec2; radius: number; untilTick: number }>
+  | Readonly<{ kind: 'Pickup'; center: Vec2; radius: number }>
   | Readonly<{ kind: 'ReturnToBase' }>;
 
 export type TaskOrder = Exclude<AircraftOrder, Readonly<{ kind: 'ReturnToBase' }>>;
@@ -158,6 +160,14 @@ export type AircraftTelemetryEntry = Readonly<{
   /** Time still to take off: the whole takeoff while ready, what's left during it, then none. */
   takeoffSeconds: number;
   flares: number;
+  seats: number;
+  /** On the ground at a pickup point, and how far boarding has got. */
+  landed: boolean;
+  boardingSeconds: number;
+  boardNeedSeconds: number;
+  passengers: number;
+  /** How far the survivor running for it is, as the crew sees it, or null if nobody is coming. */
+  survivorMeters: number | null;
 }>;
 
 export type AircraftTelemetry = readonly AircraftTelemetryEntry[];

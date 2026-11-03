@@ -1,5 +1,5 @@
 import type { Vec2 } from '../domain/public/geometry';
-import { answeringDangerClose, answeringRequests, atRisk, lingeringOnGuns, illuminatingAtNight, immediateCas, noAir, reactiveCas, markingKillZones, reconInformed, scoutingOnly, suppressingKillZones, coveringLead, sweepingRecon, type Policy } from '../policies/air-policies';
+import { answeringDangerClose, answeringRequests, atRisk, lingeringOnGuns, illuminatingAtNight, immediateCas, noAir, reactiveCas, markingKillZones, reconInformed, rescuing, scoutingOnly, suppressingKillZones, coveringLead, sweepingRecon, type Policy } from '../policies/air-policies';
 import type { Scenario } from '../scenario/load';
 
 type PolicySet = Readonly<Record<string, () => Policy>>;
@@ -80,12 +80,24 @@ function withDangerClose(set: PolicySet): PolicySet {
   return Object.fromEntries(entries);
 }
 
+function rescuePolicies(scenario: Scenario): PolicySet {
+  const mission = scenario.file.mission;
+  const survivor = mission.kind === 'Rescue' ? mission.survivorId : '';
+  return {
+    none: () => noAir,
+    rescueNow: () => rescuing(survivor, false),
+    rescueByDay: () => rescuing(survivor, true),
+    rescueUnescorted: () => rescuing(survivor, false, false),
+  };
+}
+
 const SCENARIO_POLICIES: Readonly<Record<string, (scenario: Scenario) => PolicySet>> = {
   'find-them': findThemPolicies,
   'outpost-under-pressure': outpostPolicies,
   'outpost-night': nightOutpostPolicies,
   'valley-road': valleyRoadPolicies,
   overwatch: valleyRoadPolicies,
+  'downed-pilot': rescuePolicies,
 };
 
 // Shared by the batch runner and the debug page, so it must stay free of Node imports.

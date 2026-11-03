@@ -482,3 +482,48 @@ export function illuminatingAtNight(policy: Policy): Policy {
     return [...own, ...commands];
   };
 }
+
+const SURVIVOR_FRESH_SECONDS = 1800;
+const LZ_CLEAR_METERS = 400;
+const POSITION_ASK_SECONDS = 1200;
+const DAYLIGHT = 0.5;
+
+/**
+ * A rescue as a controller might run it: ask the survivor where it is now and then, keep strike
+ * aircraft covering it, and send the helicopter once its position is fresh and no enemy is known
+ * near it. With `byDayOnly`, the helicopter goes only in daylight.
+ */
+export function rescuing(survivorId: string, byDayOnly: boolean, escorted = true): Policy {
+  let askedAt = Number.NEGATIVE_INFINITY;
+  return (view) => {
+    const commands: PlayerCommand[] = [];
+    const survivor = view.friendlies.find((friendly) => friendly.unitId === survivorId);
+    if (view.tick - askedAt >= POSITION_ASK_SECONDS && (survivor === undefined || survivor.ageSeconds >= POSITION_ASK_SECONDS)) {
+      askedAt = view.tick;
+      commands.push({ kind: 'requestReport', tick: view.tick, unitId: survivorId, report: 'position' });
+    }
+    if (survivor === undefined) return commands;
+    const where = survivor.position.center;
+    for (const aircraft of view.aircraft) {
+      const idle = aircraft.status === 'ready' || (aircraft.order === null && aircraft.status !== 'returning' && aircraft.status !== 'turnaround');
+      if (escorted && aircraft.aircraftType === 'cas' && idle && aircraft.ammunition + aircraft.gunBursts > 0) {
+        commands.push({ kind: 'aircraftOrder', tick: view.tick, aircraftId: aircraft.aircraftId, order: { kind: 'Cover', unitId: survivorId, center: where, radius: SUPPORT_RADIUS_METERS } });
+      }
+      if (aircraft.aircraftType === 'recon' && aircraft.seats === 0 && idle) {
+        commands.push({ kind: 'aircraftOrder', tick: view.tick, aircraftId: aircraft.aircraftId, order: { kind: 'Watch', center: where, radius: 800 } });
+      }
+    }
+    const sky = view.forecast?.sky;
+    const light = sky === undefined ? 1 : ambientLight(sky, view.tick, 0);
+    const fresh = survivor.ageSeconds <= SURVIVOR_FRESH_SECONDS;
+    const clear = !view.contacts.some(
+      (marker) => marker.contact.identification === 'hostile' && marker.status !== 'destroyed' && marker.ageSeconds <= SURVIVOR_FRESH_SECONDS && distance(marker.contact.position.center, where) <= LZ_CLEAR_METERS,
+    );
+    const helicopter = view.aircraft.find((aircraft) => aircraft.seats > 0 && aircraft.passengers === 0 && !aircraft.damaged && (aircraft.status === 'ready' || aircraft.status === 'onStation' || aircraft.status === 'enroute'));
+    const going = helicopter?.order?.kind === 'Pickup';
+    if (helicopter !== undefined && !going && fresh && clear && (!byDayOnly || light >= DAYLIGHT)) {
+      commands.push({ kind: 'aircraftOrder', tick: view.tick, aircraftId: helicopter.aircraftId, order: { kind: 'Pickup', center: where, radius: 50 } });
+    }
+    return commands;
+  };
+}

@@ -19,6 +19,7 @@ import { reviewContacts } from '../knowledge/player-knowledge';
 import { correlateReports } from '../knowledge/tracks';
 import { placeMarks } from './marks';
 import { dropFlares, fireIllumination, pruneFlares } from './flares';
+import { onSurvivorTransmission, resolvePickups, updateRescue } from './rescue';
 import { updatePerception } from '../perception/observe';
 import { nextGaussian, type RngState } from '../rng/streams';
 import type { Scenario } from '../scenario/load';
@@ -383,6 +384,8 @@ export function step(state: SimState, commands: readonly PlayerCommand[], scenar
   dropFlares(truth, state.player, scenario, state.tick);
   if (tactical) fireIllumination(truth, state.unitKnowledge, state.player, scenario, rng, state.tick);
   pruneFlares(truth, state.player, state.tick);
+  resolvePickups(truth, state.player, state.radio, scenario, state.tick);
+  updateRescue(truth, state.unitKnowledge, scenario, state.tick);
 
   resolveCas(truth, state.player, state.radio, terrain, file.air, file.combat, file.display, file.perception.engageMemorySeconds, rng, state.tick);
 
@@ -392,7 +395,9 @@ export function step(state: SimState, commands: readonly PlayerCommand[], scenar
     reviewContacts(state.player, sensorCoverage(truth, file.air), file.display, TACTICAL_INTERVAL_TICKS, state.tick);
   }
 
-  advanceRadio(radioUnits(truth), lazySelves(state, scenario), state.unitKnowledge, state.radio, state.player, scenario, state.tick);
+  advanceRadio(radioUnits(truth), lazySelves(state, scenario), state.unitKnowledge, state.radio, state.player, scenario, state.tick, (unitId, message) =>
+    onSurvivorTransmission(truth, state.unitKnowledge, scenario, rng, state.tick, unitId, message),
+  );
   advanceOutbound(state);
   // Whatever reached air operations this second goes on a track before anyone looks at the map.
   correlateReports(state.player, file.display, state.tick);

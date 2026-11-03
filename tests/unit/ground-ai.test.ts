@@ -63,6 +63,7 @@ const doctrine: Doctrine = {
   noSupportWeaponsAssaultFactor: 0.6,
   illuminationRounds: 0,
   waitForAirStrengthRatio: 0.5,
+  radioSilent: false,
   airRefusedMemorySeconds: 900,
   objectiveMarginMeters: 60,
   attackRadiusMeters: 100,

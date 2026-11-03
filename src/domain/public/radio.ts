@@ -31,6 +31,9 @@ export type RadioMessage =
         personnel: number;
         ammunitionFraction: number;
         status: ObjectiveStatus;
+        /** A downed aircrew's water left and radio calls left (§8.8). */
+        waterMinutes?: number;
+        battery?: number;
       }>)
   | (MessageMeta &
       Readonly<{
@@ -53,6 +56,7 @@ export type RadioMessage =
   | (MessageMeta & Readonly<{ kind: 'INTEL_REPORT'; contact: ContactEstimate }>)
   | (MessageMeta & Readonly<{ kind: 'POI_REPORT'; poi: Poi; cancelled: boolean }>)
   | (MessageMeta & Readonly<{ kind: 'SUPPRESSION'; suppression: Suppression; cancelled: boolean }>)
+  | (MessageMeta & Readonly<{ kind: 'PICKUP_POINT'; point: Vec2 }>)
   | (MessageMeta &
       Readonly<{
         kind: 'STRIKE_RESULT';
@@ -69,7 +73,7 @@ export type RadioMessage =
  * A crew's fuel and ordnance calls, in brevity words: JOKER means fuel to stay only a little
  * longer, BINGO fuel for the trip home only, WINCHESTER nothing left to fire.
  */
-export type CrewCallKind = 'JOKER' | 'BINGO' | 'BOMBS_EXPENDED' | 'WINCHESTER';
+export type CrewCallKind = 'JOKER' | 'BINGO' | 'BOMBS_EXPENDED' | 'WINCHESTER' | 'WHEELS_DOWN' | 'LIFTING_OFF' | 'SURVIVOR_ABOARD';
 
 /** A suppression mission as air operations announces it on the net: where, and when. */
 export type Suppression = Readonly<{
@@ -154,6 +158,7 @@ export function reportLevel(message: RadioMessage): ReportLevel {
     case 'INTEL_REPORT':
     case 'POI_REPORT':
     case 'SUPPRESSION':
+    case 'PICKUP_POINT':
       return 'routine';
   }
 }

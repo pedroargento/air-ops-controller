@@ -111,6 +111,8 @@ function destinationOf(objective: GroundObjective): Vec2 | null {
     case 'PatrolArea':
     case 'HoldArea':
     case 'AmbushArea':
+    case 'Evade':
+    case 'SearchArea':
       return null;
   }
 }

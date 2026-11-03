@@ -109,6 +109,8 @@ export function decideReports(
 ): ReportDecision {
   const needs: ReportNeed[] = [];
   let next = memory;
+  // A unit under radio discipline speaks only when asked: a downed aircrew saving battery (§8.8).
+  if (self.doctrine.radioSilent) return { needs, memory };
 
   const threat = strongestHostile(self, knowledge, config.ticRangeMeters);
   const inContact = threat !== null && declaresTic(self, knowledge, threat, config);

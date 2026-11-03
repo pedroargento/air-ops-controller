@@ -69,6 +69,10 @@ export type UiConfig = Readonly<{
   onSpeed: (speed: number) => void;
   onTogglePause: () => void;
   onExportLog: () => void;
+  /** The downed aircrew in a rescue mission, or null. */
+  survivorId: string | null;
+  /** Runs the battle fast until first light, stopping for anything that needs the controller. */
+  onWaitForLight: () => void;
   /** Where everyone really was, through the run: null until the run is over. */
   truthHistory: () => readonly TruthFrame[] | null;
 }>;
@@ -203,6 +207,8 @@ function describeOrder(order: AircraftOrder, names: Names, cellSize: number): st
       return `one bomb pass on ${gridRef(order.center, cellSize)}`;
     case 'Illuminate':
       return `light ${gridRef(order.center, cellSize)} with flares until ${clock(order.untilTick)}`;
+    case 'Pickup':
+      return `land at ${gridRef(order.center, cellSize)} for a pickup`;
     case 'ReturnToBase':
       return 'return to base';
   }
@@ -302,7 +308,7 @@ export class App {
     element('timeline-slider').addEventListener('input', (event) => {
       this.reviewTick = Number((event.target as HTMLInputElement).value);
     });
-    for (const panel of ['controls', 'aircraft', 'selection', 'requests', 'radio-log', 'side-tabs', 'map-layers', 'forecast', 'map-toasts', 'map-menu', 'legend', 'tracks', 'timeline']) {
+    for (const panel of ['controls', 'aircraft', 'selection', 'requests', 'radio-log', 'side-tabs', 'map-layers', 'forecast', 'map-toasts', 'map-menu', 'legend', 'tracks', 'timeline', 'pickup']) {
       element(panel).addEventListener('click', (event) => this.onPanelClick(event));
       element(panel).addEventListener('change', (event) => this.onPanelChange(event));
     }
@@ -361,6 +367,44 @@ export class App {
       }
     }
     event.preventDefault();
+  }
+
+  private readonly landed = new Set<string>();
+
+  /**
+   * While a helicopter is on the ground for a pickup, the seconds matter: the game drops to
+   * normal speed when it lands, and a panel shows boarding, the survivor coming, the fire it's
+   * taking and its escorts, with lift off one click away.
+   */
+  private renderPickup(view: PlayerView): void {
+    const panel = element('pickup');
+    const down = view.aircraft.filter((aircraft) => aircraft.landed);
+    for (const aircraft of down) {
+      if (!this.landed.has(aircraft.aircraftId)) this.config.onSpeed(1);
+    }
+    this.landed.clear();
+    for (const aircraft of down) this.landed.add(aircraft.aircraftId);
+    panel.hidden = down.length === 0;
+    if (down.length === 0) return;
+    const rows = down.map((aircraft) => {
+      const share = Math.min(1, aircraft.boardingSeconds / aircraft.boardNeedSeconds);
+      const coming = aircraft.survivorMeters === null ? 'No survivor coming yet.' : aircraft.survivorMeters <= 25 ? 'Survivor at the door, boarding.' : `Survivor ${Math.round(aircraft.survivorMeters)} m away, running for it.`;
+      const fire = view.log.filter((message) => message.kind === 'GROUND_FIRE' && message.senderId === aircraft.aircraftId && view.tick - message.receivedAt <= 15).length;
+      const escorts = view.aircraft
+        .filter((other) => other.aircraftType === 'cas' && (other.order?.kind === 'Cover' || other.order?.kind === 'Suppress') && other.status === 'onStation')
+        .map((other) => `${other.aircraftId} ${other.order?.kind === 'Suppress' ? 'suppressing' : 'covering'}`);
+      const center = aircraft.order === null || aircraft.order.kind === 'ReturnToBase' ? aircraft.position : aircraft.order.center;
+      return (
+        `<div class="pickup-row"><b>${escapeHtml(aircraft.aircraftId)} on the ground</b>` +
+        `<div class="pickup-bar"><span style="width:${(share * 100).toFixed(0)}%"></span></div>` +
+        `<span>Boarding ${Math.round(aircraft.boardingSeconds)} of ${aircraft.boardNeedSeconds} s. ${escapeHtml(coming)}</span>` +
+        `<span class="${fire > 0 ? 'danger' : 'hint-quiet'}">${fire > 0 ? `Taking fire: ${fire} burst${fire === 1 ? '' : 's'} in the last 15 s.` : 'No fire taken.'}</span>` +
+        `<span class="hint-quiet">Escorts: ${escorts.length === 0 ? 'none on station' : escapeHtml(escorts.join(', '))}.</span>` +
+        `<div class="buttons"><button class="lift" data-action="lift-off" data-id="${escapeHtml(aircraft.aircraftId)}">Lift off now</button>` +
+        `<button data-action="center" data-x="${center.x}" data-y="${center.y}">Show</button></div></div>`
+      );
+    });
+    morphHtml(panel, rows.join(''));
   }
 
   /** Opening the timeline pauses the battle; closing it goes back to live and resumes if it was running. */
@@ -525,7 +569,8 @@ export class App {
           `<button data-action="menu-fire" data-id="${id}" data-kind="Strike" title="${escapeHtml(ORDER_HELP.Strike)}">Strike</button>`
         : '';
       const flares = entry.flares > 0 ? `<button data-action="menu-illuminate" data-id="${id}" title="${escapeHtml(ORDER_HELP.Illuminate)}">Illuminate</button>` : '';
-      return `<div class="menu-fire"><b>${id}</b><button data-action="menu-watch" data-id="${id}" title="${escapeHtml(ORDER_HELP.Watch)}">Watch</button>${fire}${flares}</div>`;
+      const pickup = entry.seats > 0 ? `<button class="primary" data-action="menu-pickup" data-id="${id}" title="Land here and wait while the survivor boards. Lift off any time.">Pick up here</button>` : '';
+      return `<div class="menu-fire"><b>${id}</b><button data-action="menu-watch" data-id="${id}" title="${escapeHtml(ORDER_HELP.Watch)}">Watch</button>${fire}${flares}${pickup}</div>`;
     });
     const minutes = aircraft.some((entry) => canFire(entry) || entry.flares > 0) ? `<label>Suppress or illuminate for <input id="menu-minutes" type="number" value="${DEFAULT_SUPPRESS_MINUTES}" min="1" step="1" /> min</label>` : '';
     const boxes = recipients.map(
@@ -535,6 +580,12 @@ export class App {
       ([kind, { label }]) => `<button data-action="report-poi" data-id="${kind}">Report ${escapeHtml(label.toLowerCase())}</button>`,
     );
     sections.push(`<h3>Aircraft to grid ${gridRef(point, terrain.cellSize)}</h3>${tasks.join('') || '<p class="hint-quiet">No aircraft can take a task now.</p>'}${minutes}`);
+    const survivor = this.config.survivorId;
+    if (survivor !== null) {
+      sections.push(
+        `<h3>Survivor</h3><button data-action="menu-pickup-point" data-id="${escapeHtml(survivor)}" title="The survivor makes for it when it judges it safe.">Pickup point for ${escapeHtml(displayName(survivor, names))} here</button>`,
+      );
+    }
     sections.push(`<h3>Mark this place for</h3><div class="menu-recipients">${boxes.join('')}</div>${kinds.join('')}${cancels.join('')}`);
     const menu = element('map-menu');
     menu.innerHTML = `${sections.join('<hr />')}<button data-action="close-menu">Close</button>`;
@@ -755,6 +806,26 @@ export class App {
       case 'timeline':
         this.toggleTimeline();
         return;
+      case 'wait-light':
+        this.config.onWaitForLight();
+        return;
+      case 'menu-pickup':
+        if (this.menuPoint !== null && id !== undefined) this.order(id, { kind: 'Pickup', center: this.menuPoint, radius: 50 });
+        this.closeMapMenu();
+        return;
+      case 'menu-pickup-point':
+        if (this.menuPoint !== null && id !== undefined) {
+          this.issue({ kind: 'sendPickupPoint', unitId: id, point: this.menuPoint }, `To ${displayName(id, this.config.names)}: pickup point at ${gridRef(this.menuPoint, this.config.terrain.cellSize)}.`, true);
+        }
+        this.closeMapMenu();
+        return;
+      case 'lift-off': {
+        const helicopter = this.view?.aircraft.find((aircraft) => aircraft.aircraftId === id);
+        if (helicopter !== undefined && helicopter.order !== null && helicopter.order.kind !== 'ReturnToBase') {
+          this.order(helicopter.aircraftId, { kind: 'Watch', center: helicopter.order.center, radius: 300 });
+        }
+        return;
+      }
       case 'review-step': {
         const view = this.view;
         if (view === null) return;
@@ -971,6 +1042,7 @@ export class App {
       if (frame !== undefined) this.map.drawTruth(frame);
     }
     this.renderTimeline(view, run);
+    this.renderPickup(view);
     this.renderControls(view, run);
     this.renderAircraft(view);
     this.renderRequests(view);
@@ -1007,6 +1079,9 @@ export class App {
         `<span id="clock" title="Local time">${clockSeconds(view.tick)}</span>` +
         `<span id="mission-time">T+${duration(view.tick)} · <b>${duration(Math.max(0, this.config.durationSeconds - view.tick))} left</b></span>` +
         lightHtml(view) +
+        (view.forecast !== null && lightState(view.forecast.sky, view.tick) !== 'day' && run.result === null
+          ? '<button data-action="wait-light" title="Run fast to first light, stopping for anything that needs you. Pause stops it.">Wait for first light</button>'
+          : '') +
         `<span id="status">${escapeHtml(status)}</span>` +
         `<span id="objective">${escapeHtml(this.config.objective)}</span>` +
         `<button data-action="timeline"${this.reviewing ? ' class="active"' : ''} title="Look back through the battle as you knew it (T).">Timeline</button>` +
@@ -1022,7 +1097,7 @@ export class App {
         `<button class="aircraft-row${selected ? ' active' : ''}" data-action="select-aircraft" data-id="${a.aircraftId}" title="${escapeHtml(aircraftSummary(a))}">` +
         `<b>${a.aircraftId}</b><b>${a.damaged ? 'DAMAGED' : a.status}</b>` +
         `<span class="mission">${aircraftMission(a)}${eta}</span>` +
-        `<span>${Math.round(a.altitudeMeters)} m${a.aboveCloud ? ' ☁' : ''}</span><span>${Math.round(a.fuelFraction * 100)}%</span><span>ord ${a.ammunition}/${a.gunBursts}</span></button>`
+        `<span>${a.landed ? 'landed' : `${Math.round(a.altitudeMeters)} m`}${a.aboveCloud ? ' ☁' : ''}</span><span>${Math.round(a.fuelFraction * 100)}%</span><span>ord ${a.ammunition}/${a.gunBursts}</span></button>`
       );
     });
     morphHtml(element('aircraft'), rows.join(''));
@@ -1189,7 +1264,7 @@ export class App {
       `<h2>${aircraft.aircraftId} · ${escapeHtml(aircraft.model)}</h2>` +
       `<p class="task-now">${escapeHtml(this.taskLine(aircraft, tick))}</p>` +
       `<p>${strike ? `Bombs ${aircraft.ammunition} · gun bursts ${aircraft.gunBursts} · ` : ''}${aircraft.flares > 0 ? `flares ${aircraft.flares} · ` : ''}fuel ${Math.round(aircraft.fuelFraction * 100)}%${station} · ` +
-      `altitude ${Math.round(aircraft.altitudeMeters)} m · visibility ${visibilityText(aircraft.visibilityMeters)}` +
+      `${aircraft.landed ? 'on the ground' : `altitude ${Math.round(aircraft.altitudeMeters)} m`} · visibility ${visibilityText(aircraft.visibilityMeters)}` +
       `${aircraft.damaged ? ' · damaged, returning for repair' : ''}${aircraft.aboveCloud ? ' · above cloud, cannot see the ground' : ''}</p>` +
       `<h3>New task</h3><div class="buttons">${taskButtons}<button data-action="rtb" title="Head home now.">Return to base</button></div>${fields}` +
       `<h3>Standing settings</h3>` +
@@ -1260,8 +1335,14 @@ export class App {
       .filter((a) => canFire(a) && !(a.order?.kind === 'Cover' && a.order.unitId === unitId))
       .map((a) => `<button data-action="cover" data-id="${id}" data-kind="${escapeHtml(a.aircraftId)}" title="${escapeHtml(ORDER_HELP.Cover)}">Cover with ${escapeHtml(a.aircraftId)}</button>`)
       .join('');
+    const report = marker?.statusReport;
+    const survival =
+      unitId === this.config.survivorId
+        ? `<h3>Survival</h3><p>${report?.waterMinutes === undefined ? 'Water and battery not reported yet: ask for a SITREP.' : `Water for about ${Math.floor(report.waterMinutes / 60)} h ${report.waterMinutes % 60} min, ${report.battery ?? 0} radio calls left, as of ${clock(report.receivedAt)}.`}</p>` +
+          '<p class="hint">Every call uses battery and can give its position away to the enemy. It stays silent unless asked.</p>'
+        : '';
     return (
-      `<h2>${name}</h2>${position}${danger}${support}` +
+      `<h2>${name}</h2>${position}${survival}${danger}${support}` +
       (marker === undefined || cover === '' ? '' : `<h3>Air cover</h3><div class="buttons">${cover}</div>`) +
       `<h3>Ask for</h3><div class="buttons">` +
       `<button data-action="request" data-id="${id}" data-kind="position">Position</button>` +

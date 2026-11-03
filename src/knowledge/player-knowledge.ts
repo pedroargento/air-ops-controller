@@ -41,6 +41,9 @@ export type UnitStatusReport = Readonly<{
   ammunitionFraction: number;
   status: ObjectiveStatus;
   receivedAt: number;
+  /** A downed aircrew's last word on its water and battery (§8.8). */
+  waterMinutes?: number;
+  battery?: number;
 }>;
 
 /** An aircraft's sensors, as far as air operations can tell from telemetry. */
@@ -308,6 +311,8 @@ export function receiveByPlayer(player: PlayerKnowledge, message: RadioMessage, 
         ammunitionFraction: message.ammunitionFraction,
         status: message.status,
         receivedAt: message.receivedAt,
+        ...(message.waterMinutes === undefined ? {} : { waterMinutes: message.waterMinutes }),
+        ...(message.battery === undefined ? {} : { battery: message.battery }),
       };
       return;
     case 'DRILL':
@@ -338,6 +343,7 @@ export function receiveByPlayer(player: PlayerKnowledge, message: RadioMessage, 
     case 'INTEL_REPORT':
     case 'POI_REPORT':
     case 'SUPPRESSION':
+    case 'PICKUP_POINT':
     case 'STRIKE_RESULT':
     case 'GROUND_FIRE':
       return;

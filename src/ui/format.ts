@@ -114,6 +114,7 @@ const TASK_NAMES: Readonly<Record<NonNullable<AircraftTelemetryEntry['order']>['
   Suppress: 'suppressing',
   Strike: 'striking',
   Illuminate: 'illuminating',
+  Pickup: 'picking up',
   ReturnToBase: 'returning',
 };
 
@@ -126,7 +127,7 @@ export function aircraftMission(aircraft: AircraftTelemetryEntry): string {
 export function aircraftSummary(aircraft: AircraftTelemetryEntry): string {
   const status = aircraft.damaged ? `DAMAGED ${aircraft.status}` : aircraft.status;
   return (
-    `${aircraft.aircraftId} (${aircraft.model}): ${status}, ${aircraftMission(aircraft)}, ${Math.round(aircraft.altitudeMeters)} m, ` +
+    `${aircraft.aircraftId} (${aircraft.model}): ${status}, ${aircraftMission(aircraft)}, ${aircraft.landed ? 'landed' : `${Math.round(aircraft.altitudeMeters)} m`}, ` +
     `fuel ${Math.round(aircraft.fuelFraction * 100)}%, ordnance ${aircraft.ammunition}, guns ${aircraft.gunBursts}`
   );
 }
@@ -270,6 +271,9 @@ const CREW_CALL_TEXT: Readonly<Record<CrewCallKind, (minutes: number, bursts: nu
   BINGO: () => 'BINGO: fuel for the trip home only, returning to base.',
   BOMBS_EXPENDED: (_, bursts) => `Bombs expended, ${bursts} gun ${bursts === 1 ? 'burst' : 'bursts'} left.`,
   WINCHESTER: () => 'WINCHESTER: no ordnance left.',
+  WHEELS_DOWN: () => 'Wheels down at the pickup point. Exposed until we lift.',
+  LIFTING_OFF: () => 'Taking fire, lifting off. Pickup not made.',
+  SURVIVOR_ABOARD: () => 'Survivor aboard, lifting off for home.',
 };
 
 /** Natural-language template for a message, plus the reported points it mentions. */
@@ -291,7 +295,9 @@ export function radioLine(message: RadioMessage, cellSize: number): RadioLine {
       return { text: `Position ${grid(message.position.center)}.`, coordinates: [message.position.center] };
     case 'SITREP':
       return {
-        text: `SITREP from ${grid(message.ownPosition.center)}: ${message.personnel} effectives, ammunition ${Math.round(message.ammunitionFraction * 100)}%, ${message.status}.`,
+        text: message.waterMinutes === undefined
+          ? `SITREP from ${grid(message.ownPosition.center)}: ${message.personnel} effectives, ammunition ${Math.round(message.ammunitionFraction * 100)}%, ${message.status}.`
+          : `Survivor at ${grid(message.ownPosition.center)}: water for about ${Math.floor(message.waterMinutes / 60)} h ${message.waterMinutes % 60} min, ${message.battery ?? 0} radio calls left.`,
         coordinates: [message.ownPosition.center],
       };
     case 'CHECK_FIRE':
@@ -307,6 +313,8 @@ export function radioLine(message: RadioMessage, cellSize: number): RadioLine {
       const text = message.cancelled ? `Cancel ${label.toLowerCase()} at` : `${label} at`;
       return { text: `${text} ${grid(message.poi.center)}.`, coordinates: [message.poi.center] };
     }
+    case 'PICKUP_POINT':
+      return { text: `Pickup point for you at ${grid(message.point)}. Make for it when it's safe.`, coordinates: [message.point] };
     case 'SUPPRESSION': {
       const { center, untilTick, fromTick } = message.suppression;
       const text = message.cancelled

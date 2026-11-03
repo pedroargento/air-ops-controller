@@ -22,6 +22,10 @@ const objective = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('WithdrawTo'), area }),
   z.object({ kind: z.literal('AssaultArea'), area }),
   z.object({ kind: z.literal('AmbushArea'), area, openFireMeters: z.number().positive(), watches: vec2.optional() }),
+  // A downed aircrew hiding and moving to be picked up (§8.8).
+  z.object({ kind: z.literal('Evade'), area, pickup: vec2.nullable().default(null), boardAt: vec2.nullable().default(null) }),
+  // Hunting for someone, from whatever estimate of them the platoon holds.
+  z.object({ kind: z.literal('SearchArea'), area }),
 ]);
 
 const scheduledObjective = z.union([
@@ -34,6 +38,7 @@ const doctrine = z.object({
   drills: z.array(z.enum(['nearAmbush', 'farAmbush', 'attack', 'bypass', 'hastyAmbush', 'waitForAir', 'pushThrough'])).describe('Battle drills this doctrine knows (§4.0.2).'),
   airWaitSeconds: z.number().positive().describe('How long a platoon holds for air before deciding without it.'),
   waitForAirStrengthRatio: z.number().nonnegative().default(0.5).describe('Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself.'),
+  radioSilent: z.boolean().default(false).describe('Reports only when asked, as a downed aircrew saving its battery does.'),
   airRefusedMemorySeconds: z.number().nonnegative().default(900).describe('After air operations says no air is available, it doesn\'t wait for air again for this long.'),
   nearAmbushMeters: z.number().positive().describe('Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance.'),
   drillSeconds: z.number().positive().describe('Every drill ends after this long, so none can hold a platoon forever.'),
@@ -229,6 +234,7 @@ const aircraftModel = z.object({
   casualtyFractionPerPass: unit.describe('Share of men a bombing pass kills at full accuracy.'),
   gunBursts: z.number().int().min(0).describe('Gun runs it carries.'),
   flares: z.number().int().min(0).default(0).describe('Parachute flares it carries for lighting an area at night.'),
+  seats: z.number().int().min(0).default(0).describe('People it can pick up from the ground.'),
   gunCasualtyFraction: unit.describe('Share of men a gun run kills at full accuracy.'),
   gunSuppression: unit.describe('Suppression from a gun run.'),
   suppressionPerPass: unit.describe('Suppression from a bombing pass.'),
@@ -268,6 +274,7 @@ const air = z.object({
         id: z.string(),
         model: z.string(),
         ammunition: z.number().int().min(0).optional().describe('Bombing passes it carries here, if not the model\'s usual load.'),
+        readySeconds: z.number().int().min(0).optional().describe('Seconds after the start before it can fly, as if still being readied.'),
       }),
     )
     .describe('Aircraft in a scenario.'),
@@ -280,6 +287,13 @@ const air = z.object({
   flareBurnSeconds: z.number().positive().describe('How long a parachute flare burns.'),
   flareRadiusMeters: z.number().positive().describe('How far a flare lights the ground around it.'),
   flareLight: unit.describe('Light under a flare, as a share of daylight.'),
+  boardSeconds: z.number().positive().describe('Least time a person takes to get aboard a landed helicopter once beside it.'),
+  boardMeters: z.number().positive().describe('How close to a landed helicopter someone has to be to board.'),
+  boardCallMeters: z.number().positive().describe('A survivor runs for a helicopter that lands within this distance of it.'),
+  landingSpeedMps: z.number().positive().describe('How fast a helicopter edges onto its pickup point before it lands.'),
+  directionFindingErrorMeters: z.number().nonnegative().describe('How far off a hunter\'s fix on a survival radio is, typically.'),
+  captureMeters: z.number().positive().describe('Hunters this close to a survivor take it.'),
+  landedHitFactor: z.number().min(1).describe('How many times easier a helicopter on the ground is to hit than one flying.'),
   markSeconds: z.number().positive().describe('How long a smoke mark lasts.'),
   markIntervalSeconds: z.number().positive().describe('Shortest gap between one platoon\'s marks.'),
   markErrorMeters: z.number().nonnegative().describe('How far smoke typically lands from where the platoon aimed it.'),
@@ -378,6 +392,17 @@ const mission = z.discriminatedUnion('kind', [
     unitIds: z.array(z.string()).min(1),
     successMinPersonnel: z.number().positive(),
     partialMinPersonnel: z.number().positive(),
+  }),
+  z.object({
+    kind: z.literal('Rescue'),
+    ...missionCommon,
+    survivorId: z.string().describe('The platoon that is the downed aircrew.'),
+    waterSeconds: z.number().positive().describe('How long the survivor\'s water lasts.'),
+    thirstSeconds: z.number().positive().describe('How long it lasts weakened once the water is gone.'),
+    batteryCalls: z.number().int().positive().describe('Transmissions its survival radio has left.'),
+    /** Where the hunters believe it came down, from the parachute they saw. */
+    sightedAt: vec2,
+    sightingErrorMeters: z.number().nonnegative(),
   }),
   z.object({
     kind: z.literal('LocateForce'),

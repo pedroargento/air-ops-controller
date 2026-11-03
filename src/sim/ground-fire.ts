@@ -129,6 +129,8 @@ export function resolveGroundFire(
     const chance =
       airHitChance(fire, slantTo(unit, aircraft, terrain), heightAbove(unit, aircraft, terrain)) *
       model.hitChanceFactor *
+      // A helicopter sitting on the ground is the easiest target there is.
+      (aircraft.landed ? air.landedHitFactor : 1) *
       (1 - unit.suppression * config.suppressionFirePenalty);
     const label = `airfire/${unit.id}/${aircraft.id}`;
     const hit = nextBool(rng, label, Math.min(1, chance));

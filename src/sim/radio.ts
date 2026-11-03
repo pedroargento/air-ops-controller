@@ -203,6 +203,8 @@ export function advanceRadio(
   player: PlayerKnowledge,
   scenario: Scenario,
   tick: number,
+  /** Sees every finished transmission, and can change it or stop it (a flat battery). */
+  onTransmitted: (unitId: string, message: RadioMessage) => RadioMessage | null = (_, message) => message,
 ): void {
   const deliveries: Delivery[] = [];
   for (const unit of units) {
@@ -221,7 +223,10 @@ export function advanceRadio(
       scenario,
       tick,
     );
-    if (delivery !== null) deliveries.push(delivery);
+    if (delivery !== null) {
+      const message = onTransmitted(unit.id, delivery.message);
+      if (message !== null) deliveries.push({ ...delivery, message });
+    }
   }
   const comparable = scenario.file.display.freshReportSeconds;
   for (const delivery of deliveries) deliver(delivery, knowledge, player, comparable);

@@ -120,7 +120,8 @@
       "headingTowardsCos": 0.5,
       "illuminationRounds": 8,
       "waitForAirStrengthRatio": 0.5,
-      "airRefusedMemorySeconds": 900
+      "airRefusedMemorySeconds": 900,
+      "radioSilent": false
     },
     "patrol": {
       "speedMps": 1,
@@ -184,7 +185,8 @@
       "headingTowardsCos": 0.5,
       "illuminationRounds": 4,
       "waitForAirStrengthRatio": 0.5,
-      "airRefusedMemorySeconds": 900
+      "airRefusedMemorySeconds": 900,
+      "radioSilent": false
     },
     "assault": {
       "speedMps": 1,
@@ -240,7 +242,8 @@
       "headingTowardsCos": 0.5,
       "illuminationRounds": 0,
       "waitForAirStrengthRatio": 0.5,
-      "airRefusedMemorySeconds": 900
+      "airRefusedMemorySeconds": 900,
+      "radioSilent": false
     },
     "harass": {
       "speedMps": 1,
@@ -296,7 +299,8 @@
       "headingTowardsCos": 0.5,
       "illuminationRounds": 0,
       "waitForAirStrengthRatio": 0.5,
-      "airRefusedMemorySeconds": 900
+      "airRefusedMemorySeconds": 900,
+      "radioSilent": false
     },
     "recon": {
       "speedMps": 1,
@@ -352,7 +356,8 @@
       "headingTowardsCos": 0.5,
       "illuminationRounds": 0,
       "waitForAirStrengthRatio": 0.5,
-      "airRefusedMemorySeconds": 900
+      "airRefusedMemorySeconds": 900,
+      "radioSilent": false
     },
     "antiair": {
       "speedMps": 1,
@@ -408,7 +413,8 @@
       "headingTowardsCos": 0.5,
       "illuminationRounds": 0,
       "waitForAirStrengthRatio": 0.5,
-      "airRefusedMemorySeconds": 900
+      "airRefusedMemorySeconds": 900,
+      "radioSilent": false
     },
     "column": {
       "speedMps": 1,
@@ -471,7 +477,8 @@
       "headingTowardsCos": 0.5,
       "illuminationRounds": 6,
       "waitForAirStrengthRatio": 0.5,
-      "airRefusedMemorySeconds": 900
+      "airRefusedMemorySeconds": 900,
+      "radioSilent": false
     },
     "raider": {
       "speedMps": 1,
@@ -531,7 +538,122 @@
       "headingTowardsCos": 0.5,
       "illuminationRounds": 0,
       "waitForAirStrengthRatio": 0.5,
-      "airRefusedMemorySeconds": 900
+      "airRefusedMemorySeconds": 900,
+      "radioSilent": false
+    },
+    "evader": {
+      "speedMps": 0.8,
+      "detectRangeMeters": 500,
+      "engageRangeMeters": 300,
+      "closesToMeters": null,
+      "pinnedSuppression": 0.6,
+      "withdrawCasualties": 0.45,
+      "withdrawMorale": 0.35,
+      "withdrawSuppression": 0.8,
+      "returnMorale": 0.6,
+      "returnSuppression": 0.3,
+      "returnMaxCasualties": 0.4,
+      "returnMinAmmoFraction": 0.1,
+      "maxReturns": 2,
+      "observerQuality": 1.2,
+      "alertRadiusMeters": 350,
+      "avoidStrengthRatio": 1.5,
+      "delayStrengthRatio": 1.5,
+      "supportHoldBonus": 0.3,
+      "reportMemorySeconds": 300,
+      "airCoverSeconds": 0,
+      "standoffMeters": 300,
+      "burstSeconds": 120,
+      "pauseSeconds": 180,
+      "pressureMoraleFloor": 0.45,
+      "observeBias": 0.8,
+      "probeBias": 1.5,
+      "harassBias": 0.1,
+      "assaultBias": 0.1,
+      "airFireThreshold": 0.5,
+      "airCoverRepeatSeconds": 300,
+      "nearAmbushMeters": 120,
+      "drillSeconds": 600,
+      "attackStrengthRatio": 1.5,
+      "maxDetourFactor": 2,
+      "supportShare": 0.34,
+      "flankMeters": 450,
+      "warningMeters": 700,
+      "corridorMeters": 180,
+      "clearSeconds": 60,
+      "drills": [],
+      "rallyMeters": null,
+      "airWaitSeconds": 120,
+      "groupRadiusMeters": 200,
+      "arrivedMeters": 20,
+      "sidestepMeters": 60,
+      "breakContactMeters": 300,
+      "assaultAmmunitionFraction": 0.25,
+      "noSupportWeaponsAssaultFactor": 0.6,
+      "objectiveMarginMeters": 60,
+      "attackRadiusMeters": 100,
+      "headingTowardsCos": 0.5,
+      "illuminationRounds": 0,
+      "waitForAirStrengthRatio": 0.5,
+      "airRefusedMemorySeconds": 900,
+      "radioSilent": true
+    },
+    "hunter": {
+      "speedMps": 0.6,
+      "detectRangeMeters": 500,
+      "engageRangeMeters": 300,
+      "closesToMeters": null,
+      "pinnedSuppression": 0.6,
+      "withdrawCasualties": 0.45,
+      "withdrawMorale": 0.35,
+      "withdrawSuppression": 0.8,
+      "returnMorale": 0.6,
+      "returnSuppression": 0.3,
+      "returnMaxCasualties": 0.4,
+      "returnMinAmmoFraction": 0.1,
+      "maxReturns": 1,
+      "observerQuality": 0.5,
+      "alertRadiusMeters": 500,
+      "avoidStrengthRatio": 1.5,
+      "delayStrengthRatio": 1.5,
+      "supportHoldBonus": 0.3,
+      "reportMemorySeconds": 900,
+      "airCoverSeconds": 0,
+      "standoffMeters": 300,
+      "burstSeconds": 120,
+      "pauseSeconds": 180,
+      "pressureMoraleFloor": 0.45,
+      "observeBias": 1,
+      "probeBias": 0.3,
+      "harassBias": 0.1,
+      "assaultBias": 0.1,
+      "airFireThreshold": 0.5,
+      "airCoverRepeatSeconds": 300,
+      "nearAmbushMeters": 120,
+      "drillSeconds": 600,
+      "attackStrengthRatio": 1.5,
+      "maxDetourFactor": 2,
+      "supportShare": 0.34,
+      "flankMeters": 200,
+      "warningMeters": 700,
+      "corridorMeters": 180,
+      "clearSeconds": 60,
+      "drills": [],
+      "rallyMeters": null,
+      "airWaitSeconds": 120,
+      "groupRadiusMeters": 200,
+      "arrivedMeters": 25,
+      "sidestepMeters": 60,
+      "breakContactMeters": 300,
+      "assaultAmmunitionFraction": 0.25,
+      "noSupportWeaponsAssaultFactor": 0.6,
+      "objectiveMarginMeters": 60,
+      "attackRadiusMeters": 100,
+      "headingTowardsCos": 0.5,
+      "illuminationRounds": 0,
+      "waitForAirStrengthRatio": 0.5,
+      "airRefusedMemorySeconds": 900,
+      "radioSilent": false
     }
   },
   "combat": {
@@ -779,7 +901,8 @@
         "gunBursts": 0,
         "gunCasualtyFraction": 0,
         "gunSuppression": 0,
-        "flares": 4
+        "flares": 4,
+        "seats": 0
       },
       "RF-101C": {
         "takeoffSeconds": 60,
@@ -812,7 +935,8 @@
         "gunBursts": 0,
         "gunCasualtyFraction": 0,
         "gunSuppression": 0,
-        "flares": 0
+        "flares": 0,
+        "seats": 0
       },
       "A-1E": {
         "takeoffSeconds": 60,
@@ -845,7 +969,8 @@
         "gunBursts": 20,
         "gunCasualtyFraction": 0.12,
         "gunSuppression": 0.6,
-        "flares": 4
+        "flares": 4,
+        "seats": 0
       },
       "F-100D": {
         "takeoffSeconds": 60,
@@ -878,7 +1003,8 @@
         "gunBursts": 16,
         "gunCasualtyFraction": 0.12,
         "gunSuppression": 0.6,
-        "flares": 0
+        "flares": 0,
+        "seats": 0
       },
       "UH-1B": {
         "takeoffSeconds": 60,
@@ -911,7 +1037,8 @@
         "gunBursts": 30,
         "gunCasualtyFraction": 0.08,
         "gunSuppression": 0.5,
-        "flares": 6
+        "flares": 6,
+        "seats": 0
       },
       "AH-1G": {
         "takeoffSeconds": 60,
@@ -944,7 +1071,8 @@
         "gunBursts": 30,
         "gunCasualtyFraction": 0.1,
         "gunSuppression": 0.55,
-        "flares": 0
+        "flares": 0,
+        "seats": 0
       },
       "OH-6A": {
         "takeoffSeconds": 60,
@@ -977,7 +1105,42 @@
         "gunBursts": 0,
         "gunCasualtyFraction": 0,
         "gunSuppression": 0,
-        "flares": 0
+        "flares": 0,
+        "seats": 0
+      },
+      "HH-3E": {
+        "takeoffSeconds": 60,
+        "turnaroundSeconds": 600,
+        "repairSeconds": 1500,
+        "maxAltitudeMeters": 3000,
+        "minAltitudeMeters": 30,
+        "rotary": true,
+        "terrainClearanceMeters": 15,
+        "defaultAltitudeMeters": 450,
+        "bingoMarginSeconds": 120,
+        "turnRateRadPerSecond": 1,
+        "orbitRadiusMeters": 100,
+        "role": "recon",
+        "displayName": "HH-3E Jolly Green",
+        "speedMps": 70,
+        "fuelSeconds": 7200,
+        "ammunition": 0,
+        "sensorRadiusMeters": 700,
+        "observerQuality": 1.1,
+        "climbRateMps": 8,
+        "sensorFalloffMeters": 1500,
+        "strikeMissPerMeterAltitude": 0.02,
+        "passIntervalSeconds": 60,
+        "casualtyFractionPerPass": 0,
+        "suppressionPerPass": 0,
+        "moralePerPass": 0,
+        "hitChanceFactor": 1.4,
+        "hitSurvivalChance": 0.3,
+        "gunBursts": 0,
+        "gunCasualtyFraction": 0,
+        "gunSuppression": 0,
+        "flares": 0,
+        "seats": 4
       }
     },
     "groundNoticeSigmaMeters": 100,
@@ -1010,7 +1173,14 @@
     "gunHeightTolerance": 1.5,
     "flareBurnSeconds": 180,
     "flareRadiusMeters": 900,
-    "flareLight": 0.7
+    "flareLight": 0.7,
+    "boardSeconds": 20,
+    "boardMeters": 25,
+    "boardCallMeters": 1500,
+    "landingSpeedMps": 8,
+    "directionFindingErrorMeters": 250,
+    "captureMeters": 40,
+    "landedHitFactor": 8
   },
   "weather": {
     "baseCeilingMeters": 1600,

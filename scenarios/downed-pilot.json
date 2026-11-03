@@ -1,0 +1,275 @@
+{
+  "id": "downed-pilot",
+  "name": "Downed Pilot (introduction)",
+  "rules": "standard",
+  "durationSeconds": 57600,
+  "startTime": "1730",
+  "sky": {
+    "sunrise": "0545",
+    "sunset": "1830",
+    "moonIllumination": 0.4,
+    "moonrise": "2100",
+    "moonset": "0400"
+  },
+  "terrain": {
+    "classLayer": "valley-road/terrain.txt",
+    "elevationLayer": "valley-road/elevation.txt"
+  },
+  "mission": {
+    "kind": "Rescue",
+    "area": {
+      "center": {
+        "x": 950,
+        "y": 1500
+      },
+      "radius": 1500
+    },
+    "briefing": "Bring Hobo 2's pilot home",
+    "areaLabel": "Near the survivor",
+    "results": {
+      "success": "PILOT RECOVERED: mission success",
+      "partial": "SEARCH SUSPENDED, pilot still missing: mission failed",
+      "failure": "PILOT LOST: mission failed"
+    },
+    "survivorId": "SURV-1",
+    "waterSeconds": 50400,
+    "thirstSeconds": 7200,
+    "batteryCalls": 12,
+    "sightedAt": {
+      "x": 1050,
+      "y": 1450
+    },
+    "sightingErrorMeters": 300
+  },
+  "display": {
+    "hqEnemyEstimate": 25
+  },
+  "units": [
+    {
+      "id": "SURV-1",
+      "name": "Hobo 2 (pilot)",
+      "side": "friendly",
+      "position": {
+        "x": 950,
+        "y": 1500
+      },
+      "personnel": 1,
+      "morale": 0.6,
+      "doctrine": "evader",
+      "objective": {
+        "kind": "Evade",
+        "area": {
+          "center": {
+            "x": 950,
+            "y": 1500
+          },
+          "radius": 40
+        }
+      },
+      "fallback": {
+        "center": {
+          "x": 950,
+          "y": 1500
+        },
+        "radius": 40
+      },
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 1,
+          "ammunition": 30
+        }
+      ]
+    },
+    {
+      "id": "E-H1",
+      "name": "North Patrol",
+      "side": "enemy",
+      "position": {
+        "x": 1500,
+        "y": 1050
+      },
+      "personnel": 10,
+      "morale": 0.75,
+      "doctrine": "hunter",
+      "objective": {
+        "kind": "SearchArea",
+        "area": {
+          "center": {
+            "x": 1050,
+            "y": 1450
+          },
+          "radius": 900
+        }
+      },
+      "fallback": {
+        "center": {
+          "x": 1500,
+          "y": 1050
+        },
+        "radius": 150
+      },
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 10,
+          "ammunition": 3000
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 1,
+          "ammunition": 1000
+        }
+      ]
+    },
+    {
+      "id": "E-H2",
+      "name": "South Patrol",
+      "side": "enemy",
+      "position": {
+        "x": 1350,
+        "y": 2100
+      },
+      "personnel": 10,
+      "morale": 0.75,
+      "doctrine": "hunter",
+      "objective": {
+        "kind": "SearchArea",
+        "area": {
+          "center": {
+            "x": 1050,
+            "y": 1450
+          },
+          "radius": 900
+        }
+      },
+      "fallback": {
+        "center": {
+          "x": 1350,
+          "y": 2100
+        },
+        "radius": 150
+      },
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 10,
+          "ammunition": 3000
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 1,
+          "ammunition": 1000
+        }
+      ]
+    },
+    {
+      "id": "E-AD",
+      "name": "Air Defense Team",
+      "side": "enemy",
+      "position": {
+        "x": 1400,
+        "y": 1550
+      },
+      "personnel": 4,
+      "morale": 0.75,
+      "doctrine": "antiair",
+      "objective": {
+        "kind": "HoldArea",
+        "area": {
+          "center": {
+            "x": 1400,
+            "y": 1550
+          },
+          "radius": 60
+        }
+      },
+      "fallback": {
+        "center": {
+          "x": 1700,
+          "y": 1600
+        },
+        "radius": 120
+      },
+      "equipment": [
+        {
+          "weapon": "SMALL_ARMS",
+          "quantity": 4,
+          "ammunition": 800
+        },
+        {
+          "weapon": "MACHINE_GUN",
+          "quantity": 1,
+          "ammunition": 2000
+        },
+        {
+          "weapon": "MANPADS",
+          "quantity": 1,
+          "ammunition": 3
+        }
+      ]
+    }
+  ],
+  "links": [
+    [
+      "SURV-1",
+      "AIR_OPS"
+    ],
+    [
+      "E-H1",
+      "E-H2"
+    ],
+    [
+      "E-H1",
+      "E-AD"
+    ]
+  ],
+  "ceconMessages": [
+    {
+      "atSeconds": 0,
+      "text": "Hobo 2 went down west of the valley road at 1720. One parachute seen. Survival radio on guard. JOLLY-1 is being readied and can launch at 1820; CAS-2 at 1830."
+    },
+    {
+      "atSeconds": 30,
+      "text": "The survivor stays silent to save battery. Ask for a position or SITREP when you need one, but every call can give it away to the enemy searching for it."
+    },
+    {
+      "atSeconds": 600,
+      "text": "Get eyes over the survivor and forward what you see to it: knowing where the hunters are is what keeps it hidden."
+    },
+    {
+      "atSeconds": 2700,
+      "text": "Put strike aircraft over the pickup before JOLLY-1 goes in. On the ground a helicopter is an easy target, and boarding takes about 20 seconds."
+    },
+    {
+      "atSeconds": 3300,
+      "text": "JOLLY-1 is ready. Right-click on the survivor's position for Pick up here. If the fire gets heavy, lift off and try again."
+    }
+  ],
+  "air": {
+    "airbase": {
+      "x": 2000,
+      "y": 30000
+    },
+    "aircraft": [
+      {
+        "id": "RECON-1",
+        "model": "O-1E"
+      },
+      {
+        "id": "CAS-1",
+        "model": "A-1E"
+      },
+      {
+        "id": "CAS-2",
+        "model": "A-1E",
+        "readySeconds": 3600
+      },
+      {
+        "id": "JOLLY-1",
+        "model": "HH-3E",
+        "readySeconds": 3000
+      }
+    ]
+  }
+}

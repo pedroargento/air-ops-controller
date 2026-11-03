@@ -6,6 +6,7 @@ import { createServer } from 'vite';
 import { loadScenarioFile } from '../../src/cli/load-scenario';
 import { runReplay } from '../../src/cli/replay';
 import type { CommandLog } from '../../src/game/session';
+import { reportLevel } from '../../src/domain/public/radio';
 import type { PlayerView } from '../../src/knowledge/player-view';
 
 const PORT = 5195;
@@ -419,6 +420,41 @@ async function main(): Promise<void> {
     const ordered = (await log()).commands.find((command) => command.kind === 'aircraftOrder' && command.order.kind === 'Illuminate');
     check(ordered !== undefined, 'flares are ordered from the right-click menu');
     await shot(page, '7-night');
+    const nightStart = await page.evaluate(() => (window as unknown as { airops: { view: () => PlayerView } }).airops.view().tick);
+    await page.locator('[data-action="wait-light"]').click();
+    await page.waitForTimeout(1500);
+    const waited = await page.evaluate(() => (window as unknown as { airops: { view: () => PlayerView } }).airops.view());
+    const nightEnd = waited.tick;
+    // It runs fast until first light, or stops early for something urgent: in this fight, usually the latter.
+    const stoppedFor = waited.log.some((message) => message.receivedAt > nightStart && message.receivedAt <= nightEnd && reportLevel(message) !== 'routine' && message.senderId !== 'AIR_OPS' && message.senderId !== 'CECON');
+    check(nightEnd - nightStart > 120 || stoppedFor, `waiting for first light runs fast, stopping for anything urgent (${nightEnd - nightStart} s in 1.5 s${stoppedFor ? ', stopped for a report' : ''})`);
+
+    console.log('Rescue a downed pilot');
+    await page.goto(`http://localhost:${PORT}/?scenario=downed-pilot&seed=1&speed=60`);
+    await page.waitForSelector('#light');
+    const viewOf = () => (window as unknown as { airops: { view: () => PlayerView } }).airops.view();
+    await page.waitForFunction(
+      () => (window as unknown as { airops: { view: () => PlayerView } }).airops.view().aircraft.some((a) => a.aircraftId === 'JOLLY-1' && a.status === 'ready'),
+      undefined,
+      { timeout: 300000 },
+    );
+    await setPaused(page, true);
+    const pilot = await page.evaluate(() => {
+      const view = (window as unknown as { airops: { view: () => PlayerView } }).airops.view();
+      return view.friendlies.find((friendly) => friendly.unitId === 'SURV-1')?.position.center ?? { x: 950, y: 1500 };
+    });
+    const pilotPixel = await page.evaluate(([p]) => (window as unknown as { airops: Hook }).airops.app.screenPosition(p as Vec), [pilot]);
+    await page.locator('#map').click({ position: pilotPixel, button: 'right' });
+    await page.locator('[data-action="menu-pickup"][data-id="JOLLY-1"]').click();
+    await setPaused(page, false);
+    await page.waitForFunction(() => !(document.querySelector('#pickup') as HTMLElement).hidden, undefined, { timeout: 300000 });
+    check(true, 'the pickup panel opens when the helicopter lands');
+    check(/Boarding \d+ of 20 s/.test(await page.locator('#pickup').innerText()), 'it shows boarding progress');
+    await shot(page, '8-pickup');
+    await page.locator('#pickup [data-action="lift-off"]').click();
+    await page.waitForFunction(() => (document.querySelector('#pickup') as HTMLElement).hidden, undefined, { timeout: 30000 });
+    const jolly = (await page.evaluate(viewOf)).aircraft.find((aircraft) => aircraft.aircraftId === 'JOLLY-1');
+    check(jolly?.landed === false && jolly.order?.kind === 'Watch', 'Lift off now takes it off the ground');
 
     check(errors.length === 0, `no browser errors${errors.length > 0 ? `: ${errors.join(' | ')}` : ''}`);
     console.log(`\nPASSED ${checks} checks. ${hook} exposes only the command log and hash.`);

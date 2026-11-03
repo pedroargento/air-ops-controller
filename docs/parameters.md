@@ -200,6 +200,7 @@ rules or the schema.
 | `air.models.O-1E.casualtyFractionPerPass` | `0` | Share of men a bombing pass kills at full accuracy. |
 | `air.models.O-1E.gunBursts` | `0` | Gun runs it carries. |
 | `air.models.O-1E.flares` | `4` | Parachute flares it carries for lighting an area at night. |
+| `air.models.O-1E.seats` | `0` | People it can pick up from the ground. |
 | `air.models.O-1E.gunCasualtyFraction` | `0` | Share of men a gun run kills at full accuracy. |
 | `air.models.O-1E.gunSuppression` | `0` | Suppression from a gun run. |
 | `air.models.O-1E.suppressionPerPass` | `0` | Suppression from a bombing pass. |
@@ -231,6 +232,7 @@ rules or the schema.
 | `air.models.RF-101C.casualtyFractionPerPass` | `0` | Share of men a bombing pass kills at full accuracy. |
 | `air.models.RF-101C.gunBursts` | `0` | Gun runs it carries. |
 | `air.models.RF-101C.flares` | `0` | Parachute flares it carries for lighting an area at night. |
+| `air.models.RF-101C.seats` | `0` | People it can pick up from the ground. |
 | `air.models.RF-101C.gunCasualtyFraction` | `0` | Share of men a gun run kills at full accuracy. |
 | `air.models.RF-101C.gunSuppression` | `0` | Suppression from a gun run. |
 | `air.models.RF-101C.suppressionPerPass` | `0` | Suppression from a bombing pass. |
@@ -262,6 +264,7 @@ rules or the schema.
 | `air.models.A-1E.casualtyFractionPerPass` | `0.25` | Share of men a bombing pass kills at full accuracy. |
 | `air.models.A-1E.gunBursts` | `20` | Gun runs it carries. |
 | `air.models.A-1E.flares` | `4` | Parachute flares it carries for lighting an area at night. |
+| `air.models.A-1E.seats` | `0` | People it can pick up from the ground. |
 | `air.models.A-1E.gunCasualtyFraction` | `0.12` | Share of men a gun run kills at full accuracy. |
 | `air.models.A-1E.gunSuppression` | `0.6` | Suppression from a gun run. |
 | `air.models.A-1E.suppressionPerPass` | `0.5` | Suppression from a bombing pass. |
@@ -293,6 +296,7 @@ rules or the schema.
 | `air.models.F-100D.casualtyFractionPerPass` | `0.4` | Share of men a bombing pass kills at full accuracy. |
 | `air.models.F-100D.gunBursts` | `16` | Gun runs it carries. |
 | `air.models.F-100D.flares` | `0` | Parachute flares it carries for lighting an area at night. |
+| `air.models.F-100D.seats` | `0` | People it can pick up from the ground. |
 | `air.models.F-100D.gunCasualtyFraction` | `0.12` | Share of men a gun run kills at full accuracy. |
 | `air.models.F-100D.gunSuppression` | `0.6` | Suppression from a gun run. |
 | `air.models.F-100D.suppressionPerPass` | `0.7` | Suppression from a bombing pass. |
@@ -324,6 +328,7 @@ rules or the schema.
 | `air.models.UH-1B.casualtyFractionPerPass` | `0.1` | Share of men a bombing pass kills at full accuracy. |
 | `air.models.UH-1B.gunBursts` | `30` | Gun runs it carries. |
 | `air.models.UH-1B.flares` | `6` | Parachute flares it carries for lighting an area at night. |
+| `air.models.UH-1B.seats` | `0` | People it can pick up from the ground. |
 | `air.models.UH-1B.gunCasualtyFraction` | `0.08` | Share of men a gun run kills at full accuracy. |
 | `air.models.UH-1B.gunSuppression` | `0.5` | Suppression from a gun run. |
 | `air.models.UH-1B.suppressionPerPass` | `0.45` | Suppression from a bombing pass. |
@@ -355,6 +360,7 @@ rules or the schema.
 | `air.models.AH-1G.casualtyFractionPerPass` | `0.14` | Share of men a bombing pass kills at full accuracy. |
 | `air.models.AH-1G.gunBursts` | `30` | Gun runs it carries. |
 | `air.models.AH-1G.flares` | `0` | Parachute flares it carries for lighting an area at night. |
+| `air.models.AH-1G.seats` | `0` | People it can pick up from the ground. |
 | `air.models.AH-1G.gunCasualtyFraction` | `0.1` | Share of men a gun run kills at full accuracy. |
 | `air.models.AH-1G.gunSuppression` | `0.55` | Suppression from a gun run. |
 | `air.models.AH-1G.suppressionPerPass` | `0.5` | Suppression from a bombing pass. |
@@ -386,6 +392,7 @@ rules or the schema.
 | `air.models.OH-6A.casualtyFractionPerPass` | `0` | Share of men a bombing pass kills at full accuracy. |
 | `air.models.OH-6A.gunBursts` | `0` | Gun runs it carries. |
 | `air.models.OH-6A.flares` | `0` | Parachute flares it carries for lighting an area at night. |
+| `air.models.OH-6A.seats` | `0` | People it can pick up from the ground. |
 | `air.models.OH-6A.gunCasualtyFraction` | `0` | Share of men a gun run kills at full accuracy. |
 | `air.models.OH-6A.gunSuppression` | `0` | Suppression from a gun run. |
 | `air.models.OH-6A.suppressionPerPass` | `0` | Suppression from a bombing pass. |
@@ -406,6 +413,38 @@ rules or the schema.
 | `air.models.OH-6A.climbRateMps` | `8` | How fast it climbs or descends. |
 | `air.models.OH-6A.minAltitudeMeters` | `30` | Lowest altitude it can be given. |
 | `air.models.OH-6A.maxAltitudeMeters` | `3000` | Highest altitude it can be given. |
+| `air.models.HH-3E.role` | `"recon"` | recon or cas. |
+| `air.models.HH-3E.displayName` | `"HH-3E Jolly Green"` | Name shown to the player. |
+| `air.models.HH-3E.rotary` | `true` | True for a helicopter, which can hover. |
+| `air.models.HH-3E.terrainClearanceMeters` | `15` | Least height above the ground it flies. |
+| `air.models.HH-3E.defaultAltitudeMeters` | `450` | Its usual working height. |
+| `air.models.HH-3E.sensorFalloffMeters` | `1500` | Height over which its sensors lose quality. |
+| `air.models.HH-3E.strikeMissPerMeterAltitude` | `0.02` | Aiming error per metre of height. |
+| `air.models.HH-3E.passIntervalSeconds` | `60` | Shortest time between bombing passes. |
+| `air.models.HH-3E.casualtyFractionPerPass` | `0` | Share of men a bombing pass kills at full accuracy. |
+| `air.models.HH-3E.gunBursts` | `0` | Gun runs it carries. |
+| `air.models.HH-3E.flares` | `0` | Parachute flares it carries for lighting an area at night. |
+| `air.models.HH-3E.seats` | `4` | People it can pick up from the ground. |
+| `air.models.HH-3E.gunCasualtyFraction` | `0` | Share of men a gun run kills at full accuracy. |
+| `air.models.HH-3E.gunSuppression` | `0` | Suppression from a gun run. |
+| `air.models.HH-3E.suppressionPerPass` | `0` | Suppression from a bombing pass. |
+| `air.models.HH-3E.moralePerPass` | `0` | Morale shock from a pass. |
+| `air.models.HH-3E.hitChanceFactor` | `1.4` | Multiplier on ground fire's chance to hit it. |
+| `air.models.HH-3E.hitSurvivalChance` | `0.3` | Chance it survives a hit without damage. |
+| `air.models.HH-3E.speedMps` | `70` | Speed in metres per second. |
+| `air.models.HH-3E.fuelSeconds` | `7200` | Endurance. |
+| `air.models.HH-3E.ammunition` | `0` | Bombing passes it carries. |
+| `air.models.HH-3E.takeoffSeconds` | `60` | Time to get airborne. |
+| `air.models.HH-3E.turnaroundSeconds` | `600` | Time to refuel and rearm. |
+| `air.models.HH-3E.repairSeconds` | `1500` | Time to repair after damage. |
+| `air.models.HH-3E.bingoMarginSeconds` | `120` | Fuel kept in reserve for the trip home. |
+| `air.models.HH-3E.sensorRadiusMeters` | `700` | How far it can see. |
+| `air.models.HH-3E.observerQuality` | `1.1` | Multiplier on its chance to spot. |
+| `air.models.HH-3E.orbitRadiusMeters` | `100` | Radius of its usual orbit. |
+| `air.models.HH-3E.turnRateRadPerSecond` | `1` | How fast it turns. |
+| `air.models.HH-3E.climbRateMps` | `8` | How fast it climbs or descends. |
+| `air.models.HH-3E.minAltitudeMeters` | `30` | Lowest altitude it can be given. |
+| `air.models.HH-3E.maxAltitudeMeters` | `3000` | Highest altitude it can be given. |
 | `air.groundNoticeRangeMeters` | `800` | How far ground units notice aircraft. |
 | `air.groundNoticePerScan` | `0.5` | Chance per scan that a unit notices one. |
 | `air.sightingDedupeMeters` | `400` | An air sighting this close to a known one isn't announced. |
@@ -415,6 +454,13 @@ rules or the schema.
 | `air.flareBurnSeconds` | `180` | How long a parachute flare burns. |
 | `air.flareRadiusMeters` | `900` | How far a flare lights the ground around it. |
 | `air.flareLight` | `0.7` | Light under a flare, as a share of daylight. |
+| `air.boardSeconds` | `20` | Least time a person takes to get aboard a landed helicopter once beside it. |
+| `air.boardMeters` | `25` | How close to a landed helicopter someone has to be to board. |
+| `air.boardCallMeters` | `1500` | A survivor runs for a helicopter that lands within this distance of it. |
+| `air.landingSpeedMps` | `8` | How fast a helicopter edges onto its pickup point before it lands. |
+| `air.directionFindingErrorMeters` | `250` | How far off a hunter's fix on a survival radio is, typically. |
+| `air.captureMeters` | `40` | Hunters this close to a survivor take it. |
+| `air.landedHitFactor` | `8` | How many times easier a helicopter on the ground is to hit than one flying. |
 | `air.markSeconds` | `120` | How long a smoke mark lasts. |
 | `air.markIntervalSeconds` | `180` | Shortest gap between one platoon's marks. |
 | `air.markErrorMeters` | `30` | How far smoke typically lands from where the platoon aimed it. |
@@ -497,6 +543,7 @@ rules or the schema.
 | `doctrines.garrison.drills` | `[]` | Battle drills this doctrine knows (§4.0.2). |
 | `doctrines.garrison.airWaitSeconds` | `120` | How long a platoon holds for air before deciding without it. |
 | `doctrines.garrison.waitForAirStrengthRatio` | `0.5` | Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself. |
+| `doctrines.garrison.radioSilent` | `false` | Reports only when asked, as a downed aircrew saving its battery does. |
 | `doctrines.garrison.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
 | `doctrines.garrison.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
 | `doctrines.garrison.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
@@ -551,6 +598,7 @@ rules or the schema.
 | `doctrines.patrol.drills` | `["nearAmbush","farAmbush","attack","bypass","hastyAmbush","waitForAir","pushThrough"]` | Battle drills this doctrine knows (§4.0.2). |
 | `doctrines.patrol.airWaitSeconds` | `120` | How long a platoon holds for air before deciding without it. |
 | `doctrines.patrol.waitForAirStrengthRatio` | `0.5` | Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself. |
+| `doctrines.patrol.radioSilent` | `false` | Reports only when asked, as a downed aircrew saving its battery does. |
 | `doctrines.patrol.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
 | `doctrines.patrol.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
 | `doctrines.patrol.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
@@ -605,6 +653,7 @@ rules or the schema.
 | `doctrines.assault.drills` | `[]` | Battle drills this doctrine knows (§4.0.2). |
 | `doctrines.assault.airWaitSeconds` | `120` | How long a platoon holds for air before deciding without it. |
 | `doctrines.assault.waitForAirStrengthRatio` | `0.5` | Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself. |
+| `doctrines.assault.radioSilent` | `false` | Reports only when asked, as a downed aircrew saving its battery does. |
 | `doctrines.assault.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
 | `doctrines.assault.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
 | `doctrines.assault.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
@@ -659,6 +708,7 @@ rules or the schema.
 | `doctrines.harass.drills` | `[]` | Battle drills this doctrine knows (§4.0.2). |
 | `doctrines.harass.airWaitSeconds` | `120` | How long a platoon holds for air before deciding without it. |
 | `doctrines.harass.waitForAirStrengthRatio` | `0.5` | Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself. |
+| `doctrines.harass.radioSilent` | `false` | Reports only when asked, as a downed aircrew saving its battery does. |
 | `doctrines.harass.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
 | `doctrines.harass.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
 | `doctrines.harass.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
@@ -713,6 +763,7 @@ rules or the schema.
 | `doctrines.recon.drills` | `[]` | Battle drills this doctrine knows (§4.0.2). |
 | `doctrines.recon.airWaitSeconds` | `120` | How long a platoon holds for air before deciding without it. |
 | `doctrines.recon.waitForAirStrengthRatio` | `0.5` | Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself. |
+| `doctrines.recon.radioSilent` | `false` | Reports only when asked, as a downed aircrew saving its battery does. |
 | `doctrines.recon.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
 | `doctrines.recon.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
 | `doctrines.recon.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
@@ -767,6 +818,7 @@ rules or the schema.
 | `doctrines.antiair.drills` | `[]` | Battle drills this doctrine knows (§4.0.2). |
 | `doctrines.antiair.airWaitSeconds` | `120` | How long a platoon holds for air before deciding without it. |
 | `doctrines.antiair.waitForAirStrengthRatio` | `0.5` | Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself. |
+| `doctrines.antiair.radioSilent` | `false` | Reports only when asked, as a downed aircrew saving its battery does. |
 | `doctrines.antiair.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
 | `doctrines.antiair.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
 | `doctrines.antiair.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
@@ -821,6 +873,7 @@ rules or the schema.
 | `doctrines.column.drills` | `["nearAmbush","farAmbush","attack","bypass","hastyAmbush","pushThrough"]` | Battle drills this doctrine knows (§4.0.2). |
 | `doctrines.column.airWaitSeconds` | `120` | How long a platoon holds for air before deciding without it. |
 | `doctrines.column.waitForAirStrengthRatio` | `0.5` | Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself. |
+| `doctrines.column.radioSilent` | `false` | Reports only when asked, as a downed aircrew saving its battery does. |
 | `doctrines.column.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
 | `doctrines.column.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
 | `doctrines.column.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
@@ -875,6 +928,7 @@ rules or the schema.
 | `doctrines.raider.drills` | `["nearAmbush","farAmbush","attack"]` | Battle drills this doctrine knows (§4.0.2). |
 | `doctrines.raider.airWaitSeconds` | `120` | How long a platoon holds for air before deciding without it. |
 | `doctrines.raider.waitForAirStrengthRatio` | `0.5` | Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself. |
+| `doctrines.raider.radioSilent` | `false` | Reports only when asked, as a downed aircrew saving its battery does. |
 | `doctrines.raider.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
 | `doctrines.raider.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
 | `doctrines.raider.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
@@ -926,6 +980,116 @@ rules or the schema.
 | `doctrines.raider.objectiveMarginMeters` | `60` | An attack counts as on its objective within the objective radius plus this. |
 | `doctrines.raider.attackRadiusMeters` | `100` | Size of the area an attack on a known position has to clear. |
 | `doctrines.raider.headingTowardsCos` | `0.5` | A moving enemy counts as coming towards the platoon within this cosine of its heading. |
+| `doctrines.evader.drills` | `[]` | Battle drills this doctrine knows (§4.0.2). |
+| `doctrines.evader.airWaitSeconds` | `120` | How long a platoon holds for air before deciding without it. |
+| `doctrines.evader.waitForAirStrengthRatio` | `0.5` | Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself. |
+| `doctrines.evader.radioSilent` | `true` | Reports only when asked, as a downed aircrew saving its battery does. |
+| `doctrines.evader.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
+| `doctrines.evader.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
+| `doctrines.evader.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
+| `doctrines.evader.attackStrengthRatio` | `1.5` | Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can. |
+| `doctrines.evader.maxDetourFactor` | `2` | Bypasses only if the way round is at most this many times the direct route. |
+| `doctrines.evader.supportShare` | `0.34` | Share of squads that give support by fire while the rest move. |
+| `doctrines.evader.flankMeters` | `450` | How far to one side of the enemy flankers go before closing. |
+| `doctrines.evader.warningMeters` | `700` | How far ahead on its route a platoon looks for known positions. |
+| `doctrines.evader.corridorMeters` | `180` | A position this close to the route counts as on it. |
+| `doctrines.evader.clearSeconds` | `60` | An enemy unseen this long counts as gone. |
+| `doctrines.evader.rallyMeters` | `null` | How far a platoon on the move pulls back before carrying on; null means to its authored fallback. |
+| `doctrines.evader.speedMps` | `0.8` | Walking speed in metres per second. |
+| `doctrines.evader.detectRangeMeters` | `500` | Furthest a unit can spot an enemy in clear weather. |
+| `doctrines.evader.observerQuality` | `1.2` | Multiplier on its chance to spot and identify. |
+| `doctrines.evader.alertRadiusMeters` | `350` | Reports of enemy within this distance concern the unit. |
+| `doctrines.evader.avoidStrengthRatio` | `1.5` | A patrol avoids a reported force at least this many times stronger. |
+| `doctrines.evader.delayStrengthRatio` | `1.5` | Without drills, a moving unit stops for a reported force at least this many times stronger. |
+| `doctrines.evader.supportHoldBonus` | `0.3` | How much longer a unit holds on when air support is promised, 0 to 1. |
+| `doctrines.evader.reportMemorySeconds` | `300` | How long a received report stays in the unit's picture. |
+| `doctrines.evader.airCoverSeconds` | `0` | How long a unit takes cover on spotting an enemy aircraft. |
+| `doctrines.evader.airCoverRepeatSeconds` | `300` | Shortest gap before it takes cover again for aircraft. |
+| `doctrines.evader.illuminationRounds` | `0` | Illumination rounds it can fire over an enemy at night. |
+| `doctrines.evader.standoffMeters` | `300` | Distance a cautious unit keeps from an enemy it observes. |
+| `doctrines.evader.observeBias` | `0.8` | Weight towards observing when it meets an enemy. |
+| `doctrines.evader.probeBias` | `1.5` | Weight towards probing. |
+| `doctrines.evader.harassBias` | `0.1` | Weight towards harassing fire. |
+| `doctrines.evader.assaultBias` | `0.1` | Weight towards assaulting. |
+| `doctrines.evader.burstSeconds` | `120` | How long a probe or harassing burst lasts. |
+| `doctrines.evader.pauseSeconds` | `180` | Pause between bursts. |
+| `doctrines.evader.pressureMoraleFloor` | `0.45` | Fire alone can't push morale below this; only losses, isolation or low ammunition can. |
+| `doctrines.evader.airFireThreshold` | `0.5` | Fires at an aircraft only if its chance of a hit is at least this. |
+| `doctrines.evader.engageRangeMeters` | `300` | Furthest it opens fire on the ground. |
+| `doctrines.evader.closesToMeters` | `null` | An assault closes to this distance; null means it doesn't close. |
+| `doctrines.evader.pinnedSuppression` | `0.6` | At this suppression a unit is pinned: it stops moving and goes prone. |
+| `doctrines.evader.withdrawCasualties` | `0.45` | Withdraws at this share of its strength lost. |
+| `doctrines.evader.withdrawMorale` | `0.35` | Withdraws when morale falls to this. |
+| `doctrines.evader.withdrawSuppression` | `0.8` | Withdraws when suppression reaches this. |
+| `doctrines.evader.returnMorale` | `0.6` | Returns to the fight once morale is back to this. |
+| `doctrines.evader.returnSuppression` | `0.3` | …and suppression is down to this. |
+| `doctrines.evader.returnMaxCasualties` | `0.4` | Never returns having lost more than this share. |
+| `doctrines.evader.returnMinAmmoFraction` | `0.1` | Never returns with less than this share of its ammunition. |
+| `doctrines.evader.maxReturns` | `2` | How many times it can return to the fight. |
+| `doctrines.evader.groupRadiusMeters` | `200` | Contacts this close together are one enemy, for reports and strength estimates. |
+| `doctrines.evader.arrivedMeters` | `20` | Close enough to a point to count as there. |
+| `doctrines.evader.sidestepMeters` | `60` | How far a support squad with no view moves to find one. |
+| `doctrines.evader.breakContactMeters` | `300` | How far a unit falls back to break contact with an enemy too close. |
+| `doctrines.evader.assaultAmmunitionFraction` | `0.25` | Below this share of ammunition a unit is less keen to assault. |
+| `doctrines.evader.noSupportWeaponsAssaultFactor` | `0.6` | Assault weight for a unit with no machine guns. |
+| `doctrines.evader.objectiveMarginMeters` | `60` | An attack counts as on its objective within the objective radius plus this. |
+| `doctrines.evader.attackRadiusMeters` | `100` | Size of the area an attack on a known position has to clear. |
+| `doctrines.evader.headingTowardsCos` | `0.5` | A moving enemy counts as coming towards the platoon within this cosine of its heading. |
+| `doctrines.hunter.drills` | `[]` | Battle drills this doctrine knows (§4.0.2). |
+| `doctrines.hunter.airWaitSeconds` | `120` | How long a platoon holds for air before deciding without it. |
+| `doctrines.hunter.waitForAirStrengthRatio` | `0.5` | Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself. |
+| `doctrines.hunter.radioSilent` | `false` | Reports only when asked, as a downed aircrew saving its battery does. |
+| `doctrines.hunter.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
+| `doctrines.hunter.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
+| `doctrines.hunter.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
+| `doctrines.hunter.attackStrengthRatio` | `1.5` | Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can. |
+| `doctrines.hunter.maxDetourFactor` | `2` | Bypasses only if the way round is at most this many times the direct route. |
+| `doctrines.hunter.supportShare` | `0.34` | Share of squads that give support by fire while the rest move. |
+| `doctrines.hunter.flankMeters` | `200` | How far to one side of the enemy flankers go before closing. |
+| `doctrines.hunter.warningMeters` | `700` | How far ahead on its route a platoon looks for known positions. |
+| `doctrines.hunter.corridorMeters` | `180` | A position this close to the route counts as on it. |
+| `doctrines.hunter.clearSeconds` | `60` | An enemy unseen this long counts as gone. |
+| `doctrines.hunter.rallyMeters` | `null` | How far a platoon on the move pulls back before carrying on; null means to its authored fallback. |
+| `doctrines.hunter.speedMps` | `0.6` | Walking speed in metres per second. |
+| `doctrines.hunter.detectRangeMeters` | `500` | Furthest a unit can spot an enemy in clear weather. |
+| `doctrines.hunter.observerQuality` | `0.5` | Multiplier on its chance to spot and identify. |
+| `doctrines.hunter.alertRadiusMeters` | `500` | Reports of enemy within this distance concern the unit. |
+| `doctrines.hunter.avoidStrengthRatio` | `1.5` | A patrol avoids a reported force at least this many times stronger. |
+| `doctrines.hunter.delayStrengthRatio` | `1.5` | Without drills, a moving unit stops for a reported force at least this many times stronger. |
+| `doctrines.hunter.supportHoldBonus` | `0.3` | How much longer a unit holds on when air support is promised, 0 to 1. |
+| `doctrines.hunter.reportMemorySeconds` | `900` | How long a received report stays in the unit's picture. |
+| `doctrines.hunter.airCoverSeconds` | `0` | How long a unit takes cover on spotting an enemy aircraft. |
+| `doctrines.hunter.airCoverRepeatSeconds` | `300` | Shortest gap before it takes cover again for aircraft. |
+| `doctrines.hunter.illuminationRounds` | `0` | Illumination rounds it can fire over an enemy at night. |
+| `doctrines.hunter.standoffMeters` | `300` | Distance a cautious unit keeps from an enemy it observes. |
+| `doctrines.hunter.observeBias` | `1` | Weight towards observing when it meets an enemy. |
+| `doctrines.hunter.probeBias` | `0.3` | Weight towards probing. |
+| `doctrines.hunter.harassBias` | `0.1` | Weight towards harassing fire. |
+| `doctrines.hunter.assaultBias` | `0.1` | Weight towards assaulting. |
+| `doctrines.hunter.burstSeconds` | `120` | How long a probe or harassing burst lasts. |
+| `doctrines.hunter.pauseSeconds` | `180` | Pause between bursts. |
+| `doctrines.hunter.pressureMoraleFloor` | `0.45` | Fire alone can't push morale below this; only losses, isolation or low ammunition can. |
+| `doctrines.hunter.airFireThreshold` | `0.5` | Fires at an aircraft only if its chance of a hit is at least this. |
+| `doctrines.hunter.engageRangeMeters` | `300` | Furthest it opens fire on the ground. |
+| `doctrines.hunter.closesToMeters` | `null` | An assault closes to this distance; null means it doesn't close. |
+| `doctrines.hunter.pinnedSuppression` | `0.6` | At this suppression a unit is pinned: it stops moving and goes prone. |
+| `doctrines.hunter.withdrawCasualties` | `0.45` | Withdraws at this share of its strength lost. |
+| `doctrines.hunter.withdrawMorale` | `0.35` | Withdraws when morale falls to this. |
+| `doctrines.hunter.withdrawSuppression` | `0.8` | Withdraws when suppression reaches this. |
+| `doctrines.hunter.returnMorale` | `0.6` | Returns to the fight once morale is back to this. |
+| `doctrines.hunter.returnSuppression` | `0.3` | …and suppression is down to this. |
+| `doctrines.hunter.returnMaxCasualties` | `0.4` | Never returns having lost more than this share. |
+| `doctrines.hunter.returnMinAmmoFraction` | `0.1` | Never returns with less than this share of its ammunition. |
+| `doctrines.hunter.maxReturns` | `1` | How many times it can return to the fight. |
+| `doctrines.hunter.groupRadiusMeters` | `200` | Contacts this close together are one enemy, for reports and strength estimates. |
+| `doctrines.hunter.arrivedMeters` | `25` | Close enough to a point to count as there. |
+| `doctrines.hunter.sidestepMeters` | `60` | How far a support squad with no view moves to find one. |
+| `doctrines.hunter.breakContactMeters` | `300` | How far a unit falls back to break contact with an enemy too close. |
+| `doctrines.hunter.assaultAmmunitionFraction` | `0.25` | Below this share of ammunition a unit is less keen to assault. |
+| `doctrines.hunter.noSupportWeaponsAssaultFactor` | `0.6` | Assault weight for a unit with no machine guns. |
+| `doctrines.hunter.objectiveMarginMeters` | `60` | An attack counts as on its objective within the objective radius plus this. |
+| `doctrines.hunter.attackRadiusMeters` | `100` | Size of the area an attack on a known position has to clear. |
+| `doctrines.hunter.headingTowardsCos` | `0.5` | A moving enemy counts as coming towards the platoon within this cosine of its heading. |
 
 ## terrain
 

@@ -7,6 +7,7 @@ import { createAircraft } from './air';
 import { createPlatoon, createSquads } from './platoon';
 import { createRadioState, type RadioState } from './radio';
 import { generateWeather, skyOf } from './weather';
+import { startRescue } from './rescue';
 
 export type SimState = {
   tick: number;
@@ -30,7 +31,7 @@ export function createInitialState(scenario: Scenario, seed: number): SimState {
   }
   const units = squads.sort((a, b) => (a.id < b.id ? -1 : 1));
 
-  return {
+  const state: SimState = {
     tick: 0,
     truth: {
       platoons,
@@ -52,4 +53,7 @@ export function createInitialState(scenario: Scenario, seed: number): SimState {
     player: emptyPlayerKnowledge(),
     rng,
   };
+  // A rescue starts with the survivor's supplies and the hunters' sighting of the parachute.
+  startRescue(state.truth, state.unitKnowledge, scenario);
+  return state;
 }

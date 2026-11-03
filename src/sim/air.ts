@@ -39,17 +39,21 @@ export function createAircraft(scenario: Scenario): Aircraft[] {
         altitudeMeters: 0,
         targetAltitudeMeters: type.defaultAltitudeMeters,
         headingRad: PI / 2,
-        status: 'ready',
+        // Not ready yet: it shows as being readied until then.
+        status: (entry.readySeconds ?? 0) > 0 ? 'turnaround' : 'ready',
         damaged: false,
         lastFiredOnTick: null,
         heldForFriendliesAt: null,
         heldReportAt: null,
         order: null,
-        timerSeconds: 0,
+        timerSeconds: entry.readySeconds ?? 0,
         fuelSeconds: type.fuelSeconds,
         ammunition: entry.ammunition ?? type.ammunition,
         bombLoad: entry.ammunition ?? type.ammunition,
         flares: type.flares,
+        landed: false,
+        boardingSeconds: 0,
+        passengers: [],
         gunBursts: type.gunBursts,
         nextPassTick: 0,
         risk: 'normal',
@@ -93,6 +97,7 @@ export function applyOrder(aircraft: Aircraft, order: AircraftOrder, air: AirCon
   if (aircraft.status === 'turnaround' || aircraft.damaged) return false;
   if (FIRE_ORDERS.has(order.kind) && aircraft.aircraftType !== 'cas') return false;
   if (order.kind === 'Illuminate' && aircraft.flares <= 0) return false;
+  if (order.kind === 'Pickup' && (!typeOf(aircraft, air).rotary || typeOf(aircraft, air).seats <= 0)) return false;
   if (order.kind === 'ReturnToBase') {
     if (aircraft.status === 'ready') return false;
     aircraft.status = aircraft.status === 'takeoff' ? 'ready' : 'returning';
@@ -152,6 +157,12 @@ function orbitHeading(aircraft: Aircraft, center: Vec2, radius: number): number 
 
 /** Aircraft movement, fuel and readiness. Runs every tick. */
 export function advanceAircraft(aircraft: Aircraft, air: AirConfig, terrain: TerrainGrid): void {
+  if (aircraft.landed) {
+    // On the ground at a pickup: it doesn't move, but it still burns fuel.
+    aircraft.altitudeMeters = elevationAt(terrain, aircraft.position);
+    aircraft.fuelSeconds = Math.max(0, aircraft.fuelSeconds - 1);
+    return;
+  }
   flyAircraft(aircraft, air);
   if (!isAirborne(aircraft)) {
     aircraft.altitudeMeters = 0;
@@ -860,6 +871,21 @@ function casPhase(aircraft: Aircraft, tick: number): CasPhase | null {
   return inArea.some((contact) => contact.identification === 'unidentified') ? 'identifying' : 'searching';
 }
 
+/** How far a survivor running for this landed helicopter is, as its crew sees it come. */
+function survivorGap(truth: WorldTruth, aircraft: Aircraft, air: AirConfig): number | null {
+  if (!aircraft.landed) return null;
+  let best: number | null = null;
+  for (const platoon of Object.values(truth.platoons)) {
+    if (platoon.survival?.state !== 'evading' || platoon.objective.kind !== 'Evade' || platoon.objective.boardAt === null) continue;
+    for (const squad of platoon.squads) {
+      if (squad.personnel <= 0) continue;
+      const gap = distance(squad.position, aircraft.position);
+      if (gap <= air.boardCallMeters && (best === null || gap < best)) best = gap;
+    }
+  }
+  return best;
+}
+
 export function aircraftTelemetry(truth: WorldTruth, air: AirConfig, tick = 0): AircraftTelemetry {
   return truth.aircraft.map((aircraft) => {
     const type = typeOf(aircraft, air);
@@ -904,6 +930,12 @@ export function aircraftTelemetry(truth: WorldTruth, air: AirConfig, tick = 0): 
       speedMps: type.speedMps,
       takeoffSeconds: aircraft.status === 'ready' ? type.takeoffSeconds : aircraft.status === 'takeoff' ? aircraft.timerSeconds : 0,
       flares: aircraft.flares,
+      seats: type.seats,
+      landed: aircraft.landed,
+      boardingSeconds: aircraft.boardingSeconds,
+      boardNeedSeconds: air.boardSeconds,
+      passengers: aircraft.passengers.length,
+      survivorMeters: survivorGap(truth, aircraft, air),
     };
   });
 }

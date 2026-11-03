@@ -23,6 +23,7 @@ export type PlayerCommand =
       recipients: readonly string[];
     }>
   | Readonly<{ kind: 'cancelPoi'; tick: number; poiId: string }>
+  | Readonly<{ kind: 'sendPickupPoint'; tick: number; unitId: string; point: Vec2 }>
   | Readonly<{ kind: 'answerDangerClose'; tick: number; unitId: string; approved: boolean }>
   | Readonly<{ kind: 'requestReport'; tick: number; unitId: string; report: ReportRequest }>
   | Readonly<{ kind: 'acknowledge'; tick: number; unitId: string; casAircraftId: AircraftId | null }>;

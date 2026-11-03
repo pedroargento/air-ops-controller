@@ -71,6 +71,17 @@ function updateLocate(truth: WorldTruth, player: PlayerKnowledge, mission: Locat
   finish(truth, share >= mission.successShare ? 'success' : share >= mission.partialShare ? 'partial' : 'failure', tick);
 }
 
+/**
+ * A rescue succeeds when the survivor is home or linked up with friends, fails when it is taken
+ * or dies, and ends with it still missing, alive, at the deadline: the search suspended.
+ */
+function updateRescueOutcome(truth: WorldTruth, mission: Extract<MissionConfig, { kind: 'Rescue' }>, durationSeconds: number, tick: number): void {
+  const state = truth.platoons[mission.survivorId]?.survival?.state;
+  if (state === 'delivered') finish(truth, 'success', tick);
+  else if (state === 'captured' || state === 'dead') finish(truth, 'failure', tick);
+  else if (tick >= durationSeconds) finish(truth, 'partial', tick);
+}
+
 export function updateOutcome(
   truth: WorldTruth,
   mission: MissionConfig,
@@ -80,5 +91,6 @@ export function updateOutcome(
 ): void {
   if (mission.kind === 'HoldArea') updateHoldArea(truth, mission, durationSeconds, tick);
   else if (mission.kind === 'ReachArea') updateReachArea(truth, mission, durationSeconds, tick);
+  else if (mission.kind === 'Rescue') updateRescueOutcome(truth, mission, durationSeconds, tick);
   else updateLocate(truth, player, mission, durationSeconds, tick);
 }

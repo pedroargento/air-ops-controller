@@ -1,5 +1,6 @@
 import { isAntiAir, threatRadiusMeters } from './domain/public/equipment';
-import { AIR_OPS } from './domain/public/radio';
+import { AIR_OPS, CECON, reportLevel } from './domain/public/radio';
+import { nextFirstLight } from './domain/public/light';
 import { GameSession } from './game/session';
 import { DEFAULT_SCENARIO_NAME, loadBundledScenario } from './scenario/catalog';
 import { App } from './ui/app';
@@ -85,6 +86,8 @@ const app = new App({
   },
   onExportLog: exportLog,
   truthHistory: () => session.truthHistory(),
+  survivorId: mission.kind === 'Rescue' ? mission.survivorId : null,
+  onWaitForLight: () => waitForLight(),
 });
 
 // A hook for end-to-end tests. It exposes what the player already has, never truth.
@@ -99,10 +102,45 @@ Object.assign(window, {
   },
 });
 
+/** Waiting for first light: the battle runs fast until dawn, or until something needs the controller. */
+let skipUntil: number | null = null;
+const SKIP_CHUNK_TICKS = 30;
+const SKIP_TICKS_PER_FRAME = 900;
+
+function waitForLight(): void {
+  const view = session.view();
+  const sky = view.forecast?.sky;
+  if (sky === undefined || session.outcome !== 'running') return;
+  skipUntil = nextFirstLight(sky, view.tick);
+  paused = false;
+}
+
+/** A message that should stop the wait: anything urgent or main from a unit or an aircraft. */
+function interrupts(from: number): boolean {
+  const view = session.view();
+  if (view.aircraft.some((aircraft) => aircraft.landed)) return true;
+  return view.log.slice(from).some((message) => message.senderId !== CECON && message.senderId !== AIR_OPS && reportLevel(message) !== 'routine');
+}
+
+function skip(): void {
+  if (skipUntil === null) return;
+  for (let done = 0; done < SKIP_TICKS_PER_FRAME; done += SKIP_CHUNK_TICKS) {
+    const before = session.view().log.length;
+    for (let i = 0; i < SKIP_CHUNK_TICKS; i += 1) session.advance();
+    if (session.outcome !== 'running' || session.tick >= skipUntil || interrupts(before)) {
+      skipUntil = null;
+      speed = 1;
+      return;
+    }
+  }
+}
+
 function frame(now: number): void {
   const elapsedSeconds = (now - lastFrame) / 1000;
   lastFrame = now;
-  if (!paused) {
+  if (paused) skipUntil = null;
+  if (skipUntil !== null) skip();
+  else if (!paused) {
     accumulator += elapsedSeconds * speed;
     let ticks = 0;
     while (accumulator >= 1 && ticks < MAX_TICKS_PER_FRAME) {

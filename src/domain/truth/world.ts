@@ -43,6 +43,8 @@ export type Platoon = {
   lastMarkAt?: number;
   illuminationFired?: number;
   lastIlluminationAt?: number;
+  /** A downed aircrew's state, for the platoon that is one (§8.8). */
+  survival?: Survival;
   objective: GroundObjective;
   objectiveSchedule: readonly ScheduledObjective[];
   /** Positions in `objectiveSchedule` that have already fired. */
@@ -131,6 +133,11 @@ export type Aircraft = {
   /** What it is loaded with at the airbase. */
   bombLoad: number;
   flares: number;
+  /** On the ground at a pickup point, and for how long someone has been boarding. */
+  landed: boolean;
+  boardingSeconds: number;
+  /** Platoons aboard. */
+  passengers: string[];
   gunBursts: number;
   nextPassTick: number;
   risk: RiskLimit;
@@ -145,6 +152,15 @@ export type Aircraft = {
   searchPoint: Vec2 | null;
   attackRun: AttackRun | null;
   contacts: Record<string, ContactEstimate>;
+};
+
+export type Survival = {
+  waterSeconds: number;
+  thirstSeconds: number;
+  battery: number;
+  state: 'evading' | 'aboard' | 'delivered' | 'captured' | 'dead';
+  /** The helicopter it boarded. */
+  aircraftId: string | null;
 };
 
 export type SmokeMark = Readonly<{ position: Vec2; placedAt: number; platoonId: string }>;

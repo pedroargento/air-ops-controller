@@ -85,6 +85,7 @@ const TASK_CODES: Readonly<Record<NonNullable<AircraftTelemetryEntry['order']>['
   Suppress: 'SUPP',
   Strike: 'STRIKE',
   Illuminate: 'ILLUM',
+  Pickup: 'PICKUP',
   ReturnToBase: 'RTB',
 };
 const ANTI_AIR_COLOR = '#ff3df0';
@@ -900,7 +901,7 @@ export class MapView {
     const task = aircraft.order === null ? (aircraft.status === 'returning' ? 'RTB' : '') : TASK_CODES[aircraft.order.kind];
     const lines = [
       aircraft.aircraftId,
-      `${Math.round(aircraft.altitudeMeters)}m ${task}`.trim(),
+      `${aircraft.landed ? 'LANDED' : `${Math.round(aircraft.altitudeMeters)}m`} ${task}`.trim(),
       aircraft.damaged ? 'DAMAGED' : aircraft.casPhase === null ? '' : BREVITY[aircraft.casPhase],
     ].filter((line) => line !== '');
     lines.forEach((line, index) => {

@@ -118,6 +118,13 @@
       #map-banner { position: absolute; left: 50%; bottom: 46px; transform: translateX(-50%); z-index: 6; padding: 6px 12px;
         background: rgba(43, 95, 138, 0.95); border: 1px solid #4a8fd8; border-radius: 4px; color: #fff; font-size: 13px; pointer-events: none; }
       #map-banner[hidden] { display: none; }
+      #pickup { position: absolute; right: 12px; top: 60px; z-index: 20; width: 300px; padding: 8px 10px; background: rgba(40, 18, 14, 0.96);
+        border: 2px solid #ff6b5a; border-radius: 4px; font-size: 12px; display: flex; flex-direction: column; gap: 8px; }
+      #pickup[hidden] { display: none; }
+      .pickup-row { display: flex; flex-direction: column; gap: 4px; }
+      .pickup-bar { height: 10px; background: #1a2024; border: 1px solid #57636a; }
+      .pickup-bar span { display: block; height: 100%; background: #3fae5a; }
+      #pickup button.lift { background: #8a2a20; border-color: #ff6b5a; color: #fff; font-weight: bold; font-size: 13px; padding: 6px 14px; }
       #timeline { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 25; padding: 8px 10px; max-height: 42%;
         display: flex; flex-direction: column; gap: 6px; background: rgba(18, 24, 27, 0.96); border: 1px solid #4a8fd8; border-radius: 4px; font-size: 12px; }
       #timeline[hidden] { display: none; }
@@ -192,6 +199,7 @@
       <div id="map-toasts"></div>
       <div id="map-menu" hidden></div>
       <div id="map-banner" hidden></div>
+      <div id="pickup" hidden></div>
       <div id="timeline" hidden>
         <div id="timeline-head"></div>
         <div id="timeline-track"><div id="timeline-marks"></div><input id="timeline-slider" type="range" min="0" max="0" step="30" value="0" /></div>

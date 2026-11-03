@@ -271,6 +271,9 @@ const BREVITY_WORDS: Readonly<Record<string, string>> = {
   BINGO: 'Fuel for the trip home only. It is leaving now.',
   'CHECK FIRE': 'Stop firing: friendly troops are being hit.',
   'DANGER CLOSE': 'Friendly troops close enough to the target to be hit. Only you can clear it.',
+  'WHEELS DOWN': 'A helicopter has landed for a pickup. It is an easy target until it lifts.',
+  'LIFTING OFF': 'The crew left the pickup under fire, by its risk limit. Boarding starts again next time.',
+  'SURVIVOR ABOARD': 'The pickup is made. It flies home; the rescue succeeds when it lands there.',
 };
 
 const TASK_WORDS: readonly (readonly [string, string])[] = [
@@ -279,6 +282,7 @@ const TASK_WORDS: readonly (readonly [string, string])[] = [
   ['SUPP', 'Suppressing an area with guns until a set time.'],
   ['STRIKE', 'One bomb pass on a place, then watching it.'],
   ['ILLUM', 'Keeping a flare burning over an area at night. It lights friends there too.'],
+  ['PICKUP', 'A rescue helicopter landing at a point and waiting while survivors board.'],
   ['RTB', 'Returning to base.'],
 ];
 

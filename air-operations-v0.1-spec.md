@@ -531,6 +531,18 @@ Darkness is a shortage of light, and light is what lets anyone see and aim. The 
 - **Light is for everyone:** A flare shows whoever is under it, on either side. Lighting up a fight exposes the friends in it as well as the enemy.
 - **On the map:** The map darkens at night, as a reminder that light matters. Flares the controller knows of, those dropped by its aircraft or fired by its platoons, are drawn as light over the area while they burn. The header shows the light state, the moon and first light. No light field is drawn beyond that, because the controller has none.
 
+### 8.8 Combat search and rescue
+
+A downed aircrew evades on the ground while air operations finds it, protects it and sends a helicopter. The scenario is a race between the survivor's water, the hunters closing in, and the light.
+
+- **The survivor:** A friendly platoon of one, with an Evade objective and radio discipline: it reports only when asked. It hides while an enemy it knows of is within its alert radius, and otherwise makes for its pickup point, or where it came down, around the nearest enemy it knows of. Air operations can send it a pickup point from the right-click menu; it makes for it when it judges it safe. Enemy positions forwarded to it are what keep it hidden.
+- **Water and battery:** It starts with `waterSeconds` of water. When that's gone it moves at half speed, and after `thirstSeconds` more it dies. Its radio has `batteryCalls` transmissions. Each answer costs one and gives every hunter a direction-finding fix, `directionFindingErrorMeters` off, on where it came from. With the battery flat it says nothing. A SITREP from it carries the water and calls left.
+- **Hunters:** Enemy platoons with a SearchArea objective start knowing where the parachute came down, within `sightingErrorMeters`. They close on the freshest lead they have and sweep around it. A hunter that has seen the survivor and comes within `captureMeters` takes it. A friendly SearchArea platoon runs the same search, and reaching the survivor brings it out.
+- **The pickup:** Only a helicopter with seats can be given Pickup. It flies to the point, edges onto it at `landingSpeedMps`, and lands. A survivor within `boardCallMeters` runs for it; within `boardMeters` it boards, and boarding takes `boardSeconds` of the survivor beside it. Boarding is counted per second against a fixed minimum, so carrying casualties can reuse it. Once the survivor is aboard, the crew lifts off and flies home, and the rescue succeeds when it lands there.
+- **On the ground:** A landed helicopter is `landedHitFactor` times easier to hit. Its crew lifts off under fire by its risk limit: cautious at any fire, normal when hit or under air defense fire, press on never. The controller can lift off at any time by giving it another order. Lifting off loses the boarding so far, and the survivor goes back to hiding.
+- **Outcome:** Success when the survivor is home or linked up with friends; failure when it's captured or dead; partial at the deadline with it still missing.
+- **On screen:** When a helicopter lands the game drops to normal speed, and a panel shows the boarding bar, the survivor coming, the fire taken and the escorts on station, with Lift off now one click away. At night the header offers Wait for first light, which runs the battle fast until dawn and stops for anything urgent from a unit or an aircraft, or a landing.
+
 ## 9. Player interface
 
 Desktop-browser layout:

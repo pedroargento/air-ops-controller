@@ -1,3 +1,4 @@
+import { evade, search } from './decide-evade';
 import { hypot } from '../domain/public/det-math';
 import { airHitChance } from '../domain/public/equipment';
 import { strengthMidpoint, type ContactEstimate } from '../domain/public/estimates';
@@ -50,6 +51,11 @@ export function decideGround(
     avoid,
   });
 
+  // A downed aircrew evades whatever its morale: there's nowhere to fall back to (§8.8).
+  if (self.objective.kind === 'Evade') {
+    const { intent, avoid } = evade(self, knowledge, tick);
+    return decision(intent, null, avoid);
+  }
   const target = chooseTarget(self, knowledge, tick);
   if (mode === 'withdrawing') {
     const destination = withdrawalPoint(self, knowledge, tick);
@@ -60,6 +66,11 @@ export function decideGround(
   }
   if (mode === 'broken') return decision({ kind: 'hold', posture: 'defending' }, 'disengage');
 
+  // Hunters hunt rather than fight; pinned down, they wait for it to lift.
+  if (self.objective.kind === 'SearchArea') {
+    if (self.suppression >= self.doctrine.pinnedSuppression) return decision({ kind: 'hold', posture: 'prone' }, null);
+    return decision(search(self, knowledge, tick), null);
+  }
   if (self.drill !== null && self.role !== null) {
     const { intent, viaDone } = runDrill(self, self.drill, self.role, target, rates, map);
     return decision(intent, intent.kind === 'engage' ? 'assault' : null, drillAvoid(self, viaDone), viaDone);
@@ -437,6 +448,10 @@ function pursueObjective(
       return advance(self, knowledge, objective.area, tick);
     case 'PatrolArea':
       return patrol(self, knowledge, objective.waypoints[patrolIndex % objective.waypoints.length], tick);
+    case 'Evade':
+      return evade(self, knowledge, tick).intent;
+    case 'SearchArea':
+      return search(self, knowledge, tick);
   }
 }
 
