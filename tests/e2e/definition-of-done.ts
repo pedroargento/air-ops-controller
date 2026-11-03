@@ -399,6 +399,27 @@ async function main(): Promise<void> {
     check(runReplay(loadScenarioFile('valley-road'), secondLog).at(-1) === secondHash, 'the second scenario replays to the same hash');
     await shot(page, '6-second-scenario');
 
+    console.log('Fight at night');
+    await page.goto(`http://localhost:${PORT}/?scenario=outpost-night&seed=3&speed=40`);
+    await page.waitForSelector('#light');
+    const lightText = await page.locator('#light').innerText();
+    check(/^Night · moon \d+%/.test(lightText) && lightText.includes('first light'), `the header gives the light: "${lightText}"`);
+    await setPaused(page, true);
+    const centre = await page.locator('#map').boundingBox();
+    if (centre === null) throw new Error('no map');
+    await page.mouse.click(centre.x + centre.width / 2, centre.y + centre.height / 2, { button: 'right' });
+    await page.locator('[data-action="menu-illuminate"]').first().click();
+    await setPaused(page, false);
+    await page.waitForFunction(
+      () => (window as unknown as { airops: { view: () => PlayerView } }).airops.view().flares.length > 0,
+      undefined,
+      { timeout: 120000 },
+    );
+    check(true, 'the flare shows on the controller\'s map once dropped');
+    const ordered = (await log()).commands.find((command) => command.kind === 'aircraftOrder' && command.order.kind === 'Illuminate');
+    check(ordered !== undefined, 'flares are ordered from the right-click menu');
+    await shot(page, '7-night');
+
     check(errors.length === 0, `no browser errors${errors.length > 0 ? `: ${errors.join(' | ')}` : ''}`);
     console.log(`\nPASSED ${checks} checks. ${hook} exposes only the command log and hash.`);
   } finally {

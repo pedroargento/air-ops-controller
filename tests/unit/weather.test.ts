@@ -1,3 +1,4 @@
+import { DAY_SKY } from '../support/sky';
 import { describe, expect, it } from 'vitest';
 import { loadScenarioFile } from '../../src/cli/load-scenario';
 import { distance } from '../../src/domain/public/geometry';
@@ -26,6 +27,7 @@ const storm: Weather = {
   heavyRainVisibilityMeters: 300,
   cloudFadeMeters: 200,
   rainMissMeters: 80,
+  sky: DAY_SKY,
   systems: [
     {
       originAtTickZero: { x: 0, y: 2500 },
@@ -79,7 +81,7 @@ describe('weather', () => {
   });
 
   it('is decided once, from the seed, with one wind for every system', () => {
-    const make = (seed: number) => generateWeather(config, 5000, 4500, createRng(seed));
+    const make = (seed: number) => generateWeather(config, 5000, 4500, createRng(seed), DAY_SKY);
     expect(make(4)).toEqual(make(4));
     expect(make(4)).not.toEqual(make(5));
     for (let seed = 0; seed < 30; seed += 1) {
@@ -198,7 +200,7 @@ describe('forecast chart', () => {
     fromTick: 0,
     untilTick: 2000,
   };
-  const forecast: Weather = { baseCeilingMeters: 1600, systems: [system], rampSeconds: 1, clearVisibilityMeters: 8000, heavyRainVisibilityMeters: 300, cloudFadeMeters: 200, rainMissMeters: 80 };
+  const forecast: Weather = { baseCeilingMeters: 1600, systems: [system], rampSeconds: 1, clearVisibilityMeters: 8000, heavyRainVisibilityMeters: 300, cloudFadeMeters: 200, rainMissMeters: 80, sky: DAY_SKY };
   const error = { windMps: 0.5, positionMeters: 100 };
 
   it('tracks a storm from now to where it dies out, with marks counted from now', () => {

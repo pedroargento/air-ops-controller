@@ -36,6 +36,7 @@ import { MapView, type Selection, type WeatherLayer } from './map-view';
 import { ToastQueue } from './toasts';
 import { admiraltyRating, BREVITY, contactCondition } from './map-conventions';
 import { boardSegments, type BoardPhase } from './status-board';
+import { isMoonUp, lightState, nextFirstLight } from '../domain/public/light';
 import { sortedTracks, type TrackSort } from './track-list';
 import { neighbourEvent, Snapshots, SNAPSHOT_SECONDS, timelineEvents } from './timeline';
 import { etaTo, requestStatus, showRequest, supportOptions } from './requests';
@@ -82,11 +83,12 @@ const ORDER_LABELS: Readonly<Record<AreaOrderKind, string>> = {
 };
 
 /** What each task does, for the button's tooltip and the picking banner. */
-const ORDER_HELP: Readonly<Record<AreaOrderKind, string>> = {
+const ORDER_HELP: Readonly<Record<AreaOrderKind | 'Illuminate', string>> = {
   Watch: 'Watch an area: recon searches it; a strike aircraft engages what it finds there, as weapons control allows.',
   Cover: 'Cover a friendly platoon: watch the ground ahead of it and follow it.',
   Suppress: 'Gun runs on an area until a set time, with no target needed.',
   Strike: 'One bomb pass on a place, then watch it.',
+  Illuminate: 'Keep a flare burning over an area until a set time, so it can be seen at night. It lights friends there too.',
 };
 
 const WEAPONS_HELP: Readonly<Record<WeaponsControl, string>> = {
@@ -175,6 +177,19 @@ function conditionLine(marker: ContactMarker): string {
 
 const CONDITION_WORDS = { capable: 'still capable', neutralized: 'neutralized', combatIneffective: 'combat-ineffective' } as const;
 
+/** The light now, from the forecast's ephemeris: day or night, the moon, and when light comes or goes. */
+function lightHtml(view: PlayerView): string {
+  const sky = view.forecast?.sky;
+  if (sky === undefined) return '';
+  const state = lightState(sky, view.tick);
+  const at = (secondsOfDay: number): string => clock(((secondsOfDay - sky.startSecondsOfDay) % 86400 + 86400) % 86400);
+  if (state === 'day') return `<span id="light" class="day" title="Light">Day · sunset ${at(sky.sunsetSeconds)}</span>`;
+  const moon = isMoonUp(sky, view.tick)
+    ? `moon ${Math.round(sky.moonIllumination * 100)}%, sets ${at(sky.moonsetSeconds)}`
+    : 'no moon';
+  return `<span id="light" class="${state}" title="Light: crews see little in the dark except muzzle flashes and what flares light up.">${state === 'night' ? 'Night' : 'Twilight'} · ${moon} · first light ${clock(nextFirstLight(sky, view.tick))}</span>`;
+}
+
 /** An order as the controller would read it back. */
 function describeOrder(order: AircraftOrder, names: Names, cellSize: number): string {
   switch (order.kind) {
@@ -186,6 +201,8 @@ function describeOrder(order: AircraftOrder, names: Names, cellSize: number): st
       return `suppress ${gridRef(order.center, cellSize)} until ${clock(order.untilTick)}`;
     case 'Strike':
       return `one bomb pass on ${gridRef(order.center, cellSize)}`;
+    case 'Illuminate':
+      return `light ${gridRef(order.center, cellSize)} with flares until ${clock(order.untilTick)}`;
     case 'ReturnToBase':
       return 'return to base';
   }
@@ -507,9 +524,10 @@ export class App {
         ? `<button data-action="menu-fire" data-id="${id}" data-kind="Suppress" title="${escapeHtml(ORDER_HELP.Suppress)}">Suppress</button>` +
           `<button data-action="menu-fire" data-id="${id}" data-kind="Strike" title="${escapeHtml(ORDER_HELP.Strike)}">Strike</button>`
         : '';
-      return `<div class="menu-fire"><b>${id}</b><button data-action="menu-watch" data-id="${id}" title="${escapeHtml(ORDER_HELP.Watch)}">Watch</button>${fire}</div>`;
+      const flares = entry.flares > 0 ? `<button data-action="menu-illuminate" data-id="${id}" title="${escapeHtml(ORDER_HELP.Illuminate)}">Illuminate</button>` : '';
+      return `<div class="menu-fire"><b>${id}</b><button data-action="menu-watch" data-id="${id}" title="${escapeHtml(ORDER_HELP.Watch)}">Watch</button>${fire}${flares}</div>`;
     });
-    const minutes = aircraft.some(canFire) ? `<label>Suppress for <input id="menu-minutes" type="number" value="${DEFAULT_SUPPRESS_MINUTES}" min="1" step="1" /> min</label>` : '';
+    const minutes = aircraft.some((entry) => canFire(entry) || entry.flares > 0) ? `<label>Suppress or illuminate for <input id="menu-minutes" type="number" value="${DEFAULT_SUPPRESS_MINUTES}" min="1" step="1" /> min</label>` : '';
     const boxes = recipients.map(
       (id) => `<label><input type="checkbox" data-poi-recipient="${escapeHtml(id)}" checked /> ${escapeHtml(displayName(id, names))}</label>`,
     );
@@ -552,14 +570,21 @@ export class App {
     const center = this.menuPoint;
     if (center === null) return;
     const minutes = Number((document.getElementById('menu-minutes') as HTMLInputElement | null)?.value ?? DEFAULT_SUPPRESS_MINUTES);
-    this.order(aircraftId, this.fireOrder(kind, center, MENU_FIRE_RADIUS, minutes));
+    this.order(aircraftId, this.fireOrder(kind, center, MENU_FIRE_RADIUS, minutes, aircraftId));
     this.closeMapMenu();
   }
 
-  private fireOrder(kind: 'Suppress' | 'Strike', center: Vec2, radius: number, minutes: number): AircraftOrder {
-    if (kind === 'Strike') return { kind, center, radius };
+  /** When a timed task over a place should end: its minutes count from when the aircraft gets there. */
+  private windowEnd(aircraftId: string, center: Vec2, minutes: number): number {
     const tick = this.view?.tick ?? 0;
-    return { kind, center, radius, untilTick: tick + Math.max(1, minutes > 0 ? minutes : DEFAULT_SUPPRESS_MINUTES) * 60 };
+    const aircraft = this.view?.aircraft.find((entry) => entry.aircraftId === aircraftId);
+    const arrival = aircraft === undefined ? 0 : Math.ceil(etaTo(aircraft, center));
+    return tick + arrival + Math.max(1, minutes > 0 ? minutes : DEFAULT_SUPPRESS_MINUTES) * 60;
+  }
+
+  private fireOrder(kind: 'Suppress' | 'Strike', center: Vec2, radius: number, minutes: number, aircraftId: string): AircraftOrder {
+    if (kind === 'Strike') return { kind, center, radius };
+    return { kind, center, radius, untilTick: this.windowEnd(aircraftId, center, minutes) };
   }
 
   private onMapClick(pixel: Vec2): void {
@@ -571,7 +596,7 @@ export class App {
         if (friendly?.kind !== 'friendly') return;
         this.coverWith(pending.aircraftId, friendly.id);
       } else {
-        this.order(pending.aircraftId, this.buildOrder(pending.kind, this.map.toWorld(pixel)));
+        this.order(pending.aircraftId, this.buildOrder(pending.kind, this.map.toWorld(pixel), pending.aircraftId));
       }
       this.pendingOrder = null;
       return;
@@ -583,13 +608,13 @@ export class App {
     this.select(hits[(current + 1) % hits.length] ?? null);
   }
 
-  private buildOrder(kind: Exclude<AreaOrderKind, 'Cover'>, point: Vec2): AircraftOrder {
+  private buildOrder(kind: Exclude<AreaOrderKind, 'Cover'>, point: Vec2, aircraftId: string): AircraftOrder {
     const input = document.getElementById('order-radius') as HTMLInputElement | null;
     const typed = Number(input?.value ?? 0);
     const radius = kind === 'Strike' ? STRIKE_RADIUS : typed > 0 ? typed : 500;
     if (kind === 'Watch') return { kind, center: point, radius };
     const minutes = Number((document.getElementById('order-minutes') as HTMLInputElement | null)?.value ?? DEFAULT_SUPPRESS_MINUTES);
-    return this.fireOrder(kind, point, radius, minutes);
+    return this.fireOrder(kind, point, radius, minutes, aircraftId);
   }
 
   private select(selection: Selection): void {
@@ -767,6 +792,13 @@ export class App {
         const center = this.menuPoint;
         const entry = this.view?.aircraft.find((a) => a.aircraftId === id);
         if (center !== null && entry !== undefined) this.order(entry.aircraftId, { kind: 'Watch', center, radius: entry.aircraftType === 'recon' ? 1000 : SUPPORT_RADIUS });
+        this.closeMapMenu();
+        return;
+      }
+      case 'menu-illuminate': {
+        const center = this.menuPoint;
+        const minutes = Number((document.getElementById('menu-minutes') as HTMLInputElement | null)?.value ?? DEFAULT_SUPPRESS_MINUTES);
+        if (center !== null && id !== undefined) this.order(id, { kind: 'Illuminate', center, radius: SUPPORT_RADIUS, untilTick: this.windowEnd(id, center, minutes) });
         this.closeMapMenu();
         return;
       }
@@ -974,6 +1006,7 @@ export class App {
       `<button id="pause" data-action="pause">${run.paused ? 'Resume' : 'Pause'}</button>${speeds}` +
         `<span id="clock" title="Local time">${clockSeconds(view.tick)}</span>` +
         `<span id="mission-time">T+${duration(view.tick)} · <b>${duration(Math.max(0, this.config.durationSeconds - view.tick))} left</b></span>` +
+        lightHtml(view) +
         `<span id="status">${escapeHtml(status)}</span>` +
         `<span id="objective">${escapeHtml(this.config.objective)}</span>` +
         `<button data-action="timeline"${this.reviewing ? ' class="active"' : ''} title="Look back through the battle as you knew it (T).">Timeline</button>` +
@@ -1125,6 +1158,7 @@ export class App {
     const view = this.view;
     const tick = view?.tick ?? 0;
     const pending = this.pendingOrder?.aircraftId === aircraft.aircraftId ? this.pendingOrder.kind : null;
+    // Flares are about a place, so they're ordered from the map's right-click menu, not here.
     const kinds: readonly AreaOrderKind[] = strike ? ['Watch', 'Cover', 'Suppress', 'Strike'] : ['Watch', 'Cover'];
     const taskButtons = kinds
       .map((kind) => `<button data-action="order" data-kind="${kind}" title="${escapeHtml(ORDER_HELP[kind])}"${pending === kind ? ' class="active"' : ''}>${ORDER_LABELS[kind]}</button>`)
@@ -1154,7 +1188,7 @@ export class App {
     return (
       `<h2>${aircraft.aircraftId} · ${escapeHtml(aircraft.model)}</h2>` +
       `<p class="task-now">${escapeHtml(this.taskLine(aircraft, tick))}</p>` +
-      `<p>${strike ? `Bombs ${aircraft.ammunition} · gun bursts ${aircraft.gunBursts} · ` : ''}fuel ${Math.round(aircraft.fuelFraction * 100)}%${station} · ` +
+      `<p>${strike ? `Bombs ${aircraft.ammunition} · gun bursts ${aircraft.gunBursts} · ` : ''}${aircraft.flares > 0 ? `flares ${aircraft.flares} · ` : ''}fuel ${Math.round(aircraft.fuelFraction * 100)}%${station} · ` +
       `altitude ${Math.round(aircraft.altitudeMeters)} m · visibility ${visibilityText(aircraft.visibilityMeters)}` +
       `${aircraft.damaged ? ' · damaged, returning for repair' : ''}${aircraft.aboveCloud ? ' · above cloud, cannot see the ground' : ''}</p>` +
       `<h3>New task</h3><div class="buttons">${taskButtons}<button data-action="rtb" title="Head home now.">Return to base</button></div>${fields}` +

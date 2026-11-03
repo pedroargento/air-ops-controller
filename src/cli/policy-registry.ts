@@ -1,5 +1,5 @@
 import type { Vec2 } from '../domain/public/geometry';
-import { answeringDangerClose, answeringRequests, atRisk, lingeringOnGuns, immediateCas, noAir, reactiveCas, markingKillZones, reconInformed, scoutingOnly, suppressingKillZones, coveringLead, sweepingRecon, type Policy } from '../policies/air-policies';
+import { answeringDangerClose, answeringRequests, atRisk, lingeringOnGuns, illuminatingAtNight, immediateCas, noAir, reactiveCas, markingKillZones, reconInformed, scoutingOnly, suppressingKillZones, coveringLead, sweepingRecon, type Policy } from '../policies/air-policies';
 import type { Scenario } from '../scenario/load';
 
 type PolicySet = Readonly<Record<string, () => Policy>>;
@@ -16,6 +16,16 @@ function outpostPolicies(scenario: Scenario): PolicySet {
     informedLinger: () => lingeringOnGuns(reconInformed(objective, true)),
     informedCautious: () => atRisk(reconInformed(objective, true), 'cautious'),
     informedPressOn: () => atRisk(reconInformed(objective, true), 'pressOn'),
+  };
+}
+
+/** The outpost's bots, each also in a version that keeps flares over the fight. */
+function nightOutpostPolicies(scenario: Scenario): PolicySet {
+  const day = outpostPolicies(scenario);
+  return {
+    ...day,
+    reactiveLit: () => illuminatingAtNight(reactiveCas()),
+    informedLit: () => illuminatingAtNight(reconInformed(scenario.file.mission.area.center, true)),
   };
 }
 
@@ -73,6 +83,7 @@ function withDangerClose(set: PolicySet): PolicySet {
 const SCENARIO_POLICIES: Readonly<Record<string, (scenario: Scenario) => PolicySet>> = {
   'find-them': findThemPolicies,
   'outpost-under-pressure': outpostPolicies,
+  'outpost-night': nightOutpostPolicies,
   'valley-road': valleyRoadPolicies,
   overwatch: valleyRoadPolicies,
 };

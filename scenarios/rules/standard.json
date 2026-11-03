@@ -117,7 +117,10 @@
       "noSupportWeaponsAssaultFactor": 0.6,
       "objectiveMarginMeters": 60,
       "attackRadiusMeters": 100,
-      "headingTowardsCos": 0.5
+      "headingTowardsCos": 0.5,
+      "illuminationRounds": 8,
+      "waitForAirStrengthRatio": 0.5,
+      "airRefusedMemorySeconds": 900
     },
     "patrol": {
       "speedMps": 1,
@@ -178,7 +181,10 @@
       "noSupportWeaponsAssaultFactor": 0.6,
       "objectiveMarginMeters": 60,
       "attackRadiusMeters": 100,
-      "headingTowardsCos": 0.5
+      "headingTowardsCos": 0.5,
+      "illuminationRounds": 4,
+      "waitForAirStrengthRatio": 0.5,
+      "airRefusedMemorySeconds": 900
     },
     "assault": {
       "speedMps": 1,
@@ -231,7 +237,10 @@
       "noSupportWeaponsAssaultFactor": 0.6,
       "objectiveMarginMeters": 60,
       "attackRadiusMeters": 100,
-      "headingTowardsCos": 0.5
+      "headingTowardsCos": 0.5,
+      "illuminationRounds": 0,
+      "waitForAirStrengthRatio": 0.5,
+      "airRefusedMemorySeconds": 900
     },
     "harass": {
       "speedMps": 1,
@@ -284,7 +293,10 @@
       "noSupportWeaponsAssaultFactor": 0.6,
       "objectiveMarginMeters": 60,
       "attackRadiusMeters": 100,
-      "headingTowardsCos": 0.5
+      "headingTowardsCos": 0.5,
+      "illuminationRounds": 0,
+      "waitForAirStrengthRatio": 0.5,
+      "airRefusedMemorySeconds": 900
     },
     "recon": {
       "speedMps": 1,
@@ -337,7 +349,10 @@
       "noSupportWeaponsAssaultFactor": 0.6,
       "objectiveMarginMeters": 60,
       "attackRadiusMeters": 100,
-      "headingTowardsCos": 0.5
+      "headingTowardsCos": 0.5,
+      "illuminationRounds": 0,
+      "waitForAirStrengthRatio": 0.5,
+      "airRefusedMemorySeconds": 900
     },
     "antiair": {
       "speedMps": 1,
@@ -390,7 +405,10 @@
       "noSupportWeaponsAssaultFactor": 0.6,
       "objectiveMarginMeters": 60,
       "attackRadiusMeters": 100,
-      "headingTowardsCos": 0.5
+      "headingTowardsCos": 0.5,
+      "illuminationRounds": 0,
+      "waitForAirStrengthRatio": 0.5,
+      "airRefusedMemorySeconds": 900
     },
     "column": {
       "speedMps": 1,
@@ -450,7 +468,10 @@
       "noSupportWeaponsAssaultFactor": 0.6,
       "objectiveMarginMeters": 60,
       "attackRadiusMeters": 100,
-      "headingTowardsCos": 0.5
+      "headingTowardsCos": 0.5,
+      "illuminationRounds": 6,
+      "waitForAirStrengthRatio": 0.5,
+      "airRefusedMemorySeconds": 900
     },
     "raider": {
       "speedMps": 1,
@@ -507,7 +528,10 @@
       "noSupportWeaponsAssaultFactor": 0.6,
       "objectiveMarginMeters": 60,
       "attackRadiusMeters": 100,
-      "headingTowardsCos": 0.5
+      "headingTowardsCos": 0.5,
+      "illuminationRounds": 0,
+      "waitForAirStrengthRatio": 0.5,
+      "airRefusedMemorySeconds": 900
     }
   },
   "combat": {
@@ -602,7 +626,13 @@
     "systemLossPerCasualtyFraction": 1,
     "assessmentNoise": 0.5,
     "fireSpreadMeters": 120,
-    "fireReach": 2.5
+    "fireReach": 2.5,
+    "illuminationBelowLight": 0.2,
+    "illuminationRangeMeters": 800,
+    "illuminationIntervalSeconds": 240,
+    "illuminationBurnSeconds": 60,
+    "illuminationRadiusMeters": 450,
+    "illuminationLight": 0.6
   },
   "perception": {
     "baseDetectionPerScan": 0.9,
@@ -748,7 +778,8 @@
         "defaultAltitudeMeters": 650,
         "gunBursts": 0,
         "gunCasualtyFraction": 0,
-        "gunSuppression": 0
+        "gunSuppression": 0,
+        "flares": 4
       },
       "RF-101C": {
         "takeoffSeconds": 60,
@@ -780,7 +811,8 @@
         "defaultAltitudeMeters": 650,
         "gunBursts": 0,
         "gunCasualtyFraction": 0,
-        "gunSuppression": 0
+        "gunSuppression": 0,
+        "flares": 0
       },
       "A-1E": {
         "takeoffSeconds": 60,
@@ -812,7 +844,8 @@
         "defaultAltitudeMeters": 650,
         "gunBursts": 20,
         "gunCasualtyFraction": 0.12,
-        "gunSuppression": 0.6
+        "gunSuppression": 0.6,
+        "flares": 4
       },
       "F-100D": {
         "takeoffSeconds": 60,
@@ -844,7 +877,8 @@
         "defaultAltitudeMeters": 650,
         "gunBursts": 16,
         "gunCasualtyFraction": 0.12,
-        "gunSuppression": 0.6
+        "gunSuppression": 0.6,
+        "flares": 0
       },
       "UH-1B": {
         "takeoffSeconds": 60,
@@ -876,7 +910,8 @@
         "hitSurvivalChance": 0.3,
         "gunBursts": 30,
         "gunCasualtyFraction": 0.08,
-        "gunSuppression": 0.5
+        "gunSuppression": 0.5,
+        "flares": 6
       },
       "AH-1G": {
         "takeoffSeconds": 60,
@@ -908,7 +943,8 @@
         "hitSurvivalChance": 0.35,
         "gunBursts": 30,
         "gunCasualtyFraction": 0.1,
-        "gunSuppression": 0.55
+        "gunSuppression": 0.55,
+        "flares": 0
       },
       "OH-6A": {
         "takeoffSeconds": 60,
@@ -940,7 +976,8 @@
         "hitSurvivalChance": 0.4,
         "gunBursts": 0,
         "gunCasualtyFraction": 0,
-        "gunSuppression": 0
+        "gunSuppression": 0,
+        "flares": 0
       }
     },
     "groundNoticeSigmaMeters": 100,
@@ -967,8 +1004,13 @@
     "suppressSpreadShare": 0.5,
     "coverAheadMeters": 400,
     "jokerSeconds": 600,
+    "nightAttackLight": 0.3,
+    "darkDangerCloseFactor": 1.5,
     "splashReach": 2,
-    "gunHeightTolerance": 1.5
+    "gunHeightTolerance": 1.5,
+    "flareBurnSeconds": 180,
+    "flareRadiusMeters": 900,
+    "flareLight": 0.7
   },
   "weather": {
     "baseCeilingMeters": 1600,
@@ -989,10 +1031,17 @@
     "heavyRainVisibilityMeters": 300,
     "cloudFadeMeters": 200,
     "rainMissMeters": 80,
+    "starlight": 0.03,
+    "fullMoonLight": 0.25,
+    "twilightSeconds": 1800,
+    "cloudDimming": 0.7,
     "forecastIntervalSeconds": 1200,
     "forecastWindErrorMps": 0.35,
     "forecastPositionErrorMeters": 120,
     "forecastCeilingErrorMeters": 80,
-    "forecastTimingErrorSeconds": 240
+    "forecastTimingErrorSeconds": 240,
+    "nightSightFloor": 0.2,
+    "flashSight": 0.6,
+    "nightAimFloor": 0.3
   }
 }

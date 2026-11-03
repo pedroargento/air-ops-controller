@@ -33,6 +33,8 @@ const scheduledObjective = z.union([
 const doctrine = z.object({
   drills: z.array(z.enum(['nearAmbush', 'farAmbush', 'attack', 'bypass', 'hastyAmbush', 'waitForAir', 'pushThrough'])).describe('Battle drills this doctrine knows (§4.0.2).'),
   airWaitSeconds: z.number().positive().describe('How long a platoon holds for air before deciding without it.'),
+  waitForAirStrengthRatio: z.number().nonnegative().default(0.5).describe('Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself.'),
+  airRefusedMemorySeconds: z.number().nonnegative().default(900).describe('After air operations says no air is available, it doesn\'t wait for air again for this long.'),
   nearAmbushMeters: z.number().positive().describe('Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance.'),
   drillSeconds: z.number().positive().describe('Every drill ends after this long, so none can hold a platoon forever.'),
   attackStrengthRatio: z.number().positive().describe('Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can.'),
@@ -53,6 +55,7 @@ const doctrine = z.object({
   reportMemorySeconds: z.number().positive().describe('How long a received report stays in the unit\'s picture.'),
   airCoverSeconds: z.number().min(0).describe('How long a unit takes cover on spotting an enemy aircraft.'),
   airCoverRepeatSeconds: z.number().int().positive().describe('Shortest gap before it takes cover again for aircraft.'),
+  illuminationRounds: z.number().int().min(0).default(0).describe('Illumination rounds it can fire over an enemy at night.'),
   standoffMeters: z.number().positive().describe('Distance a cautious unit keeps from an enemy it observes.'),
   observeBias: z.number().nonnegative().describe('Weight towards observing when it meets an enemy.'),
   probeBias: z.number().nonnegative().describe('Weight towards probing.'),
@@ -109,6 +112,12 @@ const combat = z.object({
   minRangeFactor: unit.describe('Effectiveness at maximum range, relative to point blank.'),
   fireSpreadMeters: z.number().positive().describe('Fire at a point hits whoever is near it, falling off over this distance.'),
   suppressionDecayPerUpdate: unit.describe('Share of suppression lost every 5-second update.'),
+  illuminationBelowLight: unit.describe('A platoon fires illumination only where the light is below this.'),
+  illuminationRangeMeters: z.number().positive().describe('Farthest a platoon fires an illumination round.'),
+  illuminationIntervalSeconds: z.number().positive().describe('Shortest gap between one platoon\'s illumination rounds.'),
+  illuminationBurnSeconds: z.number().positive().describe('How long an illumination round burns.'),
+  illuminationRadiusMeters: z.number().positive().describe('How far an illumination round lights the ground.'),
+  illuminationLight: unit.describe('Light under an illumination round, as a share of daylight.'),
   moraleLossPerCasualtyFraction: z.number().nonnegative().describe('Morale lost per share of the platoon\'s strength lost.'),
   moraleLossUnderFirePerUpdate: z.number().nonnegative().describe('Morale lost each update while under fire, down to the doctrine\'s floor.'),
   moraleLossDeterioratingPerUpdate: z.number().nonnegative().describe('Extra loss each update when isolated or low on ammunition, below the floor.'),
@@ -219,6 +228,7 @@ const aircraftModel = z.object({
   passIntervalSeconds: z.number().int().positive().describe('Shortest time between bombing passes.'),
   casualtyFractionPerPass: unit.describe('Share of men a bombing pass kills at full accuracy.'),
   gunBursts: z.number().int().min(0).describe('Gun runs it carries.'),
+  flares: z.number().int().min(0).default(0).describe('Parachute flares it carries for lighting an area at night.'),
   gunCasualtyFraction: unit.describe('Share of men a gun run kills at full accuracy.'),
   gunSuppression: unit.describe('Suppression from a gun run.'),
   suppressionPerPass: unit.describe('Suppression from a bombing pass.'),
@@ -267,6 +277,9 @@ const air = z.object({
   cueRadiusMeters: z.number().positive().describe('Recon cues CAS to contacts this close.'),
   cueMaxAgeSeconds: z.number().positive().describe('Cues this old don\'t help.'),
   cueDetectionBoost: z.number().min(1).describe('Spotting multiplier from a cue.'),
+  flareBurnSeconds: z.number().positive().describe('How long a parachute flare burns.'),
+  flareRadiusMeters: z.number().positive().describe('How far a flare lights the ground around it.'),
+  flareLight: unit.describe('Light under a flare, as a share of daylight.'),
   markSeconds: z.number().positive().describe('How long a smoke mark lasts.'),
   markIntervalSeconds: z.number().positive().describe('Shortest gap between one platoon\'s marks.'),
   markErrorMeters: z.number().nonnegative().describe('How far smoke typically lands from where the platoon aimed it.'),
@@ -304,6 +317,8 @@ const air = z.object({
   suppressSpreadShare: unit.describe('How far from the center of a Suppress area the crew walks its fire, as a share of the area\'s radius.'),
   coverAheadMeters: z.number().nonnegative().describe('How far ahead of a covered platoon the aircraft watches, along its reported heading.'),
   jokerSeconds: z.number().positive().describe('A crew calls JOKER when it has this much time left on station before it must head home.'),
+  nightAttackLight: unit.describe('Below this light a crew attacks only targets that are firing.'),
+  darkDangerCloseFactor: z.number().min(1).describe('Danger close distances are this many times wider where it is dark.'),
 });
 
 const weather = z.object({
@@ -325,6 +340,13 @@ const weather = z.object({
   heavyRainVisibilityMeters: z.number().positive().describe('Visibility in the heaviest rain.'),
   cloudFadeMeters: z.number().positive().describe('Height over which cloud fades in below its base.'),
   rainMissMeters: z.number().nonnegative().describe('Extra strike error in the heaviest rain.'),
+  starlight: unit.describe('Light on a moonless night, as a share of daylight\'s usefulness for seeing and aiming.'),
+  fullMoonLight: unit.describe('Extra light from a full moon that is up.'),
+  twilightSeconds: z.number().positive().describe('How long twilight lasts either side of sunrise and sunset.'),
+  cloudDimming: unit.describe('Share of the night\'s light heavy rain and its cloud take away.'),
+  nightSightFloor: unit.describe('Least sight reach in the dark, as a share of daylight\'s: movement seen by starlight.'),
+  flashSight: unit.describe('Sight reach to a unit that is firing, however dark: its muzzle flashes give it away.'),
+  nightAimFloor: unit.describe('Least effect of fire on men in the dark, as a share of daylight\'s.'),
   forecastIntervalSeconds: z.number().int().positive().describe('Seconds between forecasts.'),
   forecastWindErrorMps: z.number().nonnegative().describe('Forecast error in storm movement.'),
   forecastPositionErrorMeters: z.number().nonnegative().describe('Forecast error in storm position.'),
@@ -395,6 +417,16 @@ export const scenarioFileSchema = z.object({
   name: z.string(),
   durationSeconds: z.number().int().positive(),
   startTime: z.string().regex(/^([01]\d|2[0-3])[0-5]\d$/).default('0600').describe('Local time the mission starts, as a 24-hour clock: 0600.'),
+  sky: z
+    .object({
+      sunrise: z.string().regex(/^([01]\d|2[0-3])[0-5]\d$/).default('0500'),
+      sunset: z.string().regex(/^([01]\d|2[0-3])[0-5]\d$/).default('1900'),
+      moonIllumination: unit.default(0.3),
+      moonrise: z.string().regex(/^([01]\d|2[0-3])[0-5]\d$/).default('1800'),
+      moonset: z.string().regex(/^([01]\d|2[0-3])[0-5]\d$/).default('0400'),
+    })
+    .default({ sunrise: '0500', sunset: '1900', moonIllumination: 0.3, moonrise: '1800', moonset: '0400' })
+    .describe('Sunrise, sunset and the moon for the mission\'s day.'),
   terrain: z.object({
     cellSizeMeters: z.number().positive().describe('Width of one terrain cell, in metres.'),
     elevationStepMeters: z.number().positive().describe('Height of one step in the elevation layer, in metres.'),

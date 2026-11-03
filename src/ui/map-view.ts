@@ -1,5 +1,6 @@
 import type { AircraftTelemetry, AircraftTelemetryEntry } from '../domain/public/air';
 import type { TruthFrame } from '../domain/public/debrief';
+import { ambientLight } from '../domain/public/light';
 import type { Vec2 } from '../domain/public/geometry';
 import { isAntiAir, type WeaponType } from '../domain/public/equipment';
 import { elevationAt, type TerrainGrid } from '../domain/public/terrain';
@@ -76,11 +77,14 @@ const GRID_INK = 'rgba(20,40,70,0.45)';
 const AIR_FILL = '#80e0ff';
 const AIR_INK = '#0b2a4a';
 const FACING_COLOR = '#9a4a00';
+/** How dark the map gets on a moonless night: enough to notice, not enough to hide it. */
+const NIGHT_TINT = 0.55;
 const TASK_CODES: Readonly<Record<NonNullable<AircraftTelemetryEntry['order']>['kind'], string>> = {
   Watch: 'WATCH',
   Cover: 'COVER',
   Suppress: 'SUPP',
   Strike: 'STRIKE',
+  Illuminate: 'ILLUM',
   ReturnToBase: 'RTB',
 };
 const ANTI_AIR_COLOR = '#ff3df0';
@@ -96,6 +100,7 @@ export class MapView {
   private readonly peaks: readonly SpotHeight[];
   private readonly figures: readonly ElevationFigure[];
   private readonly weatherImage = document.createElement('canvas');
+  private readonly nightImage = document.createElement('canvas');
   private readonly worldSize: number;
   private center: Vec2;
   private zoom = 1;
@@ -223,6 +228,7 @@ export class MapView {
     const flying = selection?.kind === 'aircraft' ? view.aircraft.find((a) => a.aircraftId === selection.id) : undefined;
     if (flying !== undefined) this.drawElevationFigures(flying.targetAltitudeMeters);
     if (layers.weather !== null) this.drawWeather(layers.weather);
+    this.drawNight(view);
 
     const contacts = this.shownContacts(view);
     for (const marker of contacts) {
@@ -526,6 +532,66 @@ export class MapView {
       }
     }
     haloText(ctx, 'TRUTH: ● where each squad really was, ✕ dead', 14, 52, '#111111', 'bold 12px sans-serif');
+  }
+
+  /**
+   * At night the map darkens, by the light the forecast's ephemeris gives at this hour, and
+   * flares the controller knows of are drawn as light cut into the dark while they burn. It's a
+   * reminder that light matters, not a measurement: no light field is shown beyond them.
+   */
+  private drawNight(view: PlayerView): void {
+    const sky = view.forecast?.sky;
+    if (sky === undefined) return;
+    const darkness = 1 - ambientLight(sky, view.tick, 0);
+    const { ctx, canvas } = this;
+    if (darkness > 0.01) {
+      const shade = this.nightImage;
+      shade.width = canvas.width;
+      shade.height = canvas.height;
+      const tint = shade.getContext('2d');
+      if (tint === null) return;
+      tint.fillStyle = `rgba(6, 12, 32, ${(NIGHT_TINT * darkness).toFixed(3)})`;
+      tint.fillRect(0, 0, shade.width, shade.height);
+      tint.globalCompositeOperation = 'destination-out';
+      for (const flare of view.flares) {
+        const at = this.toScreen(flare.position);
+        const radius = flare.radiusMeters * this.pixelsPerMeter;
+        const strength = flare.light * Math.min(1, (flare.burnSeconds - flare.ageSeconds) / (flare.burnSeconds * 0.2));
+        const glow = tint.createRadialGradient(at.x, at.y, 0, at.x, at.y, radius);
+        glow.addColorStop(0, `rgba(0,0,0,${strength.toFixed(3)})`);
+        glow.addColorStop(0.5, `rgba(0,0,0,${strength.toFixed(3)})`);
+        glow.addColorStop(1, 'rgba(0,0,0,0)');
+        tint.fillStyle = glow;
+        tint.beginPath();
+        tint.arc(at.x, at.y, radius, 0, Math.PI * 2);
+        tint.fill();
+      }
+      tint.globalCompositeOperation = 'source-over';
+      ctx.drawImage(shade, 0, 0);
+    }
+    for (const flare of view.flares) this.drawFlare(flare.position, flare.burnSeconds - flare.ageSeconds);
+  }
+
+  /** A flare: a small star with the minutes of burn it has left. */
+  private drawFlare(point: Vec2, secondsLeft: number): void {
+    const { ctx } = this;
+    const at = this.toScreen(point);
+    ctx.fillStyle = '#fff3a0';
+    ctx.strokeStyle = '#7a5a00';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < 10; i += 1) {
+      const angle = (i * Math.PI) / 5 - Math.PI / 2;
+      const reach = i % 2 === 0 ? 8 : 3.5;
+      const x = at.x + Math.cos(angle) * reach;
+      const y = at.y + Math.sin(angle) * reach;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    haloText(ctx, `FLARE ${Math.max(0, Math.ceil(secondsLeft / 60))}m`, at.x + 10, at.y - 6, '#7a5a00', 'bold 10px sans-serif');
   }
 
   /** Smoke a platoon threw on a target, as a crew reported seeing it: a drifting grey puff. */

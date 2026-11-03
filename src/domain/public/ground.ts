@@ -80,6 +80,9 @@ export type Doctrine = Readonly<{
   reportMemorySeconds: number;
   airCoverSeconds: number;
   airCoverRepeatSeconds: number;
+  illuminationRounds: number;
+  waitForAirStrengthRatio: number;
+  airRefusedMemorySeconds: number;
   standoffMeters: number;
   observeBias: number;
   probeBias: number;

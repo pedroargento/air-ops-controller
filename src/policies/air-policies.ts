@@ -1,4 +1,5 @@
 import { cos, sin } from '../domain/public/det-math';
+import { ambientLight } from '../domain/public/light';
 import { POI_KINDS } from '../domain/public/poi';
 import type { AircraftId, AircraftTelemetryEntry, RiskLimit, SupportWeapons } from '../domain/public/air';
 import type { PlayerCommand } from '../domain/public/commands';
@@ -433,5 +434,51 @@ export function coveringLead(policy: Policy, destination: Vec2, radiusMeters = S
         order: { kind: 'Cover', unitId: lead.unitId, center: lead.position.center, radius: radiusMeters },
       }));
     return [...own, ...covers];
+  };
+}
+
+const ILLUMINATE_SECONDS = 600;
+const FIGHT_MEMORY_SECONDS = 300;
+const LIT_REACH_METERS = 600;
+const DARK_ENOUGH = 0.2;
+
+/**
+ * At night, keeps flares over every fight it hears of: a unit asking for support or reporting
+ * troops in contact gets an aircraft with flares over it, recon first, so strike aircraft stay
+ * free to attack what the light shows. By day it does nothing.
+ */
+export function illuminatingAtNight(policy: Policy): Policy {
+  return (view) => {
+    const sky = view.forecast?.sky;
+    if (sky === undefined || ambientLight(sky, view.tick, 0) >= DARK_ENOUGH) return policy(view);
+    const busy = new Set(view.aircraft.filter((aircraft) => aircraft.order?.kind === 'Illuminate').map((aircraft) => aircraft.aircraftId as string));
+    const fights = [
+      ...view.supportRequests.filter((request) => request.ageSeconds <= FIGHT_MEMORY_SECONDS).map((request) => request.target ?? request.position.center),
+      ...view.ticFlags.filter((flag) => flag.ageSeconds <= FIGHT_MEMORY_SECONDS).map((flag) => flag.position.center),
+    ];
+    const commands: PlayerCommand[] = [];
+    const lit: Vec2[] = [
+      ...view.flares.map((flare) => flare.position),
+      ...view.aircraft.flatMap((aircraft) => (aircraft.order?.kind === 'Illuminate' ? [aircraft.order.center] : [])),
+    ];
+    for (const fight of fights) {
+      if (lit.some((point) => distance(point, fight) <= LIT_REACH_METERS)) continue;
+      const [aircraft] = view.aircraft
+        .filter((candidate) => candidate.flares > 0 && !candidate.damaged && !busy.has(candidate.aircraftId))
+        .filter((candidate) => candidate.status !== 'returning' && candidate.status !== 'turnaround')
+        .sort((a, b) => Number(a.aircraftType === 'cas') - Number(b.aircraftType === 'cas') || distance(a.position, fight) - distance(b.position, fight));
+      if (aircraft === undefined) break;
+      busy.add(aircraft.aircraftId);
+      lit.push(fight);
+      commands.push({
+        kind: 'aircraftOrder',
+        tick: view.tick,
+        aircraftId: aircraft.aircraftId,
+        // The light is wanted once the aircraft is there, so its time counts from arrival.
+        order: { kind: 'Illuminate', center: fight, radius: SUPPORT_RADIUS_METERS, untilTick: view.tick + Math.ceil(aircraft.takeoffSeconds + distance(aircraft.position, fight) / aircraft.speedMps) + ILLUMINATE_SECONDS },
+      });
+    }
+    const own = policy(view).filter((command) => !('aircraftId' in command) || !busy.has(command.aircraftId));
+    return [...own, ...commands];
   };
 }

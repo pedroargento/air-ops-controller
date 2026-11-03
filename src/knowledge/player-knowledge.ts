@@ -6,6 +6,7 @@ import { distance, type Vec2 } from '../domain/public/geometry';
 import type { ObjectiveStatus, RadioMessage, StrikeAssessment } from '../domain/public/radio';
 import type { Weather } from '../domain/public/weather';
 import type { TrackRecord } from './tracks';
+import type { Flare } from '../domain/public/light';
 
 export type PositionSource = 'self-report' | 'aircraft';
 
@@ -95,6 +96,8 @@ export type GroundFireMark = Readonly<{
 
 export type PlayerKnowledge = {
   pois: Poi[];
+  /** Flares the controller knows of: dropped by its aircraft or fired by its platoons. */
+  flares: Flare[];
   /** Smoke marks crews have reported seeing. */
   smoke: Readonly<{ position: Vec2; placedAt: number; platoonId: string; seenAt: number }>[];
   log: RadioMessage[];
@@ -127,6 +130,7 @@ export function emptyPlayerKnowledge(): PlayerKnowledge {
     groundFire: [],
     pois: [],
     smoke: [],
+    flares: [],
     friendlyEngagedAt: {},
     contacts: {},
     tracks: {},

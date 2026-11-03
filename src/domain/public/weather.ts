@@ -1,6 +1,7 @@
 import { exp, hypot, log } from './det-math';
 import { distance, type Vec2 } from './geometry';
 import { hasAirLos, type TerrainGrid } from './terrain';
+import type { Sky } from './light';
 
 /** A storm: one wind moves every system, so the sky has a pattern a player can read. */
 export type WeatherSystem = Readonly<{
@@ -25,6 +26,8 @@ export type Weather = Readonly<{
   /** Sight starts to go this far under the cloud base and is gone at it. */
   cloudFadeMeters: number;
   rainMissMeters: number;
+  /** The day's ephemeris: when it's light, and how much the moon gives at night. */
+  sky: Sky;
 }>;
 
 export type LocalWeather = Readonly<{ ceilingMeters: number; rain: number }>;

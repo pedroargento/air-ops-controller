@@ -1,5 +1,7 @@
 import { totalAmmunition, usableWeapons, type WeaponFire } from '../domain/public/equipment';
 import { exp } from '../domain/public/det-math';
+import { aimFactor } from '../domain/public/light';
+import { isFiring, lightOn } from '../perception/observe';
 import { distance, type Vec2 } from '../domain/public/geometry';
 import { cellAt, hasGroundLos, type TerrainGrid } from '../domain/public/terrain';
 import type { GroundUnit, Platoon, WorldTruth } from '../domain/truth/world';
@@ -201,8 +203,10 @@ export function resolveCombat(
   tick: number,
 ): void {
   const solutions = fireSolutions(truth, terrain, config, tick);
+  // Fire lands worse on men in the dark, unless their own flashes show where they are.
+  const aim = (target: GroundUnit): number => aimFactor(truth.weather.sky, lightOn(truth, target.position, tick), isFiring(target, tick));
   const effects = solutions.flatMap(({ firer, fire, hits }) =>
-    hits.map((hit) => volleyEffect(firer, fire, hit, terrain, config, rng)),
+    hits.map((hit) => volleyEffect(firer, fire, { ...hit, surprise: hit.surprise * aim(hit.target) }, terrain, config, rng)),
   );
   for (const solution of solutions) {
     solution.firer.lastFiredAtTick = tick;

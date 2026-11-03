@@ -1,3 +1,4 @@
+import type { Sky } from '../domain/public/light';
 import { cos, PI, sin } from '../domain/public/det-math';
 import type { Weather, WeatherSystem } from '../domain/public/weather';
 import { nextFloat, nextGaussian, type RngState } from '../rng/streams';
@@ -10,7 +11,7 @@ function between(rng: RngState, low: number, high: number): number {
 }
 
 /** The mission's weather, decided once at the start from the seed. */
-export function generateWeather(config: WeatherConfig, worldSize: number, durationSeconds: number, rng: RngState): Weather {
+export function generateWeather(config: WeatherConfig, worldSize: number, durationSeconds: number, rng: RngState, sky: Sky): Weather {
   const count = Math.floor(between(rng, config.minSystems, config.maxSystems + 1));
   const bearing = between(rng, 0, PI * 2);
   const speed = between(rng, config.minWindMps, config.maxWindMps);
@@ -37,6 +38,7 @@ export function generateWeather(config: WeatherConfig, worldSize: number, durati
     heavyRainVisibilityMeters: config.heavyRainVisibilityMeters,
     cloudFadeMeters: config.cloudFadeMeters,
     rainMissMeters: config.rainMissMeters,
+    sky,
   };
 }
 
@@ -64,4 +66,28 @@ export function issueForecast(weather: Weather, config: WeatherConfig, rng: RngS
       };
     });
   return { ...weather, systems };
+}
+
+/** Seconds of the day for a 24-hour time written like 0545. */
+export function secondsOfDay(time: string): number {
+  return Number(time.slice(0, 2)) * 3600 + Number(time.slice(2, 4)) * 60;
+}
+
+/** The mission's ephemeris, from the scenario's times and the rules' light levels. */
+export function skyOf(file: Readonly<{ startTime: string; sky: Readonly<{ sunrise: string; sunset: string; moonIllumination: number; moonrise: string; moonset: string }>; weather: WeatherConfig }>): Sky {
+  return {
+    startSecondsOfDay: secondsOfDay(file.startTime),
+    sunriseSeconds: secondsOfDay(file.sky.sunrise),
+    sunsetSeconds: secondsOfDay(file.sky.sunset),
+    twilightSeconds: file.weather.twilightSeconds,
+    moonIllumination: file.sky.moonIllumination,
+    moonriseSeconds: secondsOfDay(file.sky.moonrise),
+    moonsetSeconds: secondsOfDay(file.sky.moonset),
+    starlight: file.weather.starlight,
+    fullMoonLight: file.weather.fullMoonLight,
+    cloudDimming: file.weather.cloudDimming,
+    nightSightFloor: file.weather.nightSightFloor,
+    flashSight: file.weather.flashSight,
+    nightAimFloor: file.weather.nightAimFloor,
+  };
 }

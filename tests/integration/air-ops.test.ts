@@ -1,3 +1,4 @@
+import { DAY_SKY } from '../support/sky';
 import { describe, expect, it } from 'vitest';
 import { firstDivergence, runReplay } from '../../src/cli/replay';
 import { loadScenarioFile } from '../../src/cli/load-scenario';
@@ -17,6 +18,7 @@ import { aircraftTelemetry } from '../../src/sim/air';
 import { createInitialState, type SimState } from '../../src/sim/state';
 import { platoonOf } from '../../src/sim/platoon';
 import { step } from '../../src/sim/step';
+import { sightOn } from '../../src/perception/observe';
 import { singleSquads, squadOf } from '../support/single-squads';
 
 const scenario = singleSquads(loadScenarioFile());
@@ -1004,6 +1006,7 @@ describe('weather in play', () => {
     clearVisibilityMeters: 8000,
     heavyRainVisibilityMeters: 300,
     cloudFadeMeters: 200,
+    sky: DAY_SKY,
     rainMissMeters: 80,
   });
 
@@ -1265,5 +1268,52 @@ describe('answers to support requests', () => {
     expect(state.player.dangerCloseClearedUntil['F-A']).toBeGreaterThan(state.tick);
     run(state, 1, [{ kind: 'answerDangerClose', tick: state.tick, unitId: 'F-A', approved: false }]);
     expect(state.player.dangerCloseClearedUntil['F-A']).toBeUndefined();
+  });
+});
+
+describe('night and flares', () => {
+  const night = loadScenarioFile('outpost-night');
+  const runNight = (state: SimState, ticks: number, commands: readonly PlayerCommand[] = []): void => {
+    step(state, commands, night);
+    for (let i = 1; i < ticks && state.truth.outcome === 'running'; i += 1) step(state, [], night);
+  };
+
+  it('keeps a flare burning over the area for as long as asked, then watches it', () => {
+    const state = createInitialState(night, 3);
+    const recon = state.truth.aircraft.find((a) => a.id === RECON) as Aircraft;
+    const until = 900;
+    runNight(state, 1, [{ kind: 'aircraftOrder', tick: 0, aircraftId: RECON, order: { kind: 'Illuminate', center: outpost, radius: 500, untilTick: until } }]);
+    for (let i = 0; i < 3000 && recon.status !== 'onStation'; i += 1) step(state, [], night);
+    runNight(state, 5);
+    expect(state.player.flares.some((flare) => flare.by === RECON)).toBe(true);
+    expect(state.truth.flares.some((flare) => flare.by === RECON && distance(flare.position, outpost) < 1)).toBe(true);
+    expect(recon.flares).toBeLessThan(night.file.air.models['O-1E']!.flares);
+    runNight(state, Math.max(10, until - state.tick + 10));
+    expect(recon.order?.kind).toBe('Watch');
+  });
+
+  it('refuses to illuminate with an aircraft that carries no flares', () => {
+    const state = createInitialState(night, 3);
+    const jet = state.truth.aircraft.find((a) => a.model === 'F-100D');
+    if (jet === undefined) return;
+    runNight(state, 1, [{ kind: 'aircraftOrder', tick: 0, aircraftId: jet.id, order: { kind: 'Illuminate', center: outpost, radius: 500, untilTick: 900 } }]);
+    expect(jet.status).toBe('ready');
+  });
+
+  it('has platoons fire illumination over the enemy they know of in the dark', () => {
+    const state = createInitialState(night, 3);
+    runNight(state, 3600);
+    const fired = Object.values(state.truth.platoons).some((platoon) => (platoon.illuminationFired ?? 0) > 0);
+    expect(fired).toBe(true);
+  });
+
+  it('sees less of a unit at night than by day, unless it is firing', () => {
+    const dark = createInitialState(night, 3);
+    const light = createInitialState(scenario, 3);
+    const enemy = (state: SimState) => state.truth.units.find((u) => u.side === 'enemy') as GroundUnit;
+    expect(sightOn(light.truth, enemy(light), 0)).toBe(1);
+    expect(sightOn(dark.truth, enemy(dark), 0)).toBeLessThan(0.5);
+    enemy(dark).lastFiredAtTick = 0;
+    expect(sightOn(dark.truth, enemy(dark), 0)).toBeGreaterThanOrEqual(0.6);
   });
 });

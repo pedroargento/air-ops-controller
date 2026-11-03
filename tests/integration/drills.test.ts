@@ -116,17 +116,28 @@ describe('choosing a drill', () => {
     expect(decidePlatoon(self(), told(seen(500, 0, 'C-1', 150, 51)), 100, long).drill?.kind).toBe('attack');
   });
 
-  it('holds short and asks for air when it can call Air Ops, once', () => {
+  it('holds short for air against a strong position it can call air on, once', () => {
     const patient = { ...column, drills: [...column.drills, 'waitForAir', 'pushThrough'] } as const;
-    expect(started(self({ doctrine: patient, canCallAir: true }), told(seen(500)))).toBe('waitForAir');
-    expect(started(self({ doctrine: patient }), told(seen(500)))).toBe('attack');
+    const strong = seen(500, 0, 'C-1', 150, 51);
+    expect(started(self({ doctrine: patient, canCallAir: true }), told(strong))).toBe('waitForAir');
+    expect(started(self({ doctrine: patient }), told(strong))).toBe('bypass');
     const asked = [{ center: { x: 500, y: 0 }, tick: 50, askedAir: true }];
-    expect(started(self({ doctrine: patient, canCallAir: true, handled: asked }), told(seen(500)))).toBe('attack');
+    expect(started(self({ doctrine: patient, canCallAir: true, handled: asked }), told(strong))).toBe('bypass');
+  });
+
+  it('weighs waiting: not for a weak position, without time, after a recent no, or in the enemy\'s sight', () => {
+    const patient = { ...column, drills: [...column.drills, 'waitForAir', 'pushThrough'] } as const;
+    const strong = seen(500, 0, 'C-1', 150, 51);
+    expect(started(self({ doctrine: patient, canCallAir: true }), told(seen(500)))).toBe('attack');
+    expect(started(self({ doctrine: patient, canCallAir: true, secondsLeft: 3100 }), told(strong))).not.toBe('waitForAir');
+    expect(started(self({ doctrine: patient, canCallAir: true }), { ...told(strong), supportRefusedAt: 50 })).not.toBe('waitForAir');
+    const seenFromThere: DrillMap = { ...map, sees: () => true };
+    expect(decidePlatoon(self({ doctrine: patient, canCallAir: true }), told(strong), 100, seenFromThere).drill?.kind).not.toBe('waitForAir');
   });
 
   it('pushes through once air arrives, and gives up waiting when refused', () => {
     const patient = { ...column, drills: [...column.drills, 'waitForAir', 'pushThrough'] } as const;
-    const waiting = decidePlatoon(self({ doctrine: patient, canCallAir: true }), told(seen(500)), 100, map).drill;
+    const waiting = decidePlatoon(self({ doctrine: patient, canCallAir: true }), told(seen(500, 0, 'C-1', 150, 51)), 100, map).drill;
     const arrived = { ...told(seen(500)), expectedSupport: { aircraftId: 'CAS-1', etaAt: 150, lapsesAt: 400 } };
     expect(decidePlatoon(self({ doctrine: patient, drill: waiting }), arrived, 160, map).drill?.kind).toBe('pushThrough');
     const lapsed = { ...told(seen(500)), expectedSupport: { aircraftId: 'CAS-1', etaAt: 10, lapsesAt: 50 } };

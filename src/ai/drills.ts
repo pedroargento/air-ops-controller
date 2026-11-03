@@ -197,6 +197,22 @@ function pushThroughIfSuppressed(self: UnitSelf, knowledge: UnitKnowledge, targe
   return suppressedNow(self, knowledge, target, tick) ? drill(self, 'pushThrough', target, tick, map, true) : null;
 }
 
+/**
+ * Whether holding short for air is worth it, from what the platoon knows (§4.0.2). It waits
+ * once per position, and only for a position too strong to take cheaply, with time to spare,
+ * when air operations hasn't lately said no, and where the enemy can't see it waiting.
+ * Otherwise it deals with the position itself.
+ */
+function worthWaiting(self: UnitSelf, knowledge: UnitKnowledge, target: Vec2, ratio: number, direct: number, tick: number, map: DrillMap): boolean {
+  const { doctrine } = self;
+  if (!self.canCallAir || !knows(self, 'waitForAir') || askedAirAbout(self, target)) return false;
+  if (ratio < doctrine.waitForAirStrengthRatio) return false;
+  if (self.secondsLeft < direct / doctrine.speedMps + doctrine.airWaitSeconds + doctrine.drillSeconds) return false;
+  const refused = knowledge.supportRefusedAt;
+  if (refused !== null && tick - refused < doctrine.airRefusedMemorySeconds) return false;
+  return !map.sees(target, self.position);
+}
+
 /** What to do about a position on the route (§4.0.2). */
 function answerPosition(
   self: UnitSelf,
@@ -211,13 +227,11 @@ function answerPosition(
   const pushed = pushThroughIfSuppressed(self, knowledge, target, tick, map);
   if (pushed !== null) return pushed;
   const destination = destinationOf(self.objective);
-  // A platoon that can call air holds short and asks for guns on the position, once.
-  const canWait = self.canCallAir && !askedAirAbout(self, target);
-  if (canWait && knows(self, 'waitForAir')) return drill(self, 'waitForAir', target, tick, map, true);
-  if (comingTowards(self, threat) && knows(self, 'hastyAmbush')) return drill(self, 'hastyAmbush', target, tick, map, true);
-
   const ratio = strengthAround(self, known, target) / Math.max(1, self.platoonPersonnel);
   const direct = destination === null ? 0 : map.routeMeters(self.position, destination, null);
+  if (worthWaiting(self, knowledge, target, ratio, direct, tick, map)) return drill(self, 'waitForAir', target, tick, map, true);
+  if (comingTowards(self, threat) && knows(self, 'hastyAmbush')) return drill(self, 'hastyAmbush', target, tick, map, true);
+
   const pressed = self.secondsLeft < direct / doctrine.speedMps + doctrine.drillSeconds;
   if ((ratio > doctrine.attackStrengthRatio || pressed) && destination !== null && knows(self, 'bypass')) {
     const avoid = { center: target, radius: doctrine.flankMeters * 0.75 };

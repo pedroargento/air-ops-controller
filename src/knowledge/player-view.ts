@@ -115,6 +115,8 @@ export type PlayerView = Readonly<{
   strikes: readonly StrikeEffect[];
   groundFire: readonly GroundFireEffect[];
   archivedContacts: number;
+  /** Flares the controller knows of, while they burn. */
+  flares: readonly Readonly<{ position: Vec2; radiusMeters: number; light: number; ageSeconds: number; burnSeconds: number; by: string }>[];
   /** Smoke marks crews have reported, while they last. */
   smoke: readonly Readonly<{ position: Vec2; ageSeconds: number }>[];
   /** Aircrews' strike assessments. */
@@ -369,6 +371,14 @@ export function project(
     groundFire: mergeGroundFire(player.groundFire, tick, display),
     archivedContacts: Object.keys(player.contacts).length - held.length,
     smoke: player.smoke.map((mark) => ({ position: mark.position, ageSeconds: tick - mark.placedAt })),
+    flares: player.flares.map((flare) => ({
+      position: flare.position,
+      radiusMeters: flare.radiusMeters,
+      light: flare.light,
+      ageSeconds: tick - flare.ignitedAt,
+      burnSeconds: flare.burnSeconds,
+      by: flare.by,
+    })),
     estimatedLosses: player.estimatedLosses,
     groundClaims: contacts.reduce((sum, marker) => {
       const reports = (player.tracks[marker.key]?.reports ?? [marker.key]).flatMap((key) => {

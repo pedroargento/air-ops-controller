@@ -6,7 +6,7 @@ import type { Scenario } from '../scenario/load';
 import { createAircraft } from './air';
 import { createPlatoon, createSquads } from './platoon';
 import { createRadioState, type RadioState } from './radio';
-import { generateWeather } from './weather';
+import { generateWeather, skyOf } from './weather';
 
 export type SimState = {
   tick: number;
@@ -38,7 +38,8 @@ export function createInitialState(scenario: Scenario, seed: number): SimState {
       aircraft: createAircraft(scenario),
       tracks: {},
       nextContactNumber: 0,
-      weather: generateWeather(file.weather, terrain.width * terrain.cellSize, file.durationSeconds, rng),
+      weather: generateWeather(file.weather, terrain.width * terrain.cellSize, file.durationSeconds, rng, skyOf(file)),
+      flares: [],
       captureProgressSeconds: 0,
       locatedShare: null,
       friendlyFireCasualties: 0,

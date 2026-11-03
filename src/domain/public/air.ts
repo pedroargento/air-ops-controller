@@ -16,12 +16,14 @@ export type AircraftStatus = 'ready' | 'takeoff' | 'enroute' | 'onStation' | 're
  *   The center follows the platoon.
  * - Suppress: gun runs on the area until `untilTick`, with no target needed.
  * - Strike: one heavy pass on the center, then watch it.
+ * - Illuminate: keep a flare burning over the center until `untilTick`, then watch it (§8.7).
  */
 export type AircraftOrder =
   | Readonly<{ kind: 'Watch'; center: Vec2; radius: number }>
   | Readonly<{ kind: 'Cover'; unitId: string; center: Vec2; radius: number }>
   | Readonly<{ kind: 'Suppress'; center: Vec2; radius: number; untilTick: number }>
   | Readonly<{ kind: 'Strike'; center: Vec2; radius: number }>
+  | Readonly<{ kind: 'Illuminate'; center: Vec2; radius: number; untilTick: number }>
   | Readonly<{ kind: 'ReturnToBase' }>;
 
 export type TaskOrder = Exclude<AircraftOrder, Readonly<{ kind: 'ReturnToBase' }>>;
@@ -155,6 +157,7 @@ export type AircraftTelemetryEntry = Readonly<{
   speedMps: number;
   /** Time still to take off: the whole takeoff while ready, what's left during it, then none. */
   takeoffSeconds: number;
+  flares: number;
 }>;
 
 export type AircraftTelemetry = readonly AircraftTelemetryEntry[];

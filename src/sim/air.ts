@@ -17,7 +17,7 @@ import { cellAt, elevationAt, type TerrainGrid } from '../domain/public/terrain'
 import { airSightClear, airVisibilityMeters, rangeInVisibility, weatherAt, type Weather } from '../domain/public/weather';
 import type { Aircraft, GroundUnit, WorldTruth } from '../domain/truth/world';
 import { recordStrike, updateContact, updateFriendly, type PlayerKnowledge, type SensorCoverage } from '../knowledge/player-knowledge';
-import { observeTarget, type Observer } from '../perception/observe';
+import { lightOn, observeTarget, sightOn, type Observer } from '../perception/observe';
 import { nextBinomial, nextBool, nextFloat, nextGaussian, type RngState } from '../rng/streams';
 import type { Scenario } from '../scenario/load';
 import type { AircraftModelConfig, AirConfig, CombatConfig, DisplayConfig, PerceptionConfig } from '../scenario/schema';
@@ -49,6 +49,7 @@ export function createAircraft(scenario: Scenario): Aircraft[] {
         fuelSeconds: type.fuelSeconds,
         ammunition: entry.ammunition ?? type.ammunition,
         bombLoad: entry.ammunition ?? type.ammunition,
+        flares: type.flares,
         gunBursts: type.gunBursts,
         nextPassTick: 0,
         risk: 'normal',
@@ -91,6 +92,7 @@ const FIRE_ORDERS: ReadonlySet<AircraftOrder['kind']> = new Set(['Suppress', 'St
 export function applyOrder(aircraft: Aircraft, order: AircraftOrder, air: AirConfig): boolean {
   if (aircraft.status === 'turnaround' || aircraft.damaged) return false;
   if (FIRE_ORDERS.has(order.kind) && aircraft.aircraftType !== 'cas') return false;
+  if (order.kind === 'Illuminate' && aircraft.flares <= 0) return false;
   if (order.kind === 'ReturnToBase') {
     if (aircraft.status === 'ready') return false;
     aircraft.status = aircraft.status === 'takeoff' ? 'ready' : 'returning';
@@ -325,6 +327,7 @@ function flyAircraft(aircraft: Aircraft, air: AirConfig): void {
         aircraft.damaged = false;
         aircraft.fuelSeconds = type.fuelSeconds;
         aircraft.ammunition = aircraft.bombLoad;
+        aircraft.flares = type.flares;
         aircraft.gunBursts = type.gunBursts;
         aircraft.calls = [];
       }
@@ -401,6 +404,7 @@ function aircraftObserver(
   weather: Weather,
   boost: (t: GroundUnit) => number,
   tick: number,
+  sight: (t: GroundUnit) => number,
 ): Observer {
   const type = typeOf(aircraft, air);
   return {
@@ -409,12 +413,13 @@ function aircraftObserver(
     position: aircraft.position,
     medium: 'air',
     sees: (target) => airSightClear(terrain, weather, target.position, aircraft.position, aircraft.altitudeMeters, tick),
+    // At night a crew sees little but muzzle flashes and whatever a flare lights up.
     rangeTo: (target) =>
       rangeInVisibility(
         type.sensorRadiusMeters,
         airVisibilityMeters(weather, target.position, aircraft.position, aircraft.altitudeMeters, tick),
         weather.clearVisibilityMeters,
-      ),
+      ) * sight(target),
     quality: type.observerQuality * altitudeQuality(aircraft, air, terrain),
     rangeMeters: type.sensorRadiusMeters,
     suppression: 0,
@@ -462,7 +467,7 @@ export function updateAircraftPerception(
     const cue = cuedBoost(aircraft, player, air, tick);
     const nearSmoke = (target: GroundUnit): boolean => smokeNear(truth, target.position, air.markRadiusMeters);
     const observer = {
-      ...aircraftObserver(aircraft, air, terrain, truth.weather, (target: GroundUnit) => cue(target) * (nearSmoke(target) ? air.markDetectionBoost : 1), tick),
+      ...aircraftObserver(aircraft, air, terrain, truth.weather, (target: GroundUnit) => cue(target) * (nearSmoke(target) ? air.markDetectionBoost : 1), tick, (target: GroundUnit) => sightOn(truth, target, tick)),
       identifyBoost: (target: GroundUnit) => (nearSmoke(target) ? air.markIdentifyBoost : 1),
     };
     seeSmoke(truth, player, aircraft, air, tick);
@@ -508,6 +513,11 @@ function seeSmoke(truth: WorldTruth, player: PlayerKnowledge, aircraft: Aircraft
     const known = player.smoke.find((seen) => seen.placedAt === mark.placedAt && seen.platoonId === mark.platoonId);
     if (known === undefined) player.smoke.push({ position: mark.position, placedAt: mark.placedAt, platoonId: mark.platoonId, seenAt: tick });
   }
+}
+
+/** Friends are harder to tell from enemies in the dark, so danger close reaches further there. */
+function darkMargin(truth: WorldTruth, air: AirConfig, point: Vec2, tick: number): number {
+  return lightOn(truth, point, tick) < air.nightAttackLight ? air.darkDangerCloseFactor : 1;
 }
 
 /** Friendly units on the controller's map too near this point, who haven't been cleared. */
@@ -691,10 +701,12 @@ export function resolveCas(
     if (!seeksTargets(aircraft)) continue;
     if ((aircraft.ammunition <= 0 && aircraft.gunBursts <= 0) || tick < aircraft.nextPassTick) continue;
     const { center, radius } = order;
-    const candidates = casCandidates(aircraft, center, radius, engageMemorySeconds, tick);
+    // In the dark a crew attacks only what it can see lit, or what is firing.
+    const lit = (contact: ContactEstimate): boolean => contact.activity === 'engaging' || lightOn(truth, contact.position.center, tick) >= air.nightAttackLight;
+    const candidates = casCandidates(aircraft, center, radius, engageMemorySeconds, tick).filter(lit);
     if (candidates.length === 0) continue;
     const near = (contact: ContactEstimate, weapon: StrikeWeapon): boolean =>
-      dangerClose(player, contact.position.center, weapon === 'guns' ? air.gunDangerCloseMeters : air.dangerCloseMeters, tick);
+      dangerClose(player, contact.position.center, darkMargin(truth, air, contact.position.center, tick) * (weapon === 'guns' ? air.gunDangerCloseMeters : air.dangerCloseMeters), tick);
     const attack = chooseAttack(crewSelf(aircraft, player, air, combat, tick), candidates, near);
     if (attack === null) {
       const [nearest] = candidates;
@@ -891,6 +903,7 @@ export function aircraftTelemetry(truth: WorldTruth, air: AirConfig, tick = 0): 
       turnaroundSeconds: aircraft.damaged ? type.repairSeconds : type.turnaroundSeconds,
       speedMps: type.speedMps,
       takeoffSeconds: aircraft.status === 'ready' ? type.takeoffSeconds : aircraft.status === 'takeoff' ? aircraft.timerSeconds : 0,
+      flares: aircraft.flares,
     };
   });
 }

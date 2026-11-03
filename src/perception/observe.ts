@@ -11,7 +11,8 @@ import type { WeaponType } from '../domain/public/equipment';
 import { distance, type Vec2 } from '../domain/public/geometry';
 import { emptyKnowledge, type ContactId, type Side, type UnitKnowledge } from '../domain/public/ground';
 import { cellAt, hasGroundLos, type TerrainGrid } from '../domain/public/terrain';
-import { groundVisibilityMeters, rangeInVisibility, type Weather } from '../domain/public/weather';
+import { groundVisibilityMeters, rangeInVisibility, weatherAt } from '../domain/public/weather';
+import { lightAt, sightFactor } from '../domain/public/light';
 import type { GroundUnit, Track, WorldTruth } from '../domain/truth/world';
 import { nextBinomial, nextBool, nextFloat, nextGaussian, type RngState } from '../rng/streams';
 import type { PerceptionConfig } from '../scenario/schema';
@@ -42,6 +43,21 @@ export type Observer = Readonly<{
 function concealmentAt(observer: Observer, target: GroundUnit, terrain: TerrainGrid): number {
   const cell = cellAt(terrain, target.position);
   return observer.medium === 'air' ? cell.airConcealment : cell.groundConcealment;
+}
+
+/** Firing now, so its muzzle flashes give it away in the dark. */
+export function isFiring(unit: GroundUnit, tick: number): boolean {
+  return unit.lastFiredAtTick !== null && tick - unit.lastFiredAtTick <= SCAN_TICKS;
+}
+
+/** The light falling on a place now: the sky through its cloud, or a flare. */
+export function lightOn(truth: WorldTruth, point: Vec2, tick: number): number {
+  return lightAt(truth.weather.sky, truth.flares, point, tick, weatherAt(truth.weather, point, tick).rain);
+}
+
+/** How far sight reaches to a unit, as a share of daylight's, from the light on it. */
+export function sightOn(truth: WorldTruth, target: GroundUnit, tick: number): number {
+  return sightFactor(truth.weather.sky, lightOn(truth, target.position, tick), isFiring(target, tick));
 }
 
 function activityOf(target: GroundUnit, tick: number): ContactActivity {
@@ -368,7 +384,7 @@ function reportCue(belief: UnitKnowledge, memory: number, config: PerceptionConf
 
 function groundObserver(
   unit: GroundUnit,
-  weather: Weather,
+  truth: WorldTruth,
   detectionBoost: (target: GroundUnit) => number,
   tick: number,
   claimWindowSeconds: number,
@@ -381,12 +397,13 @@ function groundObserver(
     medium: 'ground',
     sees: () => true,
     quality: unit.doctrine.observerQuality,
+    // Darkness works like poor visibility: a shorter, worse look, unless the target is firing.
     rangeTo: (target) =>
       rangeInVisibility(
         unit.doctrine.detectRangeMeters,
-        groundVisibilityMeters(weather, unit.position, target.position, tick),
-        weather.clearVisibilityMeters,
-      ),
+        groundVisibilityMeters(truth.weather, unit.position, target.position, tick),
+        truth.weather.clearVisibilityMeters,
+      ) * sightOn(truth, target, tick),
     rangeMeters: unit.doctrine.detectRangeMeters,
     suppression: unit.suppression,
     detectionBoost,
@@ -417,7 +434,7 @@ export function updatePerception(
       if (dx * dx + dy * dy > reach * reach) continue;
       const cue = cues.get(unit.platoonId) ?? reportCue(belief, unit.doctrine.reportMemorySeconds, config, tick);
       cues.set(unit.platoonId, cue);
-      observer ??= groundObserver(unit, truth.weather, cue, tick, config.claimWindowSeconds);
+      observer ??= groundObserver(unit, truth, cue, tick, config.claimWindowSeconds);
       if (target.personnel <= 0) {
         const claimed = claimTheLast(truth, observer, target, terrain, rng, config);
         if (claimed !== null) belief.contacts[claimed.contactId] = claimed;

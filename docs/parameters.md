@@ -56,6 +56,12 @@ rules or the schema.
 | `combat.minRangeFactor` | `0.25` | Effectiveness at maximum range, relative to point blank. |
 | `combat.fireSpreadMeters` | `120` | Fire at a point hits whoever is near it, falling off over this distance. |
 | `combat.suppressionDecayPerUpdate` | `0.08` | Share of suppression lost every 5-second update. |
+| `combat.illuminationBelowLight` | `0.2` | A platoon fires illumination only where the light is below this. |
+| `combat.illuminationRangeMeters` | `800` | Farthest a platoon fires an illumination round. |
+| `combat.illuminationIntervalSeconds` | `240` | Shortest gap between one platoon's illumination rounds. |
+| `combat.illuminationBurnSeconds` | `60` | How long an illumination round burns. |
+| `combat.illuminationRadiusMeters` | `450` | How far an illumination round lights the ground. |
+| `combat.illuminationLight` | `0.6` | Light under an illumination round, as a share of daylight. |
 | `combat.moraleLossPerCasualtyFraction` | `1` | Morale lost per share of the platoon's strength lost. |
 | `combat.moraleLossUnderFirePerUpdate` | `0.004` | Morale lost each update while under fire, down to the doctrine's floor. |
 | `combat.moraleLossDeterioratingPerUpdate` | `0.002` | Extra loss each update when isolated or low on ammunition, below the floor. |
@@ -193,6 +199,7 @@ rules or the schema.
 | `air.models.O-1E.passIntervalSeconds` | `120` | Shortest time between bombing passes. |
 | `air.models.O-1E.casualtyFractionPerPass` | `0` | Share of men a bombing pass kills at full accuracy. |
 | `air.models.O-1E.gunBursts` | `0` | Gun runs it carries. |
+| `air.models.O-1E.flares` | `4` | Parachute flares it carries for lighting an area at night. |
 | `air.models.O-1E.gunCasualtyFraction` | `0` | Share of men a gun run kills at full accuracy. |
 | `air.models.O-1E.gunSuppression` | `0` | Suppression from a gun run. |
 | `air.models.O-1E.suppressionPerPass` | `0` | Suppression from a bombing pass. |
@@ -223,6 +230,7 @@ rules or the schema.
 | `air.models.RF-101C.passIntervalSeconds` | `120` | Shortest time between bombing passes. |
 | `air.models.RF-101C.casualtyFractionPerPass` | `0` | Share of men a bombing pass kills at full accuracy. |
 | `air.models.RF-101C.gunBursts` | `0` | Gun runs it carries. |
+| `air.models.RF-101C.flares` | `0` | Parachute flares it carries for lighting an area at night. |
 | `air.models.RF-101C.gunCasualtyFraction` | `0` | Share of men a gun run kills at full accuracy. |
 | `air.models.RF-101C.gunSuppression` | `0` | Suppression from a gun run. |
 | `air.models.RF-101C.suppressionPerPass` | `0` | Suppression from a bombing pass. |
@@ -253,6 +261,7 @@ rules or the schema.
 | `air.models.A-1E.passIntervalSeconds` | `120` | Shortest time between bombing passes. |
 | `air.models.A-1E.casualtyFractionPerPass` | `0.25` | Share of men a bombing pass kills at full accuracy. |
 | `air.models.A-1E.gunBursts` | `20` | Gun runs it carries. |
+| `air.models.A-1E.flares` | `4` | Parachute flares it carries for lighting an area at night. |
 | `air.models.A-1E.gunCasualtyFraction` | `0.12` | Share of men a gun run kills at full accuracy. |
 | `air.models.A-1E.gunSuppression` | `0.6` | Suppression from a gun run. |
 | `air.models.A-1E.suppressionPerPass` | `0.5` | Suppression from a bombing pass. |
@@ -283,6 +292,7 @@ rules or the schema.
 | `air.models.F-100D.passIntervalSeconds` | `90` | Shortest time between bombing passes. |
 | `air.models.F-100D.casualtyFractionPerPass` | `0.4` | Share of men a bombing pass kills at full accuracy. |
 | `air.models.F-100D.gunBursts` | `16` | Gun runs it carries. |
+| `air.models.F-100D.flares` | `0` | Parachute flares it carries for lighting an area at night. |
 | `air.models.F-100D.gunCasualtyFraction` | `0.12` | Share of men a gun run kills at full accuracy. |
 | `air.models.F-100D.gunSuppression` | `0.6` | Suppression from a gun run. |
 | `air.models.F-100D.suppressionPerPass` | `0.7` | Suppression from a bombing pass. |
@@ -313,6 +323,7 @@ rules or the schema.
 | `air.models.UH-1B.passIntervalSeconds` | `60` | Shortest time between bombing passes. |
 | `air.models.UH-1B.casualtyFractionPerPass` | `0.1` | Share of men a bombing pass kills at full accuracy. |
 | `air.models.UH-1B.gunBursts` | `30` | Gun runs it carries. |
+| `air.models.UH-1B.flares` | `6` | Parachute flares it carries for lighting an area at night. |
 | `air.models.UH-1B.gunCasualtyFraction` | `0.08` | Share of men a gun run kills at full accuracy. |
 | `air.models.UH-1B.gunSuppression` | `0.5` | Suppression from a gun run. |
 | `air.models.UH-1B.suppressionPerPass` | `0.45` | Suppression from a bombing pass. |
@@ -343,6 +354,7 @@ rules or the schema.
 | `air.models.AH-1G.passIntervalSeconds` | `45` | Shortest time between bombing passes. |
 | `air.models.AH-1G.casualtyFractionPerPass` | `0.14` | Share of men a bombing pass kills at full accuracy. |
 | `air.models.AH-1G.gunBursts` | `30` | Gun runs it carries. |
+| `air.models.AH-1G.flares` | `0` | Parachute flares it carries for lighting an area at night. |
 | `air.models.AH-1G.gunCasualtyFraction` | `0.1` | Share of men a gun run kills at full accuracy. |
 | `air.models.AH-1G.gunSuppression` | `0.55` | Suppression from a gun run. |
 | `air.models.AH-1G.suppressionPerPass` | `0.5` | Suppression from a bombing pass. |
@@ -373,6 +385,7 @@ rules or the schema.
 | `air.models.OH-6A.passIntervalSeconds` | `120` | Shortest time between bombing passes. |
 | `air.models.OH-6A.casualtyFractionPerPass` | `0` | Share of men a bombing pass kills at full accuracy. |
 | `air.models.OH-6A.gunBursts` | `0` | Gun runs it carries. |
+| `air.models.OH-6A.flares` | `0` | Parachute flares it carries for lighting an area at night. |
 | `air.models.OH-6A.gunCasualtyFraction` | `0` | Share of men a gun run kills at full accuracy. |
 | `air.models.OH-6A.gunSuppression` | `0` | Suppression from a gun run. |
 | `air.models.OH-6A.suppressionPerPass` | `0` | Suppression from a bombing pass. |
@@ -399,6 +412,9 @@ rules or the schema.
 | `air.cueRadiusMeters` | `200` | Recon cues CAS to contacts this close. |
 | `air.cueMaxAgeSeconds` | `180` | Cues this old don't help. |
 | `air.cueDetectionBoost` | `3` | Spotting multiplier from a cue. |
+| `air.flareBurnSeconds` | `180` | How long a parachute flare burns. |
+| `air.flareRadiusMeters` | `900` | How far a flare lights the ground around it. |
+| `air.flareLight` | `0.7` | Light under a flare, as a share of daylight. |
 | `air.markSeconds` | `120` | How long a smoke mark lasts. |
 | `air.markIntervalSeconds` | `180` | Shortest gap between one platoon's marks. |
 | `air.markErrorMeters` | `30` | How far smoke typically lands from where the platoon aimed it. |
@@ -436,6 +452,8 @@ rules or the schema.
 | `air.suppressSpreadShare` | `0.5` | How far from the center of a Suppress area the crew walks its fire, as a share of the area's radius. |
 | `air.coverAheadMeters` | `400` | How far ahead of a covered platoon the aircraft watches, along its reported heading. |
 | `air.jokerSeconds` | `600` | A crew calls JOKER when it has this much time left on station before it must head home. |
+| `air.nightAttackLight` | `0.3` | Below this light a crew attacks only targets that are firing. |
+| `air.darkDangerCloseFactor` | `1.5` | Danger close distances are this many times wider where it is dark. |
 
 ## weather
 
@@ -459,6 +477,13 @@ rules or the schema.
 | `weather.heavyRainVisibilityMeters` | `300` | Visibility in the heaviest rain. |
 | `weather.cloudFadeMeters` | `200` | Height over which cloud fades in below its base. |
 | `weather.rainMissMeters` | `80` | Extra strike error in the heaviest rain. |
+| `weather.starlight` | `0.03` | Light on a moonless night, as a share of daylight's usefulness for seeing and aiming. |
+| `weather.fullMoonLight` | `0.25` | Extra light from a full moon that is up. |
+| `weather.twilightSeconds` | `1800` | How long twilight lasts either side of sunrise and sunset. |
+| `weather.cloudDimming` | `0.7` | Share of the night's light heavy rain and its cloud take away. |
+| `weather.nightSightFloor` | `0.2` | Least sight reach in the dark, as a share of daylight's: movement seen by starlight. |
+| `weather.flashSight` | `0.6` | Sight reach to a unit that is firing, however dark: its muzzle flashes give it away. |
+| `weather.nightAimFloor` | `0.3` | Least effect of fire on men in the dark, as a share of daylight's. |
 | `weather.forecastIntervalSeconds` | `1200` | Seconds between forecasts. |
 | `weather.forecastWindErrorMps` | `0.35` | Forecast error in storm movement. |
 | `weather.forecastPositionErrorMeters` | `120` | Forecast error in storm position. |
@@ -471,6 +496,8 @@ rules or the schema.
 |---|---|---|
 | `doctrines.garrison.drills` | `[]` | Battle drills this doctrine knows (§4.0.2). |
 | `doctrines.garrison.airWaitSeconds` | `120` | How long a platoon holds for air before deciding without it. |
+| `doctrines.garrison.waitForAirStrengthRatio` | `0.5` | Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself. |
+| `doctrines.garrison.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
 | `doctrines.garrison.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
 | `doctrines.garrison.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
 | `doctrines.garrison.attackStrengthRatio` | `1.5` | Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can. |
@@ -491,6 +518,7 @@ rules or the schema.
 | `doctrines.garrison.reportMemorySeconds` | `300` | How long a received report stays in the unit's picture. |
 | `doctrines.garrison.airCoverSeconds` | `0` | How long a unit takes cover on spotting an enemy aircraft. |
 | `doctrines.garrison.airCoverRepeatSeconds` | `300` | Shortest gap before it takes cover again for aircraft. |
+| `doctrines.garrison.illuminationRounds` | `8` | Illumination rounds it can fire over an enemy at night. |
 | `doctrines.garrison.standoffMeters` | `200` | Distance a cautious unit keeps from an enemy it observes. |
 | `doctrines.garrison.observeBias` | `0.2` | Weight towards observing when it meets an enemy. |
 | `doctrines.garrison.probeBias` | `0` | Weight towards probing. |
@@ -522,6 +550,8 @@ rules or the schema.
 | `doctrines.garrison.headingTowardsCos` | `0.5` | A moving enemy counts as coming towards the platoon within this cosine of its heading. |
 | `doctrines.patrol.drills` | `["nearAmbush","farAmbush","attack","bypass","hastyAmbush","waitForAir","pushThrough"]` | Battle drills this doctrine knows (§4.0.2). |
 | `doctrines.patrol.airWaitSeconds` | `120` | How long a platoon holds for air before deciding without it. |
+| `doctrines.patrol.waitForAirStrengthRatio` | `0.5` | Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself. |
+| `doctrines.patrol.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
 | `doctrines.patrol.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
 | `doctrines.patrol.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
 | `doctrines.patrol.attackStrengthRatio` | `1.5` | Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can. |
@@ -542,6 +572,7 @@ rules or the schema.
 | `doctrines.patrol.reportMemorySeconds` | `900` | How long a received report stays in the unit's picture. |
 | `doctrines.patrol.airCoverSeconds` | `0` | How long a unit takes cover on spotting an enemy aircraft. |
 | `doctrines.patrol.airCoverRepeatSeconds` | `300` | Shortest gap before it takes cover again for aircraft. |
+| `doctrines.patrol.illuminationRounds` | `4` | Illumination rounds it can fire over an enemy at night. |
 | `doctrines.patrol.standoffMeters` | `300` | Distance a cautious unit keeps from an enemy it observes. |
 | `doctrines.patrol.observeBias` | `1` | Weight towards observing when it meets an enemy. |
 | `doctrines.patrol.probeBias` | `0.3` | Weight towards probing. |
@@ -573,6 +604,8 @@ rules or the schema.
 | `doctrines.patrol.headingTowardsCos` | `0.5` | A moving enemy counts as coming towards the platoon within this cosine of its heading. |
 | `doctrines.assault.drills` | `[]` | Battle drills this doctrine knows (§4.0.2). |
 | `doctrines.assault.airWaitSeconds` | `120` | How long a platoon holds for air before deciding without it. |
+| `doctrines.assault.waitForAirStrengthRatio` | `0.5` | Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself. |
+| `doctrines.assault.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
 | `doctrines.assault.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
 | `doctrines.assault.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
 | `doctrines.assault.attackStrengthRatio` | `1.5` | Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can. |
@@ -593,6 +626,7 @@ rules or the schema.
 | `doctrines.assault.reportMemorySeconds` | `300` | How long a received report stays in the unit's picture. |
 | `doctrines.assault.airCoverSeconds` | `30` | How long a unit takes cover on spotting an enemy aircraft. |
 | `doctrines.assault.airCoverRepeatSeconds` | `300` | Shortest gap before it takes cover again for aircraft. |
+| `doctrines.assault.illuminationRounds` | `0` | Illumination rounds it can fire over an enemy at night. |
 | `doctrines.assault.standoffMeters` | `150` | Distance a cautious unit keeps from an enemy it observes. |
 | `doctrines.assault.observeBias` | `0.1` | Weight towards observing when it meets an enemy. |
 | `doctrines.assault.probeBias` | `0.1` | Weight towards probing. |
@@ -624,6 +658,8 @@ rules or the schema.
 | `doctrines.assault.headingTowardsCos` | `0.5` | A moving enemy counts as coming towards the platoon within this cosine of its heading. |
 | `doctrines.harass.drills` | `[]` | Battle drills this doctrine knows (§4.0.2). |
 | `doctrines.harass.airWaitSeconds` | `120` | How long a platoon holds for air before deciding without it. |
+| `doctrines.harass.waitForAirStrengthRatio` | `0.5` | Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself. |
+| `doctrines.harass.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
 | `doctrines.harass.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
 | `doctrines.harass.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
 | `doctrines.harass.attackStrengthRatio` | `1.5` | Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can. |
@@ -644,6 +680,7 @@ rules or the schema.
 | `doctrines.harass.reportMemorySeconds` | `300` | How long a received report stays in the unit's picture. |
 | `doctrines.harass.airCoverSeconds` | `30` | How long a unit takes cover on spotting an enemy aircraft. |
 | `doctrines.harass.airCoverRepeatSeconds` | `300` | Shortest gap before it takes cover again for aircraft. |
+| `doctrines.harass.illuminationRounds` | `0` | Illumination rounds it can fire over an enemy at night. |
 | `doctrines.harass.standoffMeters` | `250` | Distance a cautious unit keeps from an enemy it observes. |
 | `doctrines.harass.observeBias` | `0.3` | Weight towards observing when it meets an enemy. |
 | `doctrines.harass.probeBias` | `0.2` | Weight towards probing. |
@@ -675,6 +712,8 @@ rules or the schema.
 | `doctrines.harass.headingTowardsCos` | `0.5` | A moving enemy counts as coming towards the platoon within this cosine of its heading. |
 | `doctrines.recon.drills` | `[]` | Battle drills this doctrine knows (§4.0.2). |
 | `doctrines.recon.airWaitSeconds` | `120` | How long a platoon holds for air before deciding without it. |
+| `doctrines.recon.waitForAirStrengthRatio` | `0.5` | Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself. |
+| `doctrines.recon.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
 | `doctrines.recon.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
 | `doctrines.recon.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
 | `doctrines.recon.attackStrengthRatio` | `1.5` | Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can. |
@@ -695,6 +734,7 @@ rules or the schema.
 | `doctrines.recon.reportMemorySeconds` | `300` | How long a received report stays in the unit's picture. |
 | `doctrines.recon.airCoverSeconds` | `0` | How long a unit takes cover on spotting an enemy aircraft. |
 | `doctrines.recon.airCoverRepeatSeconds` | `300` | Shortest gap before it takes cover again for aircraft. |
+| `doctrines.recon.illuminationRounds` | `0` | Illumination rounds it can fire over an enemy at night. |
 | `doctrines.recon.standoffMeters` | `300` | Distance a cautious unit keeps from an enemy it observes. |
 | `doctrines.recon.observeBias` | `0.8` | Weight towards observing when it meets an enemy. |
 | `doctrines.recon.probeBias` | `1.5` | Weight towards probing. |
@@ -726,6 +766,8 @@ rules or the schema.
 | `doctrines.recon.headingTowardsCos` | `0.5` | A moving enemy counts as coming towards the platoon within this cosine of its heading. |
 | `doctrines.antiair.drills` | `[]` | Battle drills this doctrine knows (§4.0.2). |
 | `doctrines.antiair.airWaitSeconds` | `120` | How long a platoon holds for air before deciding without it. |
+| `doctrines.antiair.waitForAirStrengthRatio` | `0.5` | Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself. |
+| `doctrines.antiair.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
 | `doctrines.antiair.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
 | `doctrines.antiair.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
 | `doctrines.antiair.attackStrengthRatio` | `1.5` | Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can. |
@@ -746,6 +788,7 @@ rules or the schema.
 | `doctrines.antiair.reportMemorySeconds` | `300` | How long a received report stays in the unit's picture. |
 | `doctrines.antiair.airCoverSeconds` | `0` | How long a unit takes cover on spotting an enemy aircraft. |
 | `doctrines.antiair.airCoverRepeatSeconds` | `300` | Shortest gap before it takes cover again for aircraft. |
+| `doctrines.antiair.illuminationRounds` | `0` | Illumination rounds it can fire over an enemy at night. |
 | `doctrines.antiair.standoffMeters` | `100` | Distance a cautious unit keeps from an enemy it observes. |
 | `doctrines.antiair.observeBias` | `1` | Weight towards observing when it meets an enemy. |
 | `doctrines.antiair.probeBias` | `0` | Weight towards probing. |
@@ -777,6 +820,8 @@ rules or the schema.
 | `doctrines.antiair.headingTowardsCos` | `0.5` | A moving enemy counts as coming towards the platoon within this cosine of its heading. |
 | `doctrines.column.drills` | `["nearAmbush","farAmbush","attack","bypass","hastyAmbush","pushThrough"]` | Battle drills this doctrine knows (§4.0.2). |
 | `doctrines.column.airWaitSeconds` | `120` | How long a platoon holds for air before deciding without it. |
+| `doctrines.column.waitForAirStrengthRatio` | `0.5` | Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself. |
+| `doctrines.column.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
 | `doctrines.column.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
 | `doctrines.column.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
 | `doctrines.column.attackStrengthRatio` | `1.5` | Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can. |
@@ -797,6 +842,7 @@ rules or the schema.
 | `doctrines.column.reportMemorySeconds` | `900` | How long a received report stays in the unit's picture. |
 | `doctrines.column.airCoverSeconds` | `0` | How long a unit takes cover on spotting an enemy aircraft. |
 | `doctrines.column.airCoverRepeatSeconds` | `300` | Shortest gap before it takes cover again for aircraft. |
+| `doctrines.column.illuminationRounds` | `6` | Illumination rounds it can fire over an enemy at night. |
 | `doctrines.column.standoffMeters` | `100` | Distance a cautious unit keeps from an enemy it observes. |
 | `doctrines.column.observeBias` | `0.3` | Weight towards observing when it meets an enemy. |
 | `doctrines.column.probeBias` | `0.3` | Weight towards probing. |
@@ -828,6 +874,8 @@ rules or the schema.
 | `doctrines.column.headingTowardsCos` | `0.5` | A moving enemy counts as coming towards the platoon within this cosine of its heading. |
 | `doctrines.raider.drills` | `["nearAmbush","farAmbush","attack"]` | Battle drills this doctrine knows (§4.0.2). |
 | `doctrines.raider.airWaitSeconds` | `120` | How long a platoon holds for air before deciding without it. |
+| `doctrines.raider.waitForAirStrengthRatio` | `0.5` | Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself. |
+| `doctrines.raider.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
 | `doctrines.raider.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
 | `doctrines.raider.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
 | `doctrines.raider.attackStrengthRatio` | `1.5` | Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can. |
@@ -848,6 +896,7 @@ rules or the schema.
 | `doctrines.raider.reportMemorySeconds` | `300` | How long a received report stays in the unit's picture. |
 | `doctrines.raider.airCoverSeconds` | `30` | How long a unit takes cover on spotting an enemy aircraft. |
 | `doctrines.raider.airCoverRepeatSeconds` | `300` | Shortest gap before it takes cover again for aircraft. |
+| `doctrines.raider.illuminationRounds` | `0` | Illumination rounds it can fire over an enemy at night. |
 | `doctrines.raider.standoffMeters` | `150` | Distance a cautious unit keeps from an enemy it observes. |
 | `doctrines.raider.observeBias` | `0.1` | Weight towards observing when it meets an enemy. |
 | `doctrines.raider.probeBias` | `0.1` | Weight towards probing. |

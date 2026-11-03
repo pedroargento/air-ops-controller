@@ -133,6 +133,31 @@ const SAMPLES: readonly (readonly [string, readonly (readonly [Sample, string])[
       ],
       [
         (ctx, _w, h) => {
+          ctx.fillStyle = 'rgba(6,12,32,0.5)';
+          ctx.fillRect(0, 0, 110, h);
+          const glow = ctx.createRadialGradient(30, h / 2, 0, 30, h / 2, 22);
+          glow.addColorStop(0, 'rgba(240,236,220,0.9)');
+          glow.addColorStop(1, 'rgba(240,236,220,0)');
+          ctx.fillStyle = glow;
+          ctx.fillRect(8, 0, 44, h);
+          ctx.fillStyle = '#fff3a0';
+          ctx.strokeStyle = '#7a5a00';
+          ctx.beginPath();
+          for (let i = 0; i < 10; i += 1) {
+            const angle = (i * Math.PI) / 5 - Math.PI / 2;
+            const reach = i % 2 === 0 ? 7 : 3;
+            const [x, y] = [30 + Math.cos(angle) * reach, h / 2 + Math.sin(angle) * reach];
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        },
+        'Night darkens the map. A flare you dropped, or one of your platoons fired, lights the ground around it, with the minutes it has left. It lights friends there too.',
+      ],
+      [
+        (ctx, _w, h) => {
           ctx.strokeStyle = '#ffaa3c';
           ctx.fillStyle = 'rgba(255,170,60,0.15)';
           ctx.lineWidth = 2;
@@ -253,6 +278,7 @@ const TASK_WORDS: readonly (readonly [string, string])[] = [
   ['COVER', 'Watching ahead of a friendly platoon, following it.'],
   ['SUPP', 'Suppressing an area with guns until a set time.'],
   ['STRIKE', 'One bomb pass on a place, then watching it.'],
+  ['ILLUM', 'Keeping a flare burning over an area at night. It lights friends there too.'],
   ['RTB', 'Returning to base.'],
 ];
 
@@ -270,7 +296,7 @@ const SHORTCUTS: readonly (readonly [string, string])[] = [
   ['R', 'Send the selected aircraft home.'],
   ['Space', 'Pause or resume.'],
   ['Esc', 'Cancel picking a place, close menus and the key.'],
-  ['Right-click', 'What can be done right there: on a unit, a contact or open ground.'],
+  ['Right-click', 'What can be done right there: on a unit, a contact or open ground. Illuminate with flares is here.'],
   ['T', 'Open the timeline: the battle as you knew it at any earlier moment. The battle pauses while it is open.'],
   ['?', 'Open or close this key.'],
 ];

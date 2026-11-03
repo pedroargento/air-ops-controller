@@ -113,6 +113,7 @@ const TASK_NAMES: Readonly<Record<NonNullable<AircraftTelemetryEntry['order']>['
   Cover: 'covering',
   Suppress: 'suppressing',
   Strike: 'striking',
+  Illuminate: 'illuminating',
   ReturnToBase: 'returning',
 };
 

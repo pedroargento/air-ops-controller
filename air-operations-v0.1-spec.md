@@ -114,7 +114,7 @@ A drill is a platoon's shared answer to a situation, taken from published small-
 | **Attack** | An `AssaultArea` objective, or a known position on the route that the platoon chooses to attack | Nearest give support by fire, the rest flank and assault | The platoon is on the area and its picture shows it clear |
 | **Bypass** | A known position on the route that is too strong or there's no time to attack, or a far ambush from a stronger force | All route around it, returning fire | The position is behind them |
 | **Hasty ambush** | A moving enemy reported coming towards them | All hide and hold fire until close | The enemy is gone |
-| **Wait for air** | A known position on the route, when the platoon can call Air Ops: it asks for guns on the position | All hold | Support arrives, then **push through**, or nobody answers in `airWaitSeconds` |
+| **Wait for air** | A known position on the route, when the platoon can call Air Ops and waiting is worth it: the position is at least `waitForAirStrengthRatio` of the platoon's strength, there's time to wait `airWaitSeconds` and still arrive, air operations hasn't said no in the last `airRefusedMemorySeconds`, and the enemy there can't see it. It asks for guns on the position, once | All hold | Support arrives, then **push through**, or nobody answers in `airWaitSeconds` |
 | **Push through** | Air has arrived over a position the platoon waited at, or air operations has announced that the position ahead, or the one firing on it, is being suppressed now | All move on past it on their route, returning fire. Under an announced suppression they keep going even when fired on from close, rather than assaulting into the fire | The position is behind them |
 
 - **Support by fire:** Not a drill of its own, but the role that pins an enemy while others move. The share of squads comes from doctrine.
@@ -518,6 +518,18 @@ Speeds, endurance and ordnance come from published figures, which often disagree
 - **Cloud:** Visibility starts to fall about 200 m under the cloud base and is zero at it. An aircraft above the local ceiling and the ground can't see each other. Getting below the cloud can mean flying into reach of ground fire.
 - **Forecast:** Forecasts reach the player as CECON updates at a configured interval. Each is a noisy copy of the plan, with small errors in position, ceiling and timing, and a wind error that grows with lead time. So near forecasts are good, far ones are rough, and a new one can change the picture.
 - **Truth boundary:** The real weather is hidden. The player sees forecasts, and telemetry says when an aircraft is above cloud. A forecast covers weather only, and never shows future enemy positions.
+
+### 8.7 Light, night and flares
+
+Darkness is a shortage of light, and light is what lets anyone see and aim. The aircraft are 1960s types, so crews have no night-vision devices.
+
+- **The sky:** Each scenario gives the mission's start time, sunrise, sunset, the moon's illumination and its rise and set. Twilight lasts `twilightSeconds` either side of sunrise and sunset. The light level is 1 by day. At night it is `starlight`, plus `fullMoonLight` times the moon's illumination while the moon is up, and heavy rain with its cloud takes away up to `cloudDimming` of it. The ephemeris comes with the weather forecast, so the controller knows it.
+- **What light changes:** It works through visibility. An observer's reach to a target is cut by the square root of the light on that target, down to a twentieth, and a shorter reach is also a worse look, with poorer spotting, position and identification. A unit that is firing shows its muzzle flashes, so it can be seen at six tenths of daylight reach however dark it is: the reason to hold fire at night. Fire lands worse on men in the dark, down to three tenths of daylight effect, less so on men firing back. All of this applies to both sides.
+- **Crews at night:** Where it is darker than `nightAttackLight`, a strike crew attacks only targets that are firing, and danger close distances are `darkDangerCloseFactor` times wider, because friends are harder to tell from enemies.
+- **Flares from the air:** An aircraft carrying flares (each model has a load, restored at the airbase) can be told to Illuminate an area for some minutes, ordered from the map's right-click menu. The minutes count from when it gets there, as they do for Suppress. It keeps a flare burning over the area, dropping the next as the last one burns low, until the time is up or the flares run out, then watches the area. A flare lights `flareRadiusMeters` around it at `flareLight` for `flareBurnSeconds`: full across the middle, fading to the edge, and dimming as it burns out.
+- **Illumination from the ground:** A platoon whose doctrine carries illumination rounds fires one, when it's dark, over the nearest enemy it knows of within `illuminationRangeMeters` that isn't already lit. These are smaller and shorter than an aircraft's flares, and fired no more often than every `illuminationIntervalSeconds`.
+- **Light is for everyone:** A flare shows whoever is under it, on either side. Lighting up a fight exposes the friends in it as well as the enemy.
+- **On the map:** The map darkens at night, as a reminder that light matters. Flares the controller knows of, those dropped by its aircraft or fired by its platoons, are drawn as light over the area while they burn. The header shows the light state, the moon and first light. No light field is drawn beyond that, because the controller has none.
 
 ## 9. Player interface
 
