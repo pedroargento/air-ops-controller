@@ -65,7 +65,7 @@ export default tseslint.config(
   },
   {
     files: ['src/**/*.ts'],
-    ignores: ['src/ui/**', 'src/debug/**', 'src/cli/**', 'src/main.ts'],
+    ignores: ['src/ui/**', 'src/debug/**', 'src/cli/**', 'src/main.ts', 'src/play.ts'],
     rules: banNondeterminism,
   },
 );

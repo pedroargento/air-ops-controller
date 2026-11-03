@@ -1,6 +1,7 @@
 {
   "id": "find-them",
   "name": "Find Them",
+  "summary": "A force has infiltrated the sector and gone to ground. Two spotter aircraft and one hour to find it.",
   "rules": "standard",
   "durationSeconds": 3600,
   "startTime": "1300",

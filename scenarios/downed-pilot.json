@@ -1,6 +1,7 @@
 {
   "id": "downed-pilot",
   "name": "Downed Pilot (introduction)",
+  "summary": "An introduction to rescue. A pilot is down near dusk with the enemy searching. Keep the pilot hidden, cover the pickup and bring the pilot home.",
   "rules": "standard",
   "durationSeconds": 57600,
   "startTime": "1730",
@@ -231,7 +232,7 @@
     },
     {
       "atSeconds": 30,
-      "text": "The survivor stays silent to save battery. Ask for a position or SITREP when you need one, but every call can give it away to the enemy searching for it."
+      "text": "The survivor stays silent to save battery. Call it from Units on the net when you need its position or a SITREP, but every call can give it away to the enemy searching for it."
     },
     {
       "atSeconds": 600,

@@ -1,6 +1,7 @@
 {
   "id": "overwatch",
   "name": "Overwatch",
+  "summary": "The valley road again, with the enemy dug in on the slopes and your strike aircraft carrying only two bombs. Choose where to use them.",
   "rules": "standard",
   "durationSeconds": 7200,
   "startTime": "0700",

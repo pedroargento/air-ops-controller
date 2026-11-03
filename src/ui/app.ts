@@ -73,6 +73,8 @@ export type UiConfig = Readonly<{
   survivorId: string | null;
   /** Runs the battle fast until first light, stopping for anything that needs the controller. */
   onWaitForLight: () => void;
+  /** Leaves this run for the scenario menu. */
+  onScenarios: () => void;
   /** Where everyone really was, through the run: null until the run is over. */
   truthHistory: () => readonly TruthFrame[] | null;
 }>;
@@ -308,7 +310,7 @@ export class App {
     element('timeline-slider').addEventListener('input', (event) => {
       this.reviewTick = Number((event.target as HTMLInputElement).value);
     });
-    for (const panel of ['controls', 'aircraft', 'selection', 'requests', 'radio-log', 'side-tabs', 'map-layers', 'forecast', 'map-toasts', 'map-menu', 'legend', 'tracks', 'timeline', 'pickup']) {
+    for (const panel of ['controls', 'aircraft', 'selection', 'requests', 'radio-log', 'side-tabs', 'map-layers', 'forecast', 'map-toasts', 'map-menu', 'legend', 'tracks', 'timeline', 'pickup', 'units']) {
       element(panel).addEventListener('click', (event) => this.onPanelClick(event));
       element(panel).addEventListener('change', (event) => this.onPanelChange(event));
     }
@@ -369,6 +371,8 @@ export class App {
     event.preventDefault();
   }
 
+  /** Whether the battle is over, so leaving it loses nothing. */
+  private ended = false;
   private readonly landed = new Set<string>();
 
   /**
@@ -806,6 +810,9 @@ export class App {
       case 'timeline':
         this.toggleTimeline();
         return;
+      case 'scenarios':
+        if (this.view === null || this.ended || window.confirm('Leave this battle for the scenario menu? It will be lost.')) this.config.onScenarios();
+        return;
       case 'wait-light':
         this.config.onWaitForLight();
         return;
@@ -1043,8 +1050,10 @@ export class App {
     }
     this.renderTimeline(view, run);
     this.renderPickup(view);
+    this.ended = run.result !== null;
     this.renderControls(view, run);
     this.renderAircraft(view);
+    this.renderUnits(view);
     this.renderRequests(view);
     this.renderSelection(view);
     this.renderLog(view);
@@ -1085,8 +1094,26 @@ export class App {
         `<span id="status">${escapeHtml(status)}</span>` +
         `<span id="objective">${escapeHtml(this.config.objective)}</span>` +
         `<button data-action="timeline"${this.reviewing ? ' class="active"' : ''} title="Look back through the battle as you knew it (T).">Timeline</button>` +
+        '<button data-action="scenarios" title="Back to the scenario menu.">Scenarios</button>' +
         `<button data-action="export">Export log</button>`,
     );
+  }
+
+  /**
+   * Every unit air operations can talk to, seen or not, so a unit that has never reported, such
+   * as a downed pilot keeping radio silence, can still be called and asked where it is.
+   */
+  private renderUnits(view: PlayerView): void {
+    const chips = this.config.recipients.map((unitId) => {
+      const marker = view.friendlies.find((entry) => entry.unitId === unitId);
+      const selected = this.selection?.kind === 'friendly' && this.selection.id === unitId;
+      const age = marker === undefined ? '<span class="age unknown">no position</span>' : `<span class="age">${duration(marker.ageSeconds)} ago</span>`;
+      return (
+        `<button class="unit-chip${selected ? ' active' : ''}" data-action="select-friendly" data-id="${escapeHtml(unitId)}" title="Select to see it and call it on the radio.">` +
+        `<b>${escapeHtml(displayName(unitId, this.config.names))}</b>${age}</button>`
+      );
+    });
+    morphHtml(element('unit-list'), chips.join(''));
   }
 
   private renderAircraft(view: PlayerView): void {

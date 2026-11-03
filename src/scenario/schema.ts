@@ -441,6 +441,7 @@ export const scenarioFileSchema = z.object({
   id: z.string(),
   name: z.string(),
   durationSeconds: z.number().int().positive(),
+  summary: z.string().default('').describe('A line or two for the scenario menu: the situation as the controller is told it.'),
   startTime: z.string().regex(/^([01]\d|2[0-3])[0-5]\d$/).default('0600').describe('Local time the mission starts, as a 24-hour clock: 0600.'),
   sky: z
     .object({

@@ -106,6 +106,24 @@
       .request-status { margin-top: 4px; color: #9fd3a8; font-size: 11px; }
       .danger-row { margin-top: 3px; }
       button.primary { background: #2b5f8a; border-color: #4a8fd8; color: #fff; }
+      #scenario-menu { position: fixed; inset: 0; z-index: 100; overflow-y: auto; background: #12181c; padding: 32px 16px; }
+      #scenario-menu[hidden] { display: none; }
+      body:not(.playing) > header, body:not(.playing) > main, body:not(.playing) > aside { display: none; }
+      .menu-box { max-width: 760px; margin: 0 auto; }
+      .menu-box h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: 0.04em; }
+      .scenario-list { list-style: none; margin: 16px 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+      .scenario-card { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; background: #1c252b; border: 1px solid #3a4850; border-radius: 4px; color: inherit; font: inherit; cursor: pointer; }
+      .scenario-card:hover, .scenario-card:focus-visible { border-color: #4a8fd8; background: #213039; }
+      .scenario-card.last { border-left: 4px solid #4a8fd8; }
+      .scenario-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 15px; }
+      .scenario-objective { color: #e6d27a; }
+      .scenario-summary { color: #c9d3d8; line-height: 1.4; }
+      .scenario-facts { color: #8a979e; font-size: 12px; }
+      .light-tag { font-size: 12px; padding: 1px 6px; border-radius: 3px; white-space: nowrap; }
+      .light-tag.day { background: #4a4420; color: #ffe27a; }
+      .light-tag.twilight { background: #3a2f45; color: #d6b8ff; }
+      .light-tag.night { background: #1c2340; color: #9fb3ff; }
+      .seed input { background: #1a2024; color: inherit; border: 1px solid #57636a; padding: 3px 6px; }
       .log-row.outgoing { border-left: 3px solid #4a8fd8; background: rgba(74, 143, 216, 0.08); }
       .toast.sent { background: rgba(30, 60, 95, 0.92); border-color: #4a8fd8; }
       .toast.urgent { border-left-color: #ff6b5a; background: rgba(60, 22, 20, 0.94); }
@@ -157,7 +175,7 @@
       #forecast { flex-wrap: wrap; max-width: calc(100% - 240px); }
       #forecast-key { flex-basis: 100%; font-size: 11px; color: #cfd8d3; }
       #forecast-lead { width: 180px; }
-      #sidebar { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); min-height: 0; border-left: 1px solid #333c41; }
+      #sidebar { display: grid; grid-template-rows: auto auto auto auto minmax(0, 1fr); min-height: 0; border-left: 1px solid #333c41; }
       #sidebar > section { padding: 8px 10px; border-bottom: 1px solid #333c41; }
       #altitude-profile { display: block; width: 100%; height: 130px; cursor: ns-resize; }
       #aircraft { max-height: 112px; overflow-y: auto; margin-top: 4px; }
@@ -165,6 +183,11 @@
         display: grid; grid-template-columns: 72px 72px minmax(0, 1fr) 54px 34px 40px; gap: 4px;
         width: 100%; text-align: left; font-size: 11px; padding: 2px 4px; margin-bottom: 2px;
       }
+      #unit-list { display: flex; flex-wrap: wrap; gap: 4px; }
+      .unit-chip { display: inline-flex; gap: 6px; align-items: baseline; padding: 2px 8px; font-size: 12px; }
+      .unit-chip.active { border-color: #4a8fd8; background: #213039; }
+      .unit-chip .age { color: #8a979e; }
+      .unit-chip .age.unknown { color: #ff9a5a; }
       .aircraft-row > * { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
       .buttons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
       .hint { color: #ffd24a; }
@@ -175,6 +198,8 @@
       /* The bottom tabs always keep room: the panels above scroll instead of crowding them out. */
       #selection { max-height: 38vh; overflow-y: auto; }
       #requests { max-height: 26vh; overflow-y: auto; }
+      #units { max-height: 14vh; overflow-y: auto; padding-top: 4px; padding-bottom: 6px; }
+      #units h2 { margin-bottom: 4px; }
       #radio { min-height: 160px; }
       #radio-log { overflow-y: auto; flex: 1; min-height: 0; }
       .log-row { padding: 4px 0; border-bottom: 1px solid #2a3236; font-size: 12px; }
@@ -190,6 +215,7 @@
     </style>
   </head>
   <body>
+    <div id="scenario-menu" hidden></div>
     <header id="controls"></header>
     <main id="map-holder">
       <canvas id="map"></canvas>
@@ -224,6 +250,7 @@
         <canvas id="altitude-profile" height="130"></canvas>
         <div id="aircraft"></div>
       </section>
+      <section id="units"><h2>Units on the net</h2><div id="unit-list"></div></section>
       <section id="requests"></section>
       <section id="selection"></section>
       <section id="radio">

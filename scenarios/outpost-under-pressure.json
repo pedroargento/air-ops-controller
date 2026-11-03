@@ -1,6 +1,7 @@
 {
   "id": "outpost-under-pressure",
   "name": "Outpost Under Pressure",
+  "summary": "Dawn. An outpost expects a heavy attack and must hold for 75 minutes. Answer its calls for air, find the attackers and keep them off the wire.",
   "rules": "standard",
   "durationSeconds": 4500,
   "startTime": "0545",

@@ -1,6 +1,7 @@
 {
   "id": "outpost-night",
   "name": "Outpost at Night",
+  "summary": "The same outpost, attacked in the dark before dawn. Flares light the fight for both sides. The moon sets at 0500 and first light is at 0515.",
   "rules": "standard",
   "durationSeconds": 4500,
   "startTime": "0400",

@@ -1,6 +1,7 @@
 {
   "id": "valley-road",
   "name": "Valley Road",
+  "summary": "A column drives north up a valley road where the enemy is expected. Scout ahead of it and support it to the north end.",
   "rules": "standard",
   "durationSeconds": 7200,
   "startTime": "0700",

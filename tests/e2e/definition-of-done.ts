@@ -7,6 +7,7 @@ import { loadScenarioFile } from '../../src/cli/load-scenario';
 import { runReplay } from '../../src/cli/replay';
 import type { CommandLog } from '../../src/game/session';
 import { reportLevel } from '../../src/domain/public/radio';
+import { scenarioNames as loadScenarioNames } from '../../src/cli/load-scenario';
 import type { PlayerView } from '../../src/knowledge/player-view';
 
 const PORT = 5195;
@@ -64,6 +65,20 @@ async function main(): Promise<void> {
   });
 
   try {
+    console.log('Choose from the scenario menu');
+    await page.goto(`http://localhost:${PORT}/`);
+    await page.waitForSelector('.scenario-card');
+    const cards = await page.locator('.scenario-card').count();
+    check(cards === loadScenarioNames().length, `the menu lists every scenario (${cards})`);
+    check((await page.locator('.scenario-card').first().getAttribute('data-id')) === 'outpost-under-pressure', 'the default scenario comes first');
+    await shot(page, '0-menu');
+    await page.locator('#menu-seed').fill('7');
+    await page.locator('.scenario-card[data-id="find-them"]').click();
+    await page.waitForSelector('#clock');
+    check(new URL(page.url()).search === '?scenario=find-them&seed=7', `choosing a card plays it, with the seed given (${new URL(page.url()).search})`);
+    check((await page.title()) === 'Find Them', 'the chosen scenario is loaded');
+    await page.locator('[data-action="scenarios"]').click({ trial: true });
+
     console.log('Load the scenario');
     await page.goto(`http://localhost:${PORT}/?seed=1&speed=40`);
     await page.waitForSelector('#clock');
@@ -433,6 +448,15 @@ async function main(): Promise<void> {
     await page.goto(`http://localhost:${PORT}/?scenario=downed-pilot&seed=1&speed=60`);
     await page.waitForSelector('#light');
     const viewOf = () => (window as unknown as { airops: { view: () => PlayerView } }).airops.view();
+    check((await page.locator('.unit-chip[data-id="SURV-1"] .age.unknown').count()) === 1, 'the unseen survivor is listed among the units on the net');
+    await page.locator('.unit-chip[data-id="SURV-1"]').click();
+    await page.locator('#selection [data-action="request"][data-kind="position"]').click();
+    await page.waitForFunction(
+      () => (window as unknown as { airops: { view: () => PlayerView } }).airops.view().friendlies.some((friendly) => friendly.unitId === 'SURV-1'),
+      undefined,
+      { timeout: 60000 },
+    );
+    check(true, 'asked from the list, the survivor reports its position');
     await page.waitForFunction(
       () => (window as unknown as { airops: { view: () => PlayerView } }).airops.view().aircraft.some((a) => a.aircraftId === 'JOLLY-1' && a.status === 'ready'),
       undefined,
