@@ -4,6 +4,8 @@ You are the air operations controller in 1960s Southeast Asia. Your job is the a
 
 What you have is reports. They arrive late, they are often wrong, and they contradict each other. The map shows what air operations believes, not what is there. The game is about building a picture from radio traffic, deciding with what you know, and living with the result. The truth is shown only in the debrief.
 
+![Outpost Under Pressure at 0615: NATO symbols on a topographic map, a troops-in-contact call from Viper 2-1, and a reconnaissance report about to be forwarded to Garrison Alpha](docs/images/outpost.png)
+
 The design follows real doctrine where it can: NATO map symbols (APP-6), SALUTE spot reports, 9-line support requests, brevity words (JOKER, BINGO, WINCHESTER), track numbers and source ratings, danger close, and military time.
 
 ## Running it
