@@ -77,7 +77,7 @@ async function main(): Promise<void> {
     await page.locator('#order-radius').fill('1500');
     const objective = { x: 2525, y: 2625 };
     await clickWorld(page, objective);
-    await page.waitForFunction(() => document.querySelector('[data-id="RECON-1"]')?.textContent?.includes('Watch'));
+    await page.waitForFunction(() => document.querySelector('[data-id="RECON-1"]')?.textContent?.includes('watching'));
     check(true, 'recon accepted its order from a map click');
 
     console.log('Receive a TIC from an autonomous formation');
@@ -134,7 +134,7 @@ async function main(): Promise<void> {
     await page.locator('[data-action="order"][data-kind="Watch"]').click();
     await clickWorld(page, point);
     await setPaused(page, false);
-    await page.waitForFunction(() => document.querySelector('[data-id="CAS-1"]')?.textContent?.includes('Watch'));
+    await page.waitForFunction(() => document.querySelector('[data-id="CAS-1"]')?.textContent?.includes('watching'));
     check(true, 'CAS accepted its support mission');
 
     const log = () => page.evaluate(() => (window as unknown as { airops: Hook }).airops.session.commandLog());
@@ -251,7 +251,8 @@ async function main(): Promise<void> {
       [before, flier] as const,
     );
     const after = await targetOf(flier);
-    check((after ?? 0) > (before ?? 0) && (after ?? 0) % 100 === 0, `dragging the profile set a target of ${after} m`);
+    // The crew may already have climbed above where the drag ends, so only a new, snapped target counts.
+    check(after !== before && (after ?? 0) % 100 === 0, `dragging the profile set a target of ${after} m`);
     const sentNow = (await log()).commands.map((command) => command.kind);
     check(sentNow.includes('setAltitude'), 'the altitude order is in the replayable command log');
     await page.locator(`[data-action="select-aircraft"][data-id="${flier}"]`).click();

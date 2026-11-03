@@ -1,5 +1,6 @@
 import type { SupportWeapons } from '../domain/public/air';
 import { POI_KINDS } from '../domain/public/poi';
+import { BREVITY } from './map-conventions';
 import type { DrillKind } from '../domain/public/ground';
 import type { AircraftTelemetryEntry } from '../domain/public/air';
 import type { GroundFireEffect } from '../knowledge/player-view';
@@ -85,8 +86,18 @@ export function shortAircraftName(id: string): string {
   return `${id.charAt(0)}${id.replace(/\D/g, '')}`;
 }
 
+const TASK_NAMES: Readonly<Record<NonNullable<AircraftTelemetryEntry['order']>['kind'], string>> = {
+  Watch: 'watching',
+  Cover: 'covering',
+  Suppress: 'suppressing',
+  Strike: 'striking',
+  ReturnToBase: 'returning',
+};
+
+/** What the aircraft is doing: the crew's own brevity word on station, otherwise its task. */
 export function aircraftMission(aircraft: AircraftTelemetryEntry): string {
-  return aircraft.casPhase ?? (aircraft.order === null ? 'no mission' : aircraft.order.kind);
+  if (aircraft.casPhase !== null) return BREVITY[aircraft.casPhase];
+  return aircraft.order === null ? 'no mission' : TASK_NAMES[aircraft.order.kind];
 }
 
 export function aircraftSummary(aircraft: AircraftTelemetryEntry): string {
@@ -140,19 +151,31 @@ function contactSummary(contact: ContactEstimate): string {
   return `${strengthText(contact.strength)} ${identity} ${kind}${heading}`;
 }
 
+const ACTIVITY_TEXT: Readonly<Record<ContactEstimate['activity'], string | null>> = {
+  moving: 'moving',
+  engaging: 'firing',
+  stationary: 'stationary',
+  unknown: null,
+};
+
+/**
+ * A spot report in SALUTE order: size and unit, activity, location, time seen, equipment.
+ * The order is the convention; the words stay plain.
+ */
+export function spotReport(contact: ContactEstimate, location: string): string {
+  const identity = contact.identification === 'hostile' ? 'hostile' : contact.identification === 'unidentified' ? 'unidentified' : 'friendly';
+  const kind = contact.kind === 'unknown' ? 'contact' : contact.kind;
+  const moving = contact.activity === 'moving' && contact.position.headingRad !== null ? `moving ${compassDirection(contact.position.headingRad)}` : ACTIVITY_TEXT[contact.activity];
+  const equipment = contact.observedWeapons.length === 0 ? '' : `, ${contact.observedWeapons.map((w) => WEAPON_NAMES[w]).join(', ')} seen`;
+  const parts = [`${strengthText(contact.strength)} ${identity} ${kind}`, moving, `at ${location}`, `seen ${clock(contact.position.observedAt)}`].filter((part) => part !== null);
+  return `Spot: ${parts.join(', ')}${equipment}. ${contact.confidence[0]?.toUpperCase()}${contact.confidence.slice(1)} confidence.`;
+}
+
 function strikeOutcome(effect: 'effect-observed' | 'no-effect-observed', assessment: StrikeAssessment | null): string {
   if (effect === 'no-effect-observed') return 'no effect observed';
   if (assessment === null) return 'effect observed';
   if (assessment.destroyed) return `target destroyed, about ${assessment.estimatedCasualties} casualties`;
   return `effect observed, about ${assessment.estimatedCasualties} casualties`;
-}
-
-/** Diamond half-width by reported strength, so mass shows at a glance. */
-export function markerSize(strength: StrengthEstimate): number {
-  if (strength.kind === 'unknown') return 7;
-  if (strength.max <= 5) return 5;
-  if (strength.max <= 14) return 7;
-  return strength.max <= 50 ? 9 : 12;
 }
 
 const STATUS_TEXT: Readonly<Record<ContactStatus, string | null>> = {
@@ -231,7 +254,7 @@ export function radioLine(message: RadioMessage, cellSize: number): RadioLine {
     }
     case 'CONTACT_REPORT':
       return {
-        text: `Contact: ${contactSummary(message.contact)} near ${grid(message.contact.position.center)}. ${message.contact.confidence} confidence.`,
+        text: spotReport(message.contact, grid(message.contact.position.center)),
         coordinates: [message.contact.position.center],
       };
     case 'POSITION_REPORT':

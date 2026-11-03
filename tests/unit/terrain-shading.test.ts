@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TerrainGrid } from '../../src/domain/public/terrain';
 import { clipToMap, groundAlong } from '../../src/ui/path-profile';
-import { contourEdges, hillshade, shadedColor } from '../../src/ui/terrain-shading';
+import { hillshade } from '../../src/ui/terrain-shading';
 
 function grid(rows: readonly (readonly number[])[]): TerrainGrid {
   return {
@@ -31,16 +31,6 @@ describe('terrain shading', () => {
     expect(hillshade(cliff, 1, 1)).toBeCloseTo(1.22);
   });
 
-  it('draws a contour where height crosses a band, and not at the map edge', () => {
-    const slope = grid([[10, 50], [10, 50]]);
-    expect(contourEdges(slope, 0, 0)).toEqual({ east: true, south: false });
-    expect(contourEdges(slope, 1, 0)).toEqual({ east: false, south: false });
-  });
-
-  it('scales a color without overflowing', () => {
-    expect(shadedColor('#804020', 0.5)).toBe('rgb(64,32,16)');
-    expect(shadedColor('#ff0000', 2)).toBe('rgb(255,0,0)');
-  });
 });
 
 describe('path profile', () => {

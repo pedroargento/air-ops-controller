@@ -11,7 +11,7 @@ import {
   updateFriendly,
 } from '../../src/knowledge/player-knowledge';
 import { project } from '../../src/knowledge/player-view';
-import { markerOpacity, reachableRegion, regionOpacity } from '../../src/knowledge/reachability';
+import { markerOpacity } from '../../src/knowledge/reachability';
 
 const display = {
   freshReportSeconds: 120,
@@ -20,10 +20,6 @@ const display = {
   opacityFloor: 0.25,
   fadeSeconds: 900,
   plausibleSpeedMps: 1,
-  coneBaseHalfAngleRad: 0.35,
-  coneWidenRadPerSecond: 0.002,
-  regionMaxRadiusMeters: 700,
-  regionFadeSeconds: 480,
   effectSeconds: 40,
   groundFireMarkSeconds: 900,
   groundFireMergeMeters: 300,
@@ -31,6 +27,7 @@ const display = {
   destroyedShowSeconds: 300,
   notFoundShowSeconds: 120,
   friendlySilentSeconds: 600,
+  staleSeconds: 120,
   consolidateMaxAgeSeconds: 120,
 };
 
@@ -65,40 +62,16 @@ describe('marker aging', () => {
   });
 });
 
-describe('reachable region', () => {
-  it('is a growing circle when movement is unknown', () => {
-    const near = reachableRegion(position(), 60, display);
-    const far = reachableRegion(position(), 600, display);
-    expect(near).toEqual({ kind: 'circle', center: { x: 100, y: 100 }, radiusMeters: 100 });
-    expect(far).toMatchObject({ kind: 'circle', radiusMeters: 640 });
-  });
-
-  it('is a sector along the heading that lengthens and widens with age', () => {
-    const moving = position({ headingRad: 1, speedMps: 2 });
-    const near = reachableRegion(moving, 60, display);
-    const far = reachableRegion(moving, 600, display);
-    if (near.kind !== 'sector' || far.kind !== 'sector') throw new Error('expected sectors');
-    expect(near.origin).toEqual(moving.center);
-    expect(near.headingRad).toBe(1);
-    expect(far.radiusMeters).toBeGreaterThan(near.radiusMeters);
-    expect(far.halfAngleRad).toBeGreaterThan(near.halfAngleRad);
-  });
-
-  it('stops growing at the configured radius', () => {
-    expect(reachableRegion(position(), 100000, display)).toMatchObject({ radiusMeters: 700 });
-    expect(reachableRegion(position({ headingRad: 1, speedMps: 3 }), 100000, display)).toMatchObject({ radiusMeters: 700 });
-  });
-
-  it('fades out with age while the marker keeps its floor', () => {
-    expect(regionOpacity(0, display)).toBe(1);
-    expect(regionOpacity(240, display)).toBeCloseTo(0.5);
-    expect(regionOpacity(480, display)).toBe(0);
-    expect(regionOpacity(100000, display)).toBe(0);
-    expect(markerOpacity(100000, display)).toBe(0.25);
-  });
-
-  it('stays anchored at the reported point however old it gets', () => {
-    expect(reachableRegion(position(), 5000, display)).toMatchObject({ center: { x: 100, y: 100 } });
+describe('stale reports', () => {
+  it('marks a contact stale once it has not been seen for a while, and draws no region', () => {
+    const player = emptyPlayerKnowledge();
+    updateContact(player, contact('C-1', 'RECON-1', 0), 0, true);
+    const fresh = project(player, [], 60, display).contacts[0];
+    const old = project(player, [], 600, display).contacts[0];
+    expect(fresh?.stale).toBe(false);
+    expect(old?.stale).toBe(true);
+    expect(old?.contact.position.center).toEqual(fresh?.contact.position.center);
+    expect(Object.keys(old ?? {})).not.toContain('region');
   });
 });
 

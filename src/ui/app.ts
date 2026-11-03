@@ -31,6 +31,7 @@ import { PathProfile } from './path-profile';
 import { summarizeBattle, type BattleSummary, type SummaryConfig } from './battle-summary';
 import { MapView, type Selection, type WeatherLayer } from './map-view';
 import { ToastQueue } from './toasts';
+import { admiraltyRating, contactCondition } from './map-conventions';
 import { POI_KINDS, type PoiKind } from '../domain/public/poi';
 import { morphHtml } from './morph';
 import { stormMovement, type ForecastError } from './weather-chart';
@@ -105,6 +106,16 @@ function aircraftDestination(aircraft: AircraftTelemetryEntry): Vec2 | null {
   const { order } = aircraft;
   return order === null || order.kind === 'ReturnToBase' ? null : order.center;
 }
+
+/** Claimed losses and what they suggest, as the condition bar shows them. */
+function conditionLine(marker: ContactMarker): string {
+  const condition = contactCondition(marker.estimatedLosses, marker.contact.strength);
+  if (condition === null) return '';
+  const words = condition.probablyDestroyed ? 'probably destroyed' : CONDITION_WORDS[condition.condition];
+  return `<p>Condition: ${words}, about ${marker.estimatedLosses} casualties claimed (${Math.round(condition.lostShare * 100)}% of its estimated strength)</p>`;
+}
+
+const CONDITION_WORDS = { capable: 'still capable', damaged: 'damaged', badlyDamaged: 'badly damaged' } as const;
 
 function findContact(view: PlayerView, key: string): ContactMarker | undefined {
   return view.contacts.flatMap((marker) => [marker, ...marker.members]).find((marker) => marker.key === key);
@@ -567,7 +578,7 @@ export class App {
         `${contact.identification} ${contact.activity}`,
         `Source: ${displayName(contact.provenance.sourceId, names)} (${marker.viaAircraft ? 'aircraft-observed' : 'reported'})`,
         `Observed ${clock(contact.position.observedAt)}, ${marker.ageSeconds}s ago`,
-        `${strengthText(contact.strength)}, ${contact.confidence} confidence`,
+        `${strengthText(contact.strength)}, ${contact.confidence} confidence, rated ${admiraltyRating(marker)}`,
         weaponsText(contact.observedWeapons),
         ...(marker.members.length > 0 ? [`${marker.members.length + 1} reports consolidated`] : []),
         ...(statusText(marker.status, marker.estimatedLosses) === null ? [] : [statusText(marker.status, marker.estimatedLosses) as string]),
@@ -785,7 +796,8 @@ export class App {
       `<h2>Contact ${escapeHtml(contact.contactId)}</h2>` +
       `<p>${marker.viaAircraft ? 'Air observation' : 'Ground report'} · ${escapeHtml(displayName(contact.provenance.sourceId, names))}</p>` +
       `<p>Grid ${gridRef(contact.position.center, terrain.cellSize)} · ${strengthText(contact.strength)} · ${contact.identification}</p>` +
-      `<p>${contact.confidence} confidence · observed ${clock(contact.position.observedAt)}</p>` +
+      `<p>${contact.confidence} confidence · rated ${admiraltyRating(marker)} · observed ${clock(contact.position.observedAt)}</p>` +
+      conditionLine(marker) +
       `<p>${weaponsText(contact.observedWeapons)}</p>` +
       this.contactHistory(marker) +
       this.threatLine(contact.observedWeapons) +

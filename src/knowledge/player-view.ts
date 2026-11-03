@@ -21,15 +21,9 @@ import {
   type PositionSource,
   type UnitStatusReport,
 } from './player-knowledge';
-import {
-  markerOpacity,
-  reachableRegion,
-  regionOpacity,
-  type DisplayParameters,
-  type ReachableRegion,
-} from './reachability';
+import { markerOpacity, type DisplayParameters } from './reachability';
 
-export type { ContactStatus, ReachableRegion, UnitStatusReport };
+export type { ContactStatus, UnitStatusReport };
 
 /** A sender that has just been heard, so the map can show who is talking. */
 export type ReportingUnit = Readonly<{ senderId: string; level: ReportLevel }>;
@@ -48,8 +42,8 @@ export type ContactMarker = Readonly<{
   viaAircraft: boolean;
   ageSeconds: number;
   opacity: number;
-  region: ReachableRegion;
-  regionOpacity: number;
+  /** Not seen for a while: drawn with a dashed frame at its last known position. */
+  stale: boolean;
   engaging: boolean;
   status: ContactStatus;
   estimatedLosses: number;
@@ -63,8 +57,6 @@ export type FriendlyMarkerView = Readonly<{
   source: PositionSource;
   ageSeconds: number;
   opacity: number;
-  region: ReachableRegion;
-  regionOpacity: number;
   engaging: boolean;
   silent: boolean;
   statusReport: UnitStatusReport | null;
@@ -148,6 +140,7 @@ type ViewParameters = DisplayParameters &
     destroyedShowSeconds: number;
     notFoundShowSeconds: number;
     friendlySilentSeconds: number;
+    staleSeconds: number;
     consolidateMaxAgeSeconds: number;
     freshReportSeconds: number;
     clusterRadiusMeters: number;
@@ -288,8 +281,7 @@ export function project(
     viaAircraft: entry.viaAircraft,
     ageSeconds: age(entry.contact.position),
     opacity: markerOpacity(age(entry.contact.position), display),
-    region: reachableRegion(entry.contact.position, age(entry.contact.position), display),
-    regionOpacity: regionOpacity(age(entry.contact.position), display),
+    stale: age(entry.contact.position) >= display.staleSeconds,
     engaging: entry.contact.activity === 'engaging' && age(entry.contact.position) <= display.effectSeconds,
     status: entry.status,
     estimatedLosses: entry.estimatedLosses,
@@ -308,8 +300,6 @@ export function project(
       source: marker.source,
       ageSeconds: age(marker.position),
       opacity: markerOpacity(age(marker.position), display),
-      region: reachableRegion(marker.position, age(marker.position), display),
-      regionOpacity: regionOpacity(age(marker.position), display),
       engaging: recent(player.friendlyEngagedAt[unitId]) || recent(player.ticFlags[unitId]?.receivedAt),
       silent: age(marker.position) >= display.friendlySilentSeconds,
       statusReport: player.statusReports[unitId] ?? null,

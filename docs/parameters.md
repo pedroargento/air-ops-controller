@@ -145,15 +145,11 @@ rules or the schema.
 | `display.opacityFloor` | `0.25` | Faintest a marker gets with age. |
 | `display.fadeSeconds` | `900` | Seconds for a marker to fade. |
 | `display.plausibleSpeedMps` | `1` | Fastest the map assumes an enemy moves, for joining reports. |
-| `display.coneBaseHalfAngleRad` | `0.35` | Width of a movement cone at first. |
-| `display.coneWidenRadPerSecond` | `0.002` | How fast it widens. |
 | `display.freshReportSeconds` | `120` | Reports this young count as fresh. |
 | `display.clusterRadiusMeters` | `200` | Fresh reports this close are ringed as a cluster. |
 | `display.reportBlinkSeconds` | `20` | How long a unit blinks after it is heard. |
 | `display.repeatContactSeconds` | `300` | A contact report repeating one this recent is routine. |
 | `display.repeatContactMeters` | `300` | …from this close. |
-| `display.regionMaxRadiusMeters` | `700` | Largest a reachable region grows. |
-| `display.regionFadeSeconds` | `480` | Seconds for a region to fade. |
 | `display.effectSeconds` | `40` | How long fire and strike effects show. |
 | `display.groundFireMarkSeconds` | `900` | How long ground fire marks show. |
 | `display.groundFireMergeMeters` | `300` | Ground fire reports this close merge. |
@@ -162,6 +158,7 @@ rules or the schema.
 | `display.destroyedShowSeconds` | `300` | How long a destroyed contact stays. |
 | `display.notFoundShowSeconds` | `120` | How long a not-found contact stays. |
 | `display.friendlySilentSeconds` | `600` | A friendly unit unheard this long shows as silent. |
+| `display.staleSeconds` | `120` | A contact not seen for this long is drawn with a dashed frame and the time it was last seen. |
 | `display.consolidateMaxAgeSeconds` | `120` | Only sightings this fresh absorb older reports. |
 | `display.notFoundMinAgeSeconds` | `60` | A report must be this old before a clear look can close it. |
 | `display.notFoundLookSeconds` | `60` | Seconds of clear look that close a report. |

@@ -43,7 +43,7 @@ The ground war is not a scripted sequence of requests. Its outcomes arise from t
 - Imperfect ground observations: estimated contact position, approximate strength, type, activity and heading.
 - Radio tasks, typed messages, report delays, player requests, outgoing intelligence reports and autonomous ground-to-ground communication over configured links.
 - Aircraft: travel, orbit, reconnoiter, provide CAS, return to base; fuel and ordnance constraints.
-- Player's knowledge map: marker aging, reported coordinates, estimated movement cones, and report history.
+- Player's knowledge map: marker aging, reported coordinates, last known positions with heading and time seen, and report history.
 - Basic rectangular grid drawing, aircraft and unit symbols, clickable coordinates, aircraft order controls, pause and speed control.
 - Headless scenario runs for balancing and debugging.
 
@@ -314,15 +314,12 @@ Maintain `WorldTruth` and `PlayerKnowledge` as separate states. Only a deliberat
 
 **Unit loss:** There is no automatic notification that a ground formation was destroyed. Evidence comes from silence or from an observed loss. A friendly unit silent for a configured time is flagged as out of contact, not as lost.
 
-### 7.1 Aging and reachability visualization
+### 7.1 Aging and last known positions
 
 - Ground-unit/contact markers gradually fade with observation age down to a **25% opacity floor**, remaining selectable.
-- The original reported point remains the observation anchor and displays its age and source.
-- Stationary/unknown movement: growing circle around the last reported position.
-- Regions stop growing at a configured radius and fade out with age, so old reports don't cover the map. The marker itself stays at the opacity floor, and selecting it shows its region again.
-- Direction of movement known: sector/cone originating at the reported position, oriented toward the reported heading, extending with plausible speed × elapsed time and widening as direction becomes stale.
-- Known road movement may become a road corridor in a later version; v0.1 uses simple geometry.
-- The cone represents a **possible region**, not a statistically calibrated probability contour. It never follows the hidden true unit trajectory.
+- A marker always stays at the reported point, the last known position, and shows its age and source.
+- **Stale reports follow the NATO convention:** once a contact hasn't been seen for `staleSeconds`, its frame is dashed (not confirmed present) and it carries the time it was last seen. A contact seen moving keeps its direction-of-movement arrow.
+- **The map draws no region of where it might be now.** Earlier versions drew a growing circle, or a cone along the heading. They suggested a knowledge the game doesn't have and weren't much help. Estimating where a unit has gone, from its last position, heading and time, is the controller's own judgment, as it is for a real operator.
 - Aircraft positions, routes, mission states, fuel and ammunition are crisp and continuously updated for the player.
 - Selected aircraft can show an approximate observation footprint; normal view hides all such footprints to reduce clutter. Terrain masking is computed without exposing hidden unit locations.
 
@@ -463,7 +460,7 @@ Speeds, endurance and ordnance come from published figures, which often disagree
 
 Desktop-browser layout:
 
-1. **Main Canvas map:** Grid terrain, simple elevation/terrain tint, aircraft icons and paths, ground unit reported markers, enemy contact estimates, uncertainty cones, TIC flags, selectable reported positions.
+1. **Main Canvas map:** Grid terrain, simple elevation/terrain tint, aircraft icons and paths, ground unit reported markers, enemy contact estimates at their last known positions, TIC flags, selectable reported positions.
 2. **Radio panel:** Chronological message log with type/source/time; clickable reported coordinates; structured responses, report requests and contact forwarding.
 3. **Selected aircraft panel:** Current mission, fuel, ammunition, available orders and target/area selection.
 4. **Altitude profile and fleet list:** Airborne aircraft, plus the selected one, side by side on one altitude scale. Clicking a column selects that aircraft, dragging sets its target altitude in 100 m steps, and hovering shows its details. Lines mark the ceilings of weapons actually observed, so the profile never reveals a weapon the player hasn't seen. Beneath it, a scrolling list gives every aircraft one line with status, mission, altitude, fuel and ordnance, so the panel still works with many more aircraft.
@@ -472,11 +469,26 @@ Desktop-browser layout:
 Interaction requirements:
 
 - The map always shows a north arrow and a scale bar that follows the zoom; north is always up, because the map doesn't rotate.
-- Marker size follows reported strength, and a hollow marker means unknown strength or not found. A `×3` badge shows consolidated reports.
+- **Unit symbols follow NATO APP-6 conventions**, drawn in a simple style of our own:
+  - **Frame by side:** a blue rectangle is friendly, a red diamond hostile, a yellow quatrefoil unknown (unidentified). A low-confidence hostile is a **suspect**: a paler diamond marked "?". A dashed frame means not seen lately (§7.1), or for a friendly unit, gone quiet. Looked for and not found means no fill and "NOT FOUND".
+  - **Icon inside:** a cross for infantry, an oval for vehicles, and a dome at the bottom for air defense.
+  - **Size mark above:** ø team, • squad, •• section, ••• platoon, | company, from the strength estimate at its largest. Unknown strength has no mark. Symbols are all one size; the mark says how big.
+  - **Losses:** (−) beside the size mark once losses are claimed, and an operational-condition bar under the symbol: green while claims are under a third of the estimated strength, yellow to two thirds, red above. The share is claims against claims plus the current estimate. A friendly unit's bar comes from its own last SITREP against its starting strength.
+  - **Destroyed:** a solid ✕ when a crew reports it destroyed, a dashed ✕ when claims reach nine tenths of the estimate but nobody has seen it dead.
+  - **Movement and facing:** an arrow from the bottom of the frame on a short staff when it's seen moving, and a short line the way a still squad faces.
+  - **Text beside it:** weapons seen (`MG`, and `AAA` or `MP` in magenta), `×3` for consolidated reports, and the time it was last seen once it is stale. A friendly symbol carries its designation.
+- Aircraft are friendly blue silhouettes with a **data block**, as on an air controller's display: callsign, altitude and task, and what the crew says it's doing in brevity words (NO JOY, TALLY, IN HOT, DEFENDING, WINCHESTER and so on). The fleet list uses the same words.
+- Contact reports read as **spot reports in SALUTE order**: size and unit, activity, location, time seen, equipment, then confidence. Each contact has an **Admiralty rating**: B for an aircraft or C for a ground report, then 1 if another source confirms it, otherwise 2, 3 or 4 by confidence.
 - A Summary tab beside the radio gives a report-based picture: known enemy strength as a range, HQ's starting estimate, reported losses, what is unlocated, strength by sector, air threats, friendly status, the force ratio at the outpost and air activity. Its high end counts every report as a separate unit and its low end counts possible duplicates once, so good reconnaissance shows up as a narrower range. Everything comes from the `PlayerView`.
 - When a run ends, the Summary tab adds a debrief comparing estimates with what really happened. This is the only time the player sees truth.
 - Map layers can be switched on and off. **Weather** is drawn as a forecaster's chart: bands of cloud base, with red where the base is under the selected aircraft's altitude, and rain marks. Each storm has a track from now to where it dies out, with time marks, and a dashed likely path that widens with forecast error, so the player can see where it's coming from and when it arrives. A slider looks ahead up to the end of the mission and a button jumps to the selected aircraft's ETA. Far-ahead forecasts are drawn fainter, and the altitude profile shows the forecast cloud base. **Threats** shows the rings of every observed anti-aircraft contact at once.
-- The map shows height through hillshading and contour lines every 20 m.
+- **The base map is drawn like a 1:50,000 topographic sheet.** Each kind of information keeps its own channel, so none hides another:
+  - land cover is color: off-white open ground, green woods, darker green jungle, grey built-up,
+  - relief is light and shade: light hillshading lit from the northwest, brown contours every 20 m with bolder labeled index contours every 100 m, and spot heights on summits,
+  - roads and streams are smooth lines, not filled squares: roads red with a dark casing, streams blue,
+  - a 1 km grid is labeled along the top and left in the same figures as grid references,
+  - the weather layer and symbols sit on top.
+- Selecting an aircraft shows **maximum elevation figures** as aviation charts print them: the highest ground in each grid square, rounded up, hundreds large and tens small. Squares whose ground is above the aircraft's set altitude are outlined and lettered in red. Height uses no color, so it never competes with land cover or weather.
 - Hovering the map shows the grid reference and elevation under the cursor, and nothing off the map.
 - Selecting an aircraft shows a terrain profile along its path to its destination, with its altitude and any ridges in the way.
 - The radio shows **Main** by default, with a switch to **All**. Messages are urgent (TIC, support request, ground fire), main (contact, SITREP, drill, strike result, command update) or routine (position, acknowledgement, the player's own forwards). A contact report counts as routine if it repeats a place heard from in the last `repeatContactSeconds` without a stronger estimate. Nothing is lost: **All** and the unit history show every message.
@@ -493,7 +505,7 @@ Interaction requirements:
 - Marker tooltip displays source, observation time, identification, confidence/strength category and whether the position is reported or aircraft-observed.
 - Map never gives hidden enemy identities, true positions, or actual ground casualties that the player has not learned.
 
-No textures, animation system, sound, contour rendering, weather layers, or elaborate HUD styling are required for v0.1.
+No textures, animation system or sound are required.
 
 ## 10. Type-driven implementation architecture
 
@@ -664,7 +676,7 @@ The engine doesn't assume the outpost. A scenario is a file naming its map, unit
 - Ground and airborne concealment affect detection; ground and air cover affect damage, separately.
 - Radio task progress slows or pauses under suppression, while ordinary engaging need not stop reporting.
 - Message contents never use true enemy coordinates or strength unless actually measured at sufficient accuracy.
-- Marker opacity never drops below the configured floor; movement cones use only received observations and elapsed time.
+- Marker opacity never drops below the configured floor; a stale marker stays at its reported point and uses only received observations and elapsed time.
 - Clicking a radio coordinate navigates to the reported location, not the hidden true one.
 - Non-interference: given identical `PlayerKnowledge`, aircraft telemetry and simulation time, projection produces identical `PlayerView` output regardless of hidden ground truth. This tests the projection boundary only; different battlefields can still generate different future observations.
 - Radio, combat and decision code behave identically for both sides given identical inputs and configuration.

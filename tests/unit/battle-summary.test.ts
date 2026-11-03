@@ -4,7 +4,7 @@ import type { ContactId } from '../../src/domain/public/ground';
 import { emptyPlayerKnowledge, updateContact, updateFriendly, type PlayerKnowledge } from '../../src/knowledge/player-knowledge';
 import { project } from '../../src/knowledge/player-view';
 import { sectorOf, strengthRange, summarizeBattle, type SummaryConfig } from '../../src/ui/battle-summary';
-import { forceRatioText, markerSize, rangeText, statusText } from '../../src/ui/format';
+import { forceRatioText, rangeText, statusText } from '../../src/ui/format';
 
 const objective = { x: 2500, y: 2500 };
 const config: SummaryConfig = {
@@ -24,10 +24,6 @@ const display = {
   opacityFloor: 0.25,
   fadeSeconds: 900,
   plausibleSpeedMps: 1,
-  coneBaseHalfAngleRad: 0.35,
-  coneWidenRadPerSecond: 0.002,
-  regionMaxRadiusMeters: 700,
-  regionFadeSeconds: 480,
   effectSeconds: 40,
   groundFireMarkSeconds: 900,
   groundFireMergeMeters: 300,
@@ -35,6 +31,7 @@ const display = {
   destroyedShowSeconds: 300,
   notFoundShowSeconds: 120,
   friendlySilentSeconds: 600,
+  staleSeconds: 120,
   consolidateMaxAgeSeconds: 120,
 };
 
@@ -158,12 +155,6 @@ describe('summary wording', () => {
     expect(rangeText({ low: 120, high: 180 })).toBe('120–180');
     expect(forceRatioText({ low: 120, high: 180 }, 60)).toBe('2–3 : 1');
     expect(forceRatioText({ low: 120, high: 180 }, 0)).toBeNull();
-  });
-
-  it('sizes markers by reported strength', () => {
-    expect(markerSize({ kind: 'range', min: 2, max: 5 })).toBeLessThan(markerSize({ kind: 'range', min: 6, max: 14 }));
-    expect(markerSize({ kind: 'range', min: 6, max: 14 })).toBeLessThan(markerSize({ kind: 'range', min: 15, max: 50 }));
-    expect(markerSize({ kind: 'range', min: 15, max: 50 })).toBeLessThan(markerSize({ kind: 'range', min: 51, max: 150 }));
   });
 
   it('describes a status only when there is one', () => {
