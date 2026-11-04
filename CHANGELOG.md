@@ -67,6 +67,7 @@ Six scenarios, squads and drills on the ground, crews that fly their own mission
 - `npm run params` generates `docs/parameters.md` from the rules, and every rule is described.
 - `batch --set path=value` overrides rules for one run, and every scenario has its own bots.
 - A README covering the game, how to play and how to run it.
+- An illustrated controller's manual in the style of a 1990s game booklet, with period photographs of every aircraft. The PDF is attached to the release, and `npm run manual` rebuilds it.
 
 ## 0.1.0
 

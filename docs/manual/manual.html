@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Air Operations Manual</title>
+<style>
+@font-face { font-family: 'Anton'; font-weight: 400; src: url(fonts/Anton-400.woff2) format('woff2'); }
+@font-face { font-family: 'Roboto Condensed'; font-style: normal; font-weight: 100 900; src: url(fonts/RobotoCondensed-400.woff2) format('woff2'); }
+@font-face { font-family: 'Roboto Condensed'; font-style: italic; font-weight: 400; src: url(fonts/RobotoCondensed-400i.woff2) format('woff2'); }
+@font-face { font-family: 'Special Elite'; font-weight: 400; src: url(fonts/SpecialElite-400.woff2) format('woff2'); }
+@font-face { font-family: 'Stardos Stencil'; font-weight: 700; src: url(fonts/StardosStencil-700.woff2) format('woff2'); }
+
+@page { size: 120mm 120mm; margin: 0; }
+
+:root {
+  --paper: #121110;
+  --text: #e8e4da;
+  --muted: #a8a397;
+  --red: #c92a20;
+  --red-hi: #e8452f;
+  --gold: #e9a23b;
+  --rule: #3a3530;
+  --desk: #2a2724;
+  --noise: url(noise.png);
+  --emblem: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200' fill='none' stroke='%23ffffff' stroke-width='3'%3E%3Ccircle cx='100' cy='100' r='92'/%3E%3Ccircle cx='100' cy='100' r='74'/%3E%3Cpath d='M100 34 L112 92 L172 100 L112 108 L100 166 L88 108 L28 100 L88 92 Z'/%3E%3Cpath d='M100 8v18M100 174v18M8 100h18M174 100h18'/%3E%3C/svg%3E");
+}
+
+* { box-sizing: border-box; }
+html { background: var(--desk); }
+body { margin: 0; padding: 24px 16px 48px; background: var(--desk); color: var(--text); font: 8pt/1.36 'Roboto Condensed', 'Arial Narrow', sans-serif; }
+
+.book { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 0; max-width: calc(240mm + 4px); margin: 0 auto; }
+.page {
+  position: relative; width: 120mm; height: 120mm; overflow: hidden;
+  padding: 7mm 7.5mm 10mm;
+  background:
+    var(--noise),
+    radial-gradient(ellipse at 50% 45%, rgba(70, 62, 52, .35), transparent 70%),
+    var(--paper);
+  box-shadow: inset 0 0 18mm rgba(0, 0, 0, .75);
+}
+.page::before { content: ''; position: absolute; inset: 0; background: var(--emblem) center 46% / 78mm no-repeat; opacity: .045; pointer-events: none; }
+.page:nth-child(even) { box-shadow: inset -3mm 0 6mm -2mm rgba(0, 0, 0, .9), inset 0 0 18mm rgba(0, 0, 0, .75); }
+.page:nth-child(odd):not(.cover) { box-shadow: inset 3mm 0 6mm -2mm rgba(0, 0, 0, .9), inset 0 0 18mm rgba(0, 0, 0, .75); }
+.page > * { position: relative; }
+.cover { margin-left: 120mm; }
+
+.folio { position: absolute; bottom: 4.5mm; font: 11pt 'Special Elite', monospace; color: var(--gold); }
+.page:nth-child(even) .folio { left: 7.5mm; }
+.page:nth-child(odd) .folio { right: 7.5mm; }
+
+h1 {
+  margin: 0 0 1.6mm; font: 400 13pt/1.05 'Special Elite', monospace; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--red-hi); -webkit-text-stroke: .25px #5c0d07; text-shadow: 0 0 1px #000, .5px .5px 0 #3b0905, 0 0 6px rgba(201, 42, 32, .35);
+}
+h1 + h1, h1.sub { font-size: 10.5pt; color: var(--red-hi); margin-top: -.4mm; }
+h2 { margin: 3.2mm 0 1mm; font: 400 10pt/1.1 'Special Elite', monospace; text-transform: uppercase; letter-spacing: .06em; color: var(--red-hi); text-shadow: .5px .5px 0 #3b0905; }
+h3 { margin: 2.4mm 0 .6mm; font: 700 7.6pt/1.2 'Roboto Condensed', sans-serif; color: var(--red-hi); text-transform: uppercase; letter-spacing: .04em; }
+p { margin: 0 0 1.5mm; text-align: justify; hyphens: auto; }
+em { color: var(--gold); font-style: normal; }
+b { font-weight: 700; color: #fff; }
+.quote { color: var(--text); font-style: italic; }
+.attrib { color: var(--muted); margin-top: -1mm; }
+ul { margin: .6mm 0 1.6mm; padding-left: 3.4mm; }
+li { margin: 0 0 .7mm; text-align: justify; }
+li::marker { color: var(--red-hi); }
+.kbd { font: 700 7pt 'Roboto Condensed'; color: var(--gold); }
+.small { font-size: 6.6pt; color: var(--muted); }
+
+figure { margin: 0; }
+.frame { border: 1.2px solid var(--red); box-shadow: 0 0 0 .6px #000, 2px 3px 8px rgba(0, 0, 0, .7); display: block; background: #000; }
+.frame img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.right { float: right; margin: .6mm 0 1.6mm 3mm; }
+.left { float: left; margin: .6mm 3mm 1.6mm 0; }
+figcaption { font-size: 6.4pt; color: var(--muted); text-align: center; margin-top: .8mm; line-height: 1.25; }
+.clear { clear: both; }
+
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 3.5mm; }
+.table { display: grid; grid-template-columns: max-content 1fr; gap: .7mm 3.5mm; margin: 1mm 0 2mm; align-items: baseline; }
+.table > :nth-child(odd) { color: var(--gold); font-weight: 700; }
+.table.boxed { border: .8px solid var(--muted); padding: 1.6mm 2.4mm; background: rgba(0, 0, 0, .35); }
+.redterm > :nth-child(odd) { color: var(--red-hi); font: 400 7.4pt 'Special Elite', monospace; letter-spacing: .03em; }
+
+.item { display: grid; grid-template-columns: 17mm 1fr; gap: 2.6mm; margin: 0 0 2.2mm; align-items: start; }
+.item .frame { width: 17mm; height: 13mm; }
+.item h3 { margin-top: 0; text-transform: none; letter-spacing: 0; font-size: 7.8pt; font-weight: 400; color: var(--red-hi); }
+.item p { margin-bottom: .6mm; }
+.hot { color: var(--muted); }
+
+/* Contents */
+.toc { display: grid; grid-template-columns: 1fr auto; gap: .55mm 3mm; font: 400 7.2pt/1.3 'Special Elite', monospace; text-transform: uppercase; letter-spacing: .05em; }
+.toc span:nth-child(even) { color: var(--gold); text-align: right; }
+.toc .grp { color: var(--red-hi); }
+
+/* Cover */
+.cover { padding: 0; background: #000; box-shadow: none; }
+.cover::before { display: none; }
+.cover .bg { position: absolute; inset: 0; background: url(photos/cover.jpg) 58% 50% / cover no-repeat; filter: grayscale(.25) contrast(1.15) brightness(.62) sepia(.2); }
+.cover .shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.92) 0%, rgba(0,0,0,.35) 38%, rgba(0,0,0,.15) 60%, rgba(0,0,0,.9) 100%), var(--noise); }
+.cover .title { position: absolute; left: 0; right: 0; top: 6mm; text-align: center; }
+.cover .title .big {
+  display: block; font: 400 25pt/1 'Anton', sans-serif; letter-spacing: .02em; text-transform: uppercase;
+  background: linear-gradient(180deg, #ffffff 0%, #d7d7d7 38%, #8e8e8e 52%, #e2e2e2 70%, #9b9b9b 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 1px 0 #000) drop-shadow(0 0 4px rgba(0,0,0,.8));
+}
+.cover .title .tag { display: block; margin-top: 1.6mm; font: 400 8.6pt 'Roboto Condensed', sans-serif; letter-spacing: .42em; color: var(--red-hi); text-transform: uppercase; padding-left: .42em; text-shadow: 0 0 3px #000; }
+.cover .stamp { position: absolute; right: 8mm; bottom: 21mm; transform: rotate(-8deg); font: 700 9pt 'Stardos Stencil', sans-serif; letter-spacing: .14em; color: rgba(232, 69, 47, .85); border: 1.6px solid rgba(232, 69, 47, .85); padding: 1mm 2.4mm; text-transform: uppercase; }
+.cover .foot { position: absolute; left: 7mm; right: 7mm; bottom: 5mm; display: flex; justify-content: space-between; align-items: end; font: 400 6.6pt 'Roboto Condensed'; letter-spacing: .3em; color: #cfcac0; text-transform: uppercase; }
+.cover .foot b { font: 400 10pt 'Anton'; letter-spacing: .2em; color: #ddd; }
+.cover .cap { position: absolute; left: 7mm; bottom: 11mm; font-size: 5.6pt; color: #9c978d; letter-spacing: .02em; }
+
+/* Aircraft profiles */
+.profile h1 { text-transform: none; font: 400 12pt/1.15 'Roboto Condensed', sans-serif; letter-spacing: 0; color: var(--red-hi); -webkit-text-stroke: 0; text-shadow: none; }
+.profile h1 span { color: var(--text); }
+.profile .hero { width: 100%; height: 52mm; margin: 0 0 2.2mm; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.2mm; margin: 1.6mm 0 2mm; }
+.stats div { border: .8px solid var(--rule); background: rgba(0, 0, 0, .4); padding: .9mm 1.3mm; }
+.stats b { display: block; font: 400 9pt 'Special Elite', monospace; color: var(--gold); }
+.stats small { font-size: 5.8pt; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+
+/* Annotated screen */
+.callouts { position: relative; }
+.callouts .n { position: absolute; width: 4.2mm; height: 4.2mm; border-radius: 50%; background: var(--red); color: #fff; font: 700 6.4pt/4.2mm 'Roboto Condensed'; text-align: center; box-shadow: 0 0 0 .6px #000, 0 0 4px #000; }
+.legend-n { display: grid; grid-template-columns: 4.2mm 1fr; gap: .9mm 2mm; align-items: baseline; }
+.legend-n i { font-style: normal; display: inline-block; width: 4.2mm; height: 4.2mm; border-radius: 50%; background: var(--red); color: #fff; font: 700 6.4pt/4.2mm 'Roboto Condensed'; text-align: center; }
+
+/* Mission cards */
+.missions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.4mm; margin-top: 1.4mm; }
+.missions .frame { height: 17mm; }
+.missions p { font-size: 6.6pt; text-align: center; line-height: 1.25; margin-top: 1mm; }
+.missions p b { display: block; color: var(--red-hi); font-weight: 400; font-size: 7.2pt; }
+
+/* Back cover */
+.back { background: #f4f2ec; color: #111; box-shadow: none; padding: 9mm 8mm; font-family: 'Arial', 'Helvetica', sans-serif; font-size: 7.6pt; line-height: 1.38; }
+.back::before { display: none; }
+.back h1 { font: italic 700 13pt Arial, Helvetica, sans-serif; color: #111; text-transform: none; letter-spacing: 0; text-align: center; -webkit-text-stroke: 0; text-shadow: none; margin: 0 0 2mm; }
+.back p, .back li { text-align: justify; }
+.back b { color: #000; }
+.back li::marker { color: #111; }
+.back .folio { display: none; }
+
+@media print {
+  html, body { background: none; padding: 0; }
+  .book { display: block; max-width: none; }
+  .page { break-after: page; margin: 0; }
+  .cover { margin-left: 0; }
+}
+@media screen and (max-width: 520px) {
+  .book { transform-origin: top center; }
+  .page { width: 100%; height: auto; aspect-ratio: 1; }
+  .cover { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+<main class="book">
+
+<!-- 1 · Cover -->
+<section class="page cover">
+  <div class="bg"></div><div class="shade"></div>
+  <div class="title"><span class="big">Air Operations</span><span class="tag">Controller's Manual</span></div>
+  <div class="stamp">Restricted</div>
+  <div class="cap">A-1H Skyraiders escort an HH-3E Jolly Green Giant, Southeast Asia, c. 1969. U.S. Air Force photo.</div>
+  <div class="foot"><span>Southeast Asia · 1960s</span><b>v0.2</b></div>
+</section>
+
+<!-- 2 · Contents -->
+<section class="page">
+  <h1>Read this first</h1>
+  <p>This manual covers Air Operations version 0.2. You are the air operations controller. The troops on the ground are not yours: they fight their own battle, report what they see and ask you for help. Yours are a handful of slow aircraft with little fuel and fewer bombs.</p>
+  <p class="quote">Everything on your map is what air operations <em>believes</em>. It is late, often wrong and sometimes contradictory. The truth is shown only in the debrief.</p>
+  <h2>Contents</h2>
+  <div class="toc">
+    <span class="grp">History</span><span>3</span>
+    <span>Setup and the scenario menu</span><span>5</span>
+    <span>The game: basic concepts</span><span>7</span>
+    <span>The missions</span><span>8</span>
+    <span>The screen and the map</span><span>10</span>
+    <span class="grp">Giving orders</span><span>12</span>
+    <span>Support requests and danger close</span><span>14</span>
+    <span>Reading reports</span><span>15</span>
+    <span>Forwarding and the radio</span><span>16</span>
+    <span>Fuel, bombs and ground fire</span><span>17</span>
+    <span>Night, light and flares</span><span>18</span>
+    <span>Weather, timeline and debrief</span><span>19</span>
+    <span class="grp">Search and rescue</span><span>20</span>
+    <span class="grp">The aircraft</span><span>22</span>
+    <span>Keys and radio words</span><span>30</span>
+    <span>Credits</span><span>31</span>
+  </div>
+  <span class="folio">2</span>
+</section>
+
+<!-- 3 · History -->
+<section class="page">
+  <h1>History</h1>
+  <h1 class="sub">Eyes over the jungle...</h1>
+  <figure class="right" style="width:46mm"><div class="frame" style="height:36mm"><img src="photos/o1e.jpg" alt="An O-1E pilot prepares to drop a smoke grenade from the cockpit"></div><figcaption>An O-1E Bird Dog pilot readies a smoke grenade to mark a target for fighter-bombers.</figcaption></figure>
+  <p>In the war in Southeast Asia the enemy rarely stood still to be bombed. It moved by night, under triple-canopy jungle, and fought close to the troops who found it, often close enough that a bomb meant for it could fall on them.</p>
+  <p>Fast jets crossing a valley at hundreds of kilometres an hour could not tell one green hillside from another. Someone had to find the enemy first, tell friend from foe, and bring the strike in on the right spot. That job fell to the <em>forward air controllers</em>: pilots in light, unarmed aircraft such as the Cessna O-1 Bird Dog, flying low and slow for hours over the same patch of ground until they knew every trail on it.</p>
+  <p>A FAC marked targets with smoke rockets, talked to the troops on one radio and to the fighters on another, and decided, minute by minute, where the little air power there was would do the most good.</p>
+  <p>Behind them stood the air operations centres: the people who knew what every aircraft was doing, how much fuel it had left, and which of a dozen calls for help could still be answered.</p>
+  <span class="folio">3</span>
+</section>
+
+<!-- 4 · The controller -->
+<section class="page">
+  <h1>The controller</h1>
+  <figure class="left" style="width:34mm"><div class="frame" style="height:52mm"><img src="photos/rto.jpg" alt="A radio-telephone operator in dense jungle with a PRC-25 radio"></div><figcaption>A radio-telephone operator with a PRC-25. Every report you get starts with a radio like this one.</figcaption></figure>
+  <p>This game puts you in that seat. You do not move troops. Platoons on the ground choose their own routes, fight their own drills and decide for themselves when to call for air.</p>
+  <p>What reaches you is radio traffic: a spot report from a pilot who saw "squad-sized hostile infantry" for a few seconds, a platoon leader in contact shouting a grid, a unit that has not reported for twenty minutes. Each report is late. Many are wrong. Two reports may describe one enemy group, or two.</p>
+  <p>From that you build a picture, decide with what you know, and live with the result.</p>
+  <p>The design follows real doctrine where it can: NATO map symbols (APP-6), SALUTE spot reports, 9-line support requests, brevity words such as JOKER, BINGO and WINCHESTER, track numbers, source ratings, danger close and military time.</p>
+  <div class="clear"></div>
+  <p class="small">The places, units and events in this game are fiction, freely inspired by the air war in Southeast Asia. The aircraft and the photographs in this manual are real.</p>
+  <span class="folio">4</span>
+</section>
+
+<!-- 5 · Setup -->
+<section class="page">
+  <h1>Setup</h1>
+  <p>Air Operations runs in a web browser. To run it from the source you need <b>Node.js 22</b> or newer.</p>
+  <div class="table boxed redterm">
+    <span>npm install</span><span>Installs what the game needs. Once only.</span>
+    <span>npm run dev</span><span>Starts the game. Open the address it prints, usually <span class="kbd">localhost:5173</span>.</span>
+    <span>npm run build</span><span>Writes a static copy of the game to <span class="kbd">dist/</span>.</span>
+  </div>
+  <p>Air Operations requires the following:</p>
+  <div class="cols">
+    <ul><li>A current Chrome, Firefox, Edge or Safari</li><li>A keyboard and mouse (right-click is used a lot)</li></ul>
+    <ul><li>A screen of 1280 × 800 or more</li><li>A cup of coffee for the long nights</li></ul>
+  </div>
+  <h2>Bookmarks</h2>
+  <p>The address records what you are playing, so a battle can be bookmarked or shared:</p>
+  <div class="table redterm">
+    <span>/</span><span>The scenario menu.</span>
+    <span>?scenario=valley-road</span><span>Plays a scenario with a random seed.</span>
+    <span>…&amp;seed=42</span><span>Plays the same battle every time.</span>
+    <span>…&amp;speed=8</span><span>Starts at a higher speed.</span>
+  </div>
+  <p>The same seed and the same orders always replay the same battle. <b>Export log</b> saves your orders so that a battle can be replayed and checked.</p>
+  <span class="folio">5</span>
+</section>
+
+<!-- 6 · Menu -->
+<section class="page">
+  <h1>The scenario menu</h1>
+  <figure style="margin-bottom:2.4mm"><div class="frame" style="height:44mm"><img src="shots/menu.jpg" alt="The scenario menu" style="object-position:top"></div></figure>
+  <p>When you open the game the scenario menu is shown. Each card gives a scenario's objective, briefing, time of day, length and the aircraft you will have. Click a card to play it.</p>
+  <p>A battle is decided by its <em>seed</em>. Leave it empty for a new battle each time, or enter a number to play one battle again with a different plan. The menu remembers the last scenario you played.</p>
+  <p>Inside a battle, the <b>Scenarios</b> button in the header brings you back to the menu.</p>
+  <h2>Speed</h2>
+  <p>A battle runs in real time at 1×. Use <b>2×</b>, <b>4×</b> and <b>8×</b> when nothing is happening, and <span class="kbd">Space</span> to pause. You can give every order while paused.</p>
+  <span class="folio">6</span>
+</section>
+
+<!-- 7 · Basic concepts -->
+<section class="page">
+  <h1>The game: basic concepts</h1>
+  <h2>The picture</h2>
+  <p>The map does not show the enemy. It shows <em>reports</em> of the enemy: where someone saw something, when, and how sure they were. A contact drawn with a solid frame was reported moments ago. A dashed one is old, and it is only where the enemy <em>was</em>. Where it went is your estimate.</p>
+  <p>Air operations groups reports that seem to be one enemy group into <em>tracks</em>, each with a number. It can be wrong: two groups may be merged, or one counted twice.</p>
+  <h2>The troops</h2>
+  <p>Ground units fight on their own. They know only what they have seen and what they have been told. A platoon that has been warned of an ambush can go around it; one that has not will walk into it. Telling them is your job.</p>
+  <h2>The aircraft</h2>
+  <p>You do not fly. You give a crew a task, such as watching an area or covering a platoon, and the crew flies it: it chooses an altitude, searches, attacks within the weapons control you set, and breaks away from ground fire within the risk limit you allow.</p>
+  <h2>The clock</h2>
+  <p>Fuel, bombs and daylight run out. An aircraft that goes home to rearm is gone for a long time. Plan reliefs before you need them.</p>
+  <span class="folio">7</span>
+</section>
+
+<!-- 8 · Missions -->
+<section class="page">
+  <h1>The missions</h1>
+  <p>There are six scenarios, each with its own objective, terrain, weather and enemy. Every one is played from the same seat, but each asks something different of you.</p>
+  <div class="missions">
+    <figure><div class="frame"><img src="shots/tic.jpg" alt=""></div><p><b>Outpost Under Pressure</b>Dawn, 75 min. Hold an outpost against a heavy attack. Play this first.</p></figure>
+    <figure><div class="frame"><img src="shots/pickupmap.jpg" alt=""></div><p><b>Downed Pilot</b>Dusk, up to 16 h. An introduction to rescue, guided by headquarters messages.</p></figure>
+    <figure><div class="frame"><img src="photos/oh6a.jpg" alt=""></div><p><b>Find Them</b>Day, 60 min. Two spotter aircraft and an hour to find a hidden force.</p></figure>
+    <figure><div class="frame"><img src="shots/night.jpg" alt=""></div><p><b>Outpost at Night</b>0400, 75 min. The same outpost in the dark. Flares light both sides.</p></figure>
+    <figure><div class="frame"><img src="shots/valley.jpg" alt=""></div><p><b>Valley Road</b>Day, 2 h. Scout ahead of a column driving up a valley and support it.</p></figure>
+    <figure><div class="frame"><img src="photos/a1e-napalm.jpg" alt="" style="object-position:50% 40%"></div><p><b>Overwatch</b>Day, 2 h. The same road, the enemy dug in, and only two bombs.</p></figure>
+  </div>
+  <span class="folio">8</span>
+</section>
+
+<!-- 9 · Missions cont / outcomes -->
+<section class="page">
+  <h1>Winning and losing</h1>
+  <p>Every scenario has one objective, shown in the header: hold an area for a set time, get a column to a place, locate a force, or bring a pilot home. When it is decided the battle ends and the result is shown, such as <em>OUTPOST LOST: mission failed</em> or <em>PILOT RECOVERED: mission success</em>.</p>
+  <p>The ground decides most battles. You win by putting the right aircraft over the right place at the right time, and by telling the troops what they need to know before they need it.</p>
+  <h2>Taking care of your crews</h2>
+  <p>An aircraft hit by ground fire goes home, and its mission ends there. Repairs take far longer than rearming. Losing an aircraft early in a battle usually costs more than the target was worth.</p>
+  <h2>The debrief</h2>
+  <figure class="right" style="width:44mm"><div class="frame" style="height:28mm"><img src="shots/truth.jpg" alt="The timeline after the run, showing the truth" style="object-position:30% 40%"></div><figcaption>After the run, the timeline shows where everyone really was.</figcaption></figure>
+  <p>At the end of a run the debrief sets your estimates beside the truth: how many enemy there were, where they were, and how many fell. Each source is rated from <b>A</b> to <b>E</b> by how often it was right.</p>
+  <p>Read it. It tells you which of your pilots see clearly and which of your platoons count high, and that is worth knowing next time.</p>
+  <span class="folio">9</span>
+</section>
+
+<!-- 10 · The screen -->
+<section class="page">
+  <h1>The screen</h1>
+  <div class="callouts" style="margin:0 auto 2mm;width:88%">
+    <div class="frame"><img src="shots/screen.jpg" alt="The game screen during a troops-in-contact call"></div>
+    <span class="n" style="left:2%;top:-1.2%">1</span>
+    <span class="n" style="left:22%;top:8%">2</span>
+    <span class="n" style="left:31%;top:40%">3</span>
+    <span class="n" style="left:72%;top:4%">4</span>
+    <span class="n" style="left:72%;top:34%">5</span>
+    <span class="n" style="left:72%;top:43%">6</span>
+    <span class="n" style="left:72%;top:51%">7</span>
+    <span class="n" style="left:72%;top:76%">8</span>
+  </div>
+  <div class="legend-n" style="grid-template-columns:4.2mm 1fr 4.2mm 1fr;font-size:7pt">
+    <i>1</i><span><b>Header.</b> Time, speed, pause, light and weather, the objective, the Timeline, Scenarios and Export log buttons.</span>
+    <i>2</i><span><b>Urgent reports</b> pop over the map. Click a grid to center on it.</span>
+    <i>3</i><span><b>The map:</b> 1:50,000 topographic map, 1 km grid, your units and the reported enemy.</span>
+    <i>4</i><span><b>Aircraft:</b> altitude chart and status board: task, altitude, fuel, ordnance.</span>
+    <i>5</i><span><b>Units on the net:</b> every unit you can call, even ones never seen.</span>
+    <i>6</i><span><b>Support requests</b> waiting for your answer.</span>
+    <i>7</i><span><b>Selected:</b> details and orders for what you clicked.</span>
+    <i>8</i><span><b>Radio, Tracks, Summary:</b> the log, tracked groups, the battle so far.</span>
+  </div>
+  <span class="folio">10</span>
+</section>
+
+<!-- 11 · Map symbols -->
+<section class="page">
+  <h1>The map</h1>
+  <figure class="left" style="width:38mm"><div class="frame" style="height:62mm"><img src="shots/key.jpg" alt="The map key" style="object-position:top left"></div><figcaption>The key (press ?) draws every symbol.</figcaption></figure>
+  <p>Units are drawn with <em>NATO (APP-6)</em> symbols. Friendly units are blue rectangles. Hostile ones are red diamonds. An X inside means infantry.</p>
+  <p>The marks above a symbol give its size: ø a team, ● a squad, ●●● a platoon.</p>
+  <p>A <b>solid frame</b> is a fresh report. A <b>dashed frame</b> is a stale one: the last known position, with the time it was seen. The small arrow points the way it was moving.</p>
+  <p>A <b>?</b> beside a diamond means the report was low-confidence. A yellow clover is a contact nobody could identify. Weapons seen are written beside the symbol: <em>MG</em> for machine guns, <em>MP</em> for shoulder-fired missiles (MANPADS) in magenta.</p>
+  <p>A contact marked <b>NOT FOUND</b> was searched for and not seen. It may still be hidden there.</p>
+  <p>The bar under a symbol is its condition: how much of it is left, as the reports estimate it.</p>
+  <div class="clear"></div>
+  <span class="folio">11</span>
+</section>
+
+<!-- 12 · Orders I -->
+<section class="page">
+  <h1>Giving orders</h1>
+  <p>Select an aircraft (click it, or press <span class="kbd">1–9</span>), then <b>right-click the map</b>. The menu offers what makes sense on that spot. You can also press a task key and click the map.</p>
+  <div class="item"><div class="frame"><img src="photos/o1e-flight.jpg" alt=""></div><div><h3>Watch</h3><p>Sends the aircraft over an area. A recon aircraft searches it. A strike aircraft attacks what it finds there, as weapons control allows.</p><p class="hot">Hot key: W</p></div></div>
+  <div class="item"><div class="frame"><img src="photos/ah1g.jpg" alt=""></div><div><h3>Cover</h3><p>Keeps the aircraft over a friendly platoon, watching ahead of it as it moves.</p><p class="hot">Hot key: C, then click the platoon</p></div></div>
+  <div class="item"><div class="frame"><img src="photos/uh1b.jpg" alt=""></div><div><h3>Suppress</h3><p>The aircraft strafes an area with guns until the time you set. It kills few, but it keeps heads down while the troops move.</p><p class="hot">Hot key: S</p></div></div>
+  <div class="item"><div class="frame"><img src="photos/a1e-napalm.jpg" alt="" style="object-position:50% 35%"></div><div><h3>Strike</h3><p>One bombing pass on a point, then the aircraft watches it. Bombs are few. Spend them where they decide something.</p><p class="hot">Hot key: K</p></div></div>
+  <span class="folio">12</span>
+</section>
+
+<!-- 13 · Orders II -->
+<section class="page">
+  <h1>More orders</h1>
+  <div class="item"><div class="frame"><img src="shots/night.jpg" alt="" style="object-position:55% 40%"></div><div><h3>Illuminate</h3><p>At night, keeps flares burning over an area. Only aircraft that carry flares offer it. Flares light friends as well as enemies.</p></div></div>
+  <div class="item"><div class="frame"><img src="photos/hh3e-scramble.jpg" alt=""></div><div><h3>Pick up here</h3><p>A rescue helicopter lands at the point and waits while survivors board. See <em>Search and rescue</em>.</p></div></div>
+  <div class="item"><div class="frame"><img src="photos/o1e.jpg" alt=""></div><div><h3>Mark this place</h3><p>Warns the units you choose of a suspected kill zone. They watch that ground and go around it.</p></div></div>
+  <h2>Standing settings</h2>
+  <figure class="right" style="width:40mm"><div class="frame" style="height:28mm"><img src="shots/aircraft.jpg" alt="The aircraft panel" style="object-position:top left"></div></figure>
+  <p><b>Weapons:</b> Bombs, Guns, Both, or Hold, when the crew picks no targets of its own.</p>
+  <p><b>Risk:</b> <em>Cautious</em> breaks away at the first shot. <em>Normal</em> breaks when hit or under missile and flak fire. <em>Press on</em> stays.</p>
+  <p><b>Altitude:</b> type it, drag it on the profile, or leave it to the crew. Low is accurate and easy to hit.</p>
+  <p><b>Return to base</b> <span class="hot">(R)</span> sends it home.</p>
+  <span class="folio">13</span>
+</section>
+
+<!-- 14 · Support requests -->
+<section class="page">
+  <h1>Support requests</h1>
+  <figure class="right" style="width:52mm"><div class="frame" style="height:26mm"><img src="shots/request.jpg" alt="A support request card"></div><figcaption>A request card: the target, the friendlies, and your answers.</figcaption></figure>
+  <p>When a platoon decides it needs air, it sends a request. It arrives as a card under <b>Support requests</b>, with the target, its size, whether the unit will mark it with smoke, and where the friendlies are: the essentials of a <em>9-line</em>.</p>
+  <p>Answer it. Click <b>Send</b> on an aircraft (each one shows its time of arrival), or <b>No air available</b>. A unit that is told no fights on without air. A unit that hears nothing waits, and waiting can cost it.</p>
+  <p>Units do not ask lightly. They wait for air only when the enemy position is strong, there is time, and they can wait unseen.</p>
+  <h2>Danger close</h2>
+  <p>When friendly troops are within about 200 m of a target, the crew holds fire and calls <em>DANGER CLOSE</em>. Only you can clear it, for ten minutes at a time, and you can revoke it. At night the distance grows.</p>
+  <p>If bombs or bullets hit friends, the ground calls <em>CHECK FIRE</em>. Stop.</p>
+  <span class="folio">14</span>
+</section>
+
+<!-- 15 · Reports -->
+<section class="page">
+  <h1>Reading reports</h1>
+  <h2>The spot report</h2>
+  <p>Contacts are reported in <em>SALUTE</em> order: <b>S</b>ize, <b>A</b>ctivity, <b>L</b>ocation, <b>U</b>nit, <b>T</b>ime, <b>E</b>quipment. "Spot: squad-sized hostile infantry, firing, at grid 048-039, seen 0615, machine guns seen. Medium confidence."</p>
+  <h2>Source ratings</h2>
+  <p>Each contact carries an <em>Admiralty rating</em> such as <b>B2</b>. The letter is the source: <b>B</b> an aircraft, <b>C</b> a ground unit. The figure is the information: <b>1</b> confirmed by another source, <b>2</b> to <b>4</b> by the confidence of the report.</p>
+  <h2>Tracks</h2>
+  <p>Reports that seem to be one group become a <em>track</em> with a number such as <b>TN 4001</b>. Each part of a track comes from its best source: position from the freshest, size from the best observer. Select a track to see the reports behind it, or split them apart if you think they are wrong.</p>
+  <h2>Claims</h2>
+  <p>Units in a fight count high. Casualty claims are deconflicted on the track's condition bar, and the debrief shows the truth.</p>
+  <span class="folio">15</span>
+</section>
+
+<!-- 16 · Forwarding and radio -->
+<section class="page">
+  <h1>Forwarding</h1>
+  <figure class="right" style="width:42mm"><div class="frame" style="height:32mm"><img src="shots/forward.jpg" alt="Forwarding a contact" style="object-position:top"></div><figcaption>Forward intelligence: tick the units, then Transmit.</figcaption></figure>
+  <p>Units act on what they know. Your aircraft see far more than any platoon. Select a contact or track, tick the units that should know about it, and <b>Transmit</b>. The message keeps its real source and age, so they know how much to trust it.</p>
+  <p>Warned of an ambush, a column can go around it. Told where the enemy is digging in, a platoon can wait for air before it walks in.</p>
+  <h2>The radio</h2>
+  <p>Traffic is sorted by how much it matters. <em>Urgent</em> calls, such as troops in contact or an aircraft taking fire, pop over the map. <b>Main</b> shows what needs you. <b>All</b> also shows routine position reports.</p>
+  <h2>Units on the net</h2>
+  <figure><div class="frame" style="height:13mm"><img src="shots/units.jpg" alt="Units on the net"></div></figure>
+  <p style="margin-top:1.6mm">Every unit you can reach, with the time since it was last heard. Click one to ask for its <b>Position</b>, a <b>SITREP</b> or a <b>Contact update</b>.</p>
+  <span class="folio">16</span>
+</section>
+
+<!-- 17 · Fuel, bombs, ground fire -->
+<section class="page">
+  <h1>Fuel, bombs and fire</h1>
+  <p>Every aircraft has a fixed time on station and a fixed load. The crew tells you when they run out:</p>
+  <div class="table boxed redterm">
+    <span>JOKER</span><span>About ten minutes left. Plan a relief now.</span>
+    <span>BINGO</span><span>Fuel for the trip home only. It is leaving.</span>
+    <span>WINCHESTER</span><span>Nothing left to fire.</span>
+  </div>
+  <p>Rearming and refuelling take ten minutes on the ground, plus the flight both ways. Repairs take longer. Keep someone in the air.</p>
+  <h2>Ground fire</h2>
+  <figure class="right" style="width:40mm"><div class="frame" style="height:27mm"><img src="photos/f100.jpg" alt="An F-100D leaves a target after a napalm drop"></div><figcaption>An F-100D pulls off a target, 1966.</figcaption></figure>
+  <p>Low and slow is easy to hit. Small arms reach a few hundred metres up. Anti-aircraft guns and shoulder-fired missiles reach much higher, and an air defense team keeps quiet until something flies over it.</p>
+  <p>A hit that gets through ends the aircraft's mission. The source of the fire is reported and marked on the map: avoid that ground, or deal with it.</p>
+  <p>Terrain blocks everything: sight, fire and bombs. A hill between your aircraft and the enemy protects both.</p>
+  <span class="folio">17</span>
+</section>
+
+<!-- 18 · Night -->
+<section class="page">
+  <h1>Night, light and flares</h1>
+  <figure style="margin-bottom:2mm"><div class="frame" style="height:7mm"><img src="shots/nightheader.jpg" alt="The header at night" style="object-position:left"></div></figure>
+  <p>Light comes from the sun, the moon and the cloud above them. The header tells you what you have, and when it changes.</p>
+  <figure class="right" style="width:46mm"><div class="frame" style="height:35mm"><img src="shots/night.jpg" alt="A flare over the outpost at night"></div><figcaption>CAS-1 lights the outpost with flares.</figcaption></figure>
+  <p>In the dark everyone sees less and shoots worse, except at units that are firing: muzzle flashes give them away. Strike crews attack only targets that are lit or firing, and danger close reaches further.</p>
+  <p><b>Flares</b> are dropped by aircraft that carry them, ordered from the right-click menu with <em>Illuminate</em>. Ground units fire illumination rounds of their own. A flare lights everyone under it, friend and enemy alike.</p>
+  <h2>Wait for first light</h2>
+  <p>When the night is quiet, <b>Wait for first light</b> in the header fast-forwards to dawn. It stops at once for anything urgent: a call for help, fire, a helicopter landing.</p>
+  <span class="folio">18</span>
+</section>
+
+<!-- 19 · Weather, timeline -->
+<section class="page">
+  <h1>Weather</h1>
+  <p>Storms, cloud and rain come and go through a battle. Forecasts are issued, and they are not always right. Press <b>Weather</b> on the map to draw the forecaster's chart, and slide it forward to see what is coming.</p>
+  <p>All of it comes down to one figure, <em>visibility</em>, which decides how far crews see and how well everyone shoots. An aircraft above the cloud cannot see the ground at all.</p>
+  <h2>The timeline</h2>
+  <p>Press <span class="kbd">T</span> to open the timeline. The battle pauses, and you can drag back to any earlier moment to see the picture as you knew it then: where that platoon was when it last reported, or what the first sighting looked like before the track was built.</p>
+  <p>After the run the timeline gains one more view: the truth. It shows where everyone really was, minute by minute, beside what you believed.</p>
+  <h2>The summary</h2>
+  <p>The <b>Summary</b> tab gives the enemy as reported: the known groups, the headquarters estimate, losses reported by the crews and casualties claimed by the ground.</p>
+  <span class="folio">19</span>
+</section>
+
+<!-- 20 · Rescue I -->
+<section class="page">
+  <h1>Search and rescue</h1>
+  <h1 class="sub">That others may live</h1>
+  <figure class="right" style="width:48mm"><div class="frame" style="height:34mm"><img src="photos/hh3e-scramble.jpg" alt="HH-3E crews run to their helicopters"></div><figcaption>Rescue crews of the 40th ARRS scramble at Nakhon Phanom, Thailand, 1969.</figcaption></figure>
+  <p>"That others may live" is the motto of the Air Force pararescuemen. In Southeast Asia a downed aircrew could count on a rescue force: <em>Sandy</em> Skyraiders to find the survivor and hold the enemy off, and <em>Jolly Green</em> helicopters to go in and bring the survivor out.</p>
+  <p>A downed pilot in this game hides and evades alone, with water for about fourteen hours. When it runs out the pilot slows down, and two hours later dies of thirst.</p>
+  <p>The pilot carries a survival radio and keeps it <b>silent</b> unless you call. Every call drains the battery, twelve calls in all, and gives the enemy a direction-finding fix on where it came from.</p>
+  <p>So ask little, and ask well. Find the pilot through <b>Units on the net</b>: ask for a <b>Position</b>, or a <b>SITREP</b> that also reports water and battery.</p>
+  <p>The hunters start from where they saw the parachute come down and close on every lead. They can take the pilot only once they have actually seen the pilot.</p>
+  <span class="folio">20</span>
+</section>
+
+<!-- 21 · Rescue II -->
+<section class="page">
+  <h1>The pickup</h1>
+  <figure class="right" style="width:40mm"><div class="frame" style="height:23mm"><img src="shots/pickup.jpg" alt="The pickup panel"></div><figcaption>On the ground: boarding progress, and Lift off now.</figcaption></figure>
+  <ol style="padding-left:3.6mm;margin-top:.4mm">
+    <li>Find the survivor, and the enemy nearby, with recon.</li>
+    <li>Put strike aircraft over the area to <b>Cover</b> the pickup and suppress whoever comes close.</li>
+    <li>Right-click on the survivor's position and choose <b>Pick up here</b> for the helicopter. Only a helicopter with seats offers it.</li>
+    <li>The helicopter edges onto the point and lands: <em>WHEELS DOWN</em>. The game drops to 1× and the pickup panel opens.</li>
+    <li>The survivor runs for it, if within reach. Boarding takes twenty seconds beside the door.</li>
+    <li><em>SURVIVOR ABOARD</em>: it lifts off and flies home. The rescue succeeds when it lands there.</li>
+  </ol>
+  <h2>On the ground</h2>
+  <p>A helicopter on the ground is eight times easier to hit. Under fire the crew lifts off by its risk limit: <em>Cautious</em> at the first shot, <em>Normal</em> when hit or under missile fire, <em>Press on</em> never. <b>Lift off now</b>, or any other order, takes it up at once. Boarding starts again next time.</p>
+  <p>Night hides the pilot and the hunters alike. Waiting for first light may be the safest thing you do.</p>
+  <span class="folio">21</span>
+</section>
+
+<!-- 22 · O-1E -->
+<section class="page profile">
+  <div class="frame hero"><img src="photos/o1e-flight.jpg" alt="O-1E Bird Dog in flight over Vietnam, 1967"></div>
+  <h1>Forward air controller: <span>Cessna O-1E Bird Dog</span></h1>
+  <p>A two-seat, high-wing light aircraft built for the Army as the L-19 and flown in Vietnam by the Air Force's forward air controllers. Slow, unarmed but for smoke rockets, and able to stay up for hours, it was the eyes of the air war in the South.</p>
+  <div class="stats"><div><b>180</b><small>km/h</small></div><div><b>4 h 40</b><small>endurance</small></div><div><b>none</b><small>ordnance</small></div><div><b>4</b><small>flares</small></div></div>
+  <p><em>In the game:</em> your best spotter in a fixed-wing aircraft and the longest on station. It searches, reports and lights the night. It has no armor: one hit ends its day.</p>
+  <span class="folio">22</span>
+</section>
+
+<!-- 23 · RF-101C -->
+<section class="page profile">
+  <div class="frame hero"><img src="photos/rf101.jpg" alt="RF-101C Voodoo of the 45th TRS"></div>
+  <h1>Photo reconnaissance: <span>McDonnell RF-101C Voodoo</span></h1>
+  <p>The unarmed camera version of the Voodoo fighter. RF-101Cs flew reconnaissance over Laos and North Vietnam from early in the war, relying on speed alone to get the photographs home.</p>
+  <div class="stats"><div><b>880</b><small>km/h</small></div><div><b>1 h 40</b><small>endurance</small></div><div><b>none</b><small>ordnance</small></div><div><b>0</b><small>flares</small></div></div>
+  <p><em>In the game:</em> sweeps a wide area fast and sees far, though not much detail. Hard to hit, and tough to stay with: it covers a whole sector in minutes, then has to go home.</p>
+  <span class="folio">23</span>
+</section>
+
+<!-- 24 · A-1E -->
+<section class="page profile">
+  <div class="frame hero"><img src="photos/a1e.jpg" alt="A-1E Skyraider of the 1st SOS in flight" style="object-position:50% 40%"></div>
+  <h1>Close air support: <span>Douglas A-1E Skyraider</span> <span class="small">A.K.A. "Spad", "Sandy"</span></h1>
+  <p>A piston-engined attack aircraft designed in 1945, still flying in Vietnam twenty years later because nothing jet-powered could carry as much, stay as long or fly as low. Rescue escort Skyraiders flew under the call sign Sandy.</p>
+  <div class="stats"><div><b>320</b><small>km/h</small></div><div><b>2 h 40</b><small>endurance</small></div><div><b>8 · 20</b><small>bombs · gun bursts</small></div><div><b>4</b><small>flares</small></div></div>
+  <p><em>In the game:</em> the workhorse. Accurate, armored enough to survive half the hits it takes, with a heavy load and the time to use it.</p>
+  <span class="folio">24</span>
+</section>
+
+<!-- 25 · F-100D -->
+<section class="page profile">
+  <div class="frame hero"><img src="photos/f100.jpg" alt="F-100D Super Sabre of the 90th TFS leaves the target area"></div>
+  <h1>Fighter-bomber: <span>North American F-100D Super Sabre</span> <span class="small">A.K.A. "Hun"</span></h1>
+  <p>The first Air Force fighter able to fly faster than sound in level flight. In Vietnam the F-100D was a mainstay of close air support in the South.</p>
+  <div class="stats"><div><b>900</b><small>km/h</small></div><div><b>50 min</b><small>endurance</small></div><div><b>4 · 16</b><small>bombs · gun bursts</small></div><div><b>0</b><small>flares</small></div></div>
+  <p><em>In the game:</em> the heaviest punch per pass and hard to hit, but the least accurate, the poorest eyes, and only minutes on station. Give it a target someone else has found.</p>
+  <span class="folio">25</span>
+</section>
+
+<!-- 26 · UH-1B -->
+<section class="page profile">
+  <div class="frame hero"><img src="photos/uh1b.jpg" alt="UH-1B takes off after a mission" style="object-position:50% 45%"></div>
+  <h1>Armed helicopter: <span>Bell UH-1B Iroquois</span> <span class="small">A.K.A. "Huey"</span></h1>
+  <p>The early Huey. Fitted with machine guns and rocket pods, B-models became the Army's first gunships, escorting the troop-carrying "slicks" into landing zones.</p>
+  <div class="stats"><div><b>200</b><small>km/h</small></div><div><b>2 h</b><small>endurance</small></div><div><b>10 · 30</b><small>rockets · gun bursts</small></div><div><b>6</b><small>flares</small></div></div>
+  <p><em>In the game:</em> flies low, hovers, follows the terrain and makes frequent passes. Good eyes, and the most flares. Easy to hit: keep it away from guns you have not found.</p>
+  <span class="folio">26</span>
+</section>
+
+<!-- 27 · AH-1G -->
+<section class="page profile">
+  <div class="frame hero"><img src="photos/ah1g.jpg" alt="AH-1G Cobra over Vietnam, 1968"></div>
+  <h1>Attack helicopter: <span>Bell AH-1G HueyCobra</span> <span class="small">A.K.A. "Snake"</span></h1>
+  <p>The first helicopter designed from the start to attack. A slim two-seat airframe on Huey parts, it reached Vietnam in 1967 with a chin turret and rocket pods.</p>
+  <div class="stats"><div><b>280</b><small>km/h</small></div><div><b>2 h</b><small>endurance</small></div><div><b>12 · 30</b><small>rockets · gun bursts</small></div><div><b>0</b><small>flares</small></div></div>
+  <p><em>In the game:</em> faster and harder to hit than the Huey, with the shortest time between passes. It pairs naturally with a scout that finds targets for it.</p>
+  <span class="folio">27</span>
+</section>
+
+<!-- 28 · OH-6A -->
+<section class="page profile">
+  <div class="frame hero"><img src="photos/oh6a.jpg" alt="OH-6A on reconnaissance patrol"></div>
+  <h1>Light observation: <span>Hughes OH-6A Cayuse</span> <span class="small">A.K.A. "Loach"</span></h1>
+  <p>A small, agile scout helicopter. Its crews flew at treetop height, looking for signs of the enemy and often drawing fire on purpose so that the Cobras above could find their target.</p>
+  <div class="stats"><div><b>230</b><small>km/h</small></div><div><b>2 h 45</b><small>endurance</small></div><div><b>none</b><small>ordnance</small></div><div><b>0</b><small>flares</small></div></div>
+  <p><em>In the game:</em> the best eyes you have, over a small area. The easiest aircraft to hit. Use it where you need certainty, not as a decoy.</p>
+  <span class="folio">28</span>
+</section>
+
+<!-- 29 · HH-3E -->
+<section class="page profile">
+  <div class="frame hero"><img src="photos/hh3e.jpg" alt="HH-3E Jolly Green Giant off the coast of Vietnam, 1969"></div>
+  <h1>Rescue: <span>Sikorsky HH-3E</span> <span class="small">A.K.A. "Jolly Green Giant"</span></h1>
+  <p>An armored rescue helicopter with a hoist, a refuelling probe and pararescuemen aboard. Refuelled in flight from HC-130 tankers, Jolly Greens reached downed aircrew deep in Laos and North Vietnam.</p>
+  <div class="stats"><div><b>250</b><small>km/h</small></div><div><b>2 h</b><small>endurance</small></div><div><b>4</b><small>seats</small></div><div><b>none</b><small>ordnance</small></div></div>
+  <p><em>In the game:</em> the only aircraft that can pick a survivor up. Unarmed, and very exposed on the ground. Send it in once the escorts are overhead.</p>
+  <span class="folio">29</span>
+</section>
+
+<!-- 30 · Keys -->
+<section class="page">
+  <h1>Keys</h1>
+  <div class="table redterm">
+    <span>1–9</span><span>Select an aircraft.</span>
+    <span>W C S K</span><span>Watch, Cover, Suppress or Strike for the selected aircraft, then click the map.</span>
+    <span>R</span><span>Return the selected aircraft to base.</span>
+    <span>Space</span><span>Pause and resume.</span>
+    <span>T</span><span>Open the timeline.</span>
+    <span>?</span><span>Show or hide the key.</span>
+    <span>Esc</span><span>Cancel, close menus and the key.</span>
+    <span>Right-click</span><span>What can be done right there.</span>
+  </div>
+  <h2>Radio words</h2>
+  <div class="cols" style="gap:2mm">
+    <div class="table redterm" style="margin:0">
+      <span>NO JOY</span><span>Searching, nothing yet.</span>
+      <span>CONTACT</span><span>Something seen.</span>
+      <span>TALLY</span><span>Target in sight.</span>
+      <span>IN HOT</span><span>Running in to attack.</span>
+      <span>DEFENDING</span><span>Breaking from fire.</span>
+      <span>WEAPONS HOLD</span><span>Picks no targets.</span>
+    </div>
+    <div class="table redterm" style="margin:0">
+      <span>HOLDING</span><span>Friendlies too close.</span>
+      <span>CHECK FIRE</span><span>Friends are hit.</span>
+      <span>WHEELS DOWN</span><span>Landed for pickup.</span>
+      <span>LIFTING OFF</span><span>Left under fire.</span>
+      <span>SURVIVOR ABOARD</span><span>Pickup made.</span>
+      <span>RTB</span><span>Going home.</span>
+    </div>
+  </div>
+  <span class="folio">30</span>
+</section>
+
+<!-- 31 · Credits -->
+<section class="page">
+  <h1>Credits</h1>
+  <div class="cols">
+    <div>
+      <h3>Air Operations</h3>
+      <p><em>Pedro Argento</em><br>Design and programming</p>
+      <h3>Source</h3>
+      <p>github.com/pedroargento/<br>air-ops-controller</p>
+      <h3>Type</h3>
+      <p class="small">Special Elite, Anton, Roboto Condensed and Stardos Stencil, from Google Fonts.</p>
+      <h3>Inspiration</h3>
+      <p class="small">The printed manuals of the late 1990s, Commandos: Behind Enemy Lines most of all.</p>
+    </div>
+    <div class="small">
+      <h3>Photographs</h3>
+      <p>All photographs are U.S. Air Force and U.S. Army photographs in the public domain, from the U.S. National Archives and the National Museum of the U.S. Air Force, via Wikimedia Commons.</p>
+      <p>Cover: A-1H Skyraiders of the 22nd SOS escort an HH-3E, c. 1969. p.3: O-1E pilot with smoke grenade, NARA 50563439. p.4: SP4 Arnold Pellerin, 2/77th Artillery, photo SP6 Thomas L. Larsen. p.12, 22: O-1E 56-4200 near Saigon, 1967. p.12, 27: AH-1G, C Troop, 7/1st Cavalry, 1968, U.S. Army Heritage and Education Center. p.12, 26: UH-1B takes off, NARA 111-CCV-93-CC31459. p.8, 12: A-1E with napalm, c. 1965. p.13, 20: HH-3Es of Det. 1, 40th ARRS, Nakhon Phanom, 1969, 342-C-KE-36280. p.17, 25: F-100D of the 90th TFS, 1966. p.23: RF-101C 56-0176, 45th TRS. p.24: A-1E 52-135206, 1st SOS. p.28: OH-6A on reconnaissance patrol, photo SP4 King. p.29: HH-3E 67-14706, 37th ARRS, 1969, photo TSgt Elmer Mullins.</p>
+    </div>
+  </div>
+  <span class="folio">31</span>
+</section>
+
+<!-- 32 · Back -->
+<section class="page back">
+  <h1>Hints &amp; Tips</h1>
+  <ul>
+    <li><b>Reports age.</b> A contact seen ten minutes ago has moved. Work out where it might have gone.</li>
+    <li><b>Units overclaim.</b> Casualty claims from a fight run high. Trust the condition bar and the debrief, not the shouting.</li>
+    <li><b>Fuel and bombs set the tempo.</b> JOKER means plan a relief. BINGO means it is already too late to plan one.</li>
+    <li><b>Find before you strike.</b> A recon aircraft over the right valley is worth more than a bomb in the wrong one.</li>
+    <li><b>Tell the troops.</b> Forwarding costs nothing and saves platoons.</li>
+    <li><b>Answer every request</b>, even with no. A unit waiting for air that will never come is a unit standing still.</li>
+    <li><b>Mind the gun you have not found.</b> Where one aircraft took fire, the next one will too.</li>
+  </ul>
+  <h1 style="margin-top:3mm">Customer Service</h1>
+  <p>Found a bug, or a battle that went strangely? Please open an issue at <b>github.com/pedroargento/air-ops-controller</b> and include the <b>Export log</b> file from that battle. It replays the battle exactly, so we can see what you saw.</p>
+</section>
+
+</main>
+</body>
+</html>

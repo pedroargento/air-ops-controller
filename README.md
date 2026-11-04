@@ -8,6 +8,8 @@ What you have is reports. They arrive late, they are often wrong, and they contr
 
 The design follows real doctrine where it can: NATO map symbols (APP-6), SALUTE spot reports, 9-line support requests, brevity words (JOKER, BINGO, WINCHESTER), track numbers and source ratings, danger close, and military time.
 
+The illustrated [controller's manual](https://github.com/pedroargento/air-ops-controller/releases/latest/download/air-operations-manual.pdf) covers the same ground in the style of a 1990s game booklet, with period photographs of every aircraft. It is attached to each release. Its source is `docs/manual/manual.html`, and `npm run manual` prints it to `docs/manual/`.
+
 ## Running it
 
 You need Node.js 22 or newer.
