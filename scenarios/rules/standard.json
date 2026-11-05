@@ -800,7 +800,8 @@
     "fireBearingErrorRad": 0.35,
     "fireSectorRad": 0.52,
     "engageMatchMeters": 150,
-    "tracerErrorRad": 0.08
+    "tracerErrorRad": 0.08,
+    "fireCueBoost": 2.0
   },
   "radio": {
     "prepareSeconds": 15,

@@ -64,6 +64,8 @@ const doctrine: Doctrine = {
   illuminationRounds: 0,
   waitForAirStrengthRatio: 0.5,
   radioSilent: false,
+  reactToFire: true,
+  blindFireRangeMeters: 250,
   airRefusedMemorySeconds: 900,
   objectiveMarginMeters: 60,
   attackRadiusMeters: 100,
@@ -466,5 +468,54 @@ describe('decideGround', () => {
     expect(decide(self({ ...recovered, personnel: 10 }), nothing).mode).toBe('broken');
     expect(decide(self({ ...recovered, ammunition: 50 }), nothing).mode).toBe('broken');
     expect(decide(self({ mode: 'broken', morale: 1 }), nothing).mode).toBe('broken');
+  });
+});
+
+describe('react to contact (§4.0.3)', () => {
+  const holding = { kind: 'HoldArea', area: { center: { x: 0, y: 0 }, radius: 100 } } as const;
+  /** Knowledge of fire on the unit: from a contact it holds, or only from a direction. */
+  const firedOn = (base: UnitKnowledge, from: Partial<UnitKnowledge['fire']['from'][string]> & { contact: ContactEstimate | null }): UnitKnowledge => ({
+    ...base,
+    fire: {
+      since: 0,
+      lastAt: 0,
+      heavyAt: null,
+      engaging: {},
+      from: { [from.contact?.contactId ?? 'bearing/0']: { bearingRad: 0, spreadRad: 0.3, origin: { x: 0, y: 0 }, observedAt: 0, ...from } },
+    },
+  });
+
+  it('fires back toward a shooter it can\'t see, at a guessed range', () => {
+    const knowledge = firedOn(nothing, { contact: null, bearingRad: -Math.PI / 2 });
+    const { intent } = decide(self({ objective: holding, underFire: true }), knowledge);
+    expect(intent.kind).toBe('engage');
+    if (intent.kind !== 'engage') return;
+    expect(intent.aim.x).toBeCloseTo(0, 5);
+    expect(intent.aim.y).toBeCloseTo(-Math.min(doctrine.blindFireRangeMeters, doctrine.engageRangeMeters), 5);
+    expect(intent.closeTo).toBeNull();
+  });
+
+  it('keeps moving on while it fires back, when it is going somewhere', () => {
+    const knowledge = firedOn(nothing, { contact: null, bearingRad: Math.PI / 2 });
+    const { intent } = decide(self({ underFire: true }), knowledge);
+    expect(intent.kind === 'engage' ? intent.closeTo : null).toEqual({ x: 1000, y: 0 });
+  });
+
+  it('answers the shooter rather than the nearest enemy', () => {
+    const shooter = estimate(-300, 'C-2');
+    const knowledge = firedOn({ ...emptyKnowledge(), contacts: { 'C-1': estimate(100, 'C-1'), 'C-2': shooter } }, { contact: shooter });
+    const { intent } = decide(self({ objective: holding, underFire: true }), knowledge);
+    expect(intent.kind === 'engage' ? intent.aim : null).toEqual({ x: -300, y: 0 });
+  });
+
+  it('does none of this when its doctrine doesn\'t react to fire', () => {
+    const knowledge = firedOn(nothing, { contact: null, bearingRad: 0 });
+    const { intent } = decide(self({ objective: holding, underFire: true, doctrine: { ...doctrine, reactToFire: false } }), knowledge);
+    expect(intent.kind).not.toBe('engage');
+  });
+
+  it('applies to both sides alike', () => {
+    const knowledge = firedOn(nothing, { contact: null, bearingRad: 1 });
+    expect(decide(self({ side: 'friendly', underFire: true }), knowledge)).toEqual(decide(self({ side: 'enemy', underFire: true }), knowledge));
   });
 });

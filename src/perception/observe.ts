@@ -1,4 +1,4 @@
-import { atan2 } from '../domain/public/det-math';
+import { atan2, PI } from '../domain/public/det-math';
 import {
   strengthCategory,
   type Confidence,
@@ -370,16 +370,25 @@ function claimTheLast(truth: WorldTruth, observer: Observer, target: GroundUnit,
 }
 
 /** Being told where to look is what a report gives a unit: it finds what it would have missed. */
-function reportCue(belief: UnitKnowledge, memory: number, config: PerceptionConfig, tick: number): (target: GroundUnit) => number {
+function reportCue(belief: UnitKnowledge, memory: number, config: PerceptionConfig, tick: number, watchesFire: boolean): (target: GroundUnit) => number {
   const reported = Object.values(belief.reports).filter(
     (report) => report.identification === 'hostile' && tick - report.position.observedAt <= memory,
   );
   const marks = Object.values(belief.pois);
-  if (reported.length === 0 && marks.length === 0) return () => 1;
+  // Fire from an unseen shooter: men look the way it comes from (§4.0.3).
+  const blind = watchesFire ? Object.values(belief.fire.from).filter((incoming) => incoming.contact === null) : [];
+  if (reported.length === 0 && marks.length === 0 && blind.length === 0) return () => 1;
   const near = (target: GroundUnit): boolean =>
     reported.some((report) => distance(report.position.center, target.position) <= config.reportCueMeters) ||
     marks.some((poi) => distance(poi.center, target.position) <= poi.radiusMeters + config.reportCueMeters);
-  return (target) => (near(target) ? config.reportCueBoost : 1);
+  const along = (target: GroundUnit): boolean =>
+    blind.some((incoming) => {
+      const toward = atan2(target.position.y - incoming.origin.y, target.position.x - incoming.origin.x);
+      let gap = Math.abs(toward - incoming.bearingRad);
+      if (gap > PI) gap = 2 * PI - gap;
+      return gap <= incoming.spreadRad;
+    });
+  return (target) => (near(target) ? config.reportCueBoost : 1) * (along(target) ? config.fireCueBoost : 1);
 }
 
 function groundObserver(
@@ -432,7 +441,7 @@ export function updatePerception(
       const dx = target.position.x - unit.position.x;
       const dy = target.position.y - unit.position.y;
       if (dx * dx + dy * dy > reach * reach) continue;
-      const cue = cues.get(unit.platoonId) ?? reportCue(belief, unit.doctrine.reportMemorySeconds, config, tick);
+      const cue = cues.get(unit.platoonId) ?? reportCue(belief, unit.doctrine.reportMemorySeconds, config, tick, unit.doctrine.reactToFire);
       cues.set(unit.platoonId, cue);
       observer ??= groundObserver(unit, truth, cue, tick, config.claimWindowSeconds);
       if (target.personnel <= 0) {

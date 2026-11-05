@@ -86,6 +86,9 @@ export type Doctrine = Readonly<{
   illuminationRounds: number;
   waitForAirStrengthRatio: number;
   radioSilent: boolean;
+  /** Under fire, aims its reaction at the shooter, or fires back toward unseen fire (§4.0.3). */
+  reactToFire: boolean;
+  blindFireRangeMeters: number;
   airRefusedMemorySeconds: number;
   standoffMeters: number;
   observeBias: number;

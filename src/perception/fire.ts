@@ -38,13 +38,13 @@ function sourceOf(
   const track = truth.tracks[squad.platoonId]?.[firer.id];
   const contact = track === undefined ? undefined : belief.contacts[track.contactId];
   if (contact !== undefined && tick - contact.position.observedAt <= config.fireMemorySeconds) {
-    return [contact.contactId, { contact, bearingRad: bearing(squad.position, contact.position.center), spreadRad: 0, observedAt: at }];
+    return [contact.contactId, { contact, bearingRad: bearing(squad.position, contact.position.center), spreadRad: 0, origin: squad.position, observedAt: at }];
   }
   const judged = wrap(bearing(squad.position, firer.position) + nextGaussian(rng, `firefrom/${squad.id}/${firer.id}`) * config.fireBearingErrorRad);
   // Directions close together are one: men under fire say "from the north-east", not a bearing.
   const sector = Math.round(judged / config.fireSectorRad);
   const spreadRad = Math.max(config.fireSectorRad, 2 * config.fireBearingErrorRad) / 2;
-  return [`bearing/${sector}`, { contact: null, bearingRad: judged, spreadRad, observedAt: at }];
+  return [`bearing/${sector}`, { contact: null, bearingRad: judged, spreadRad, origin: squad.position, observedAt: at }];
 }
 
 /** The platoon's contact nearest where a firing squad aims, if close enough to be what it is shooting at. */

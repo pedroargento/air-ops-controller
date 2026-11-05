@@ -1,3 +1,4 @@
+import { shooterContact } from './under-fire';
 import { strengthMidpoint, type ContactEstimate } from '../domain/public/estimates';
 import { cos, sin } from '../domain/public/det-math';
 import { distance, type Vec2 } from '../domain/public/geometry';
@@ -264,7 +265,9 @@ function startDrill(self: UnitSelf, knowledge: UnitKnowledge, tick: number, map:
   if (doctrine.drills.length === 0) return null;
   // Drills belong to a platoon going somewhere: holding and patrolling have their own rules.
   if (objective.kind !== 'MoveTo' && objective.kind !== 'AssaultArea') return null;
-  const nearest = nearestHostile(self, knowledge, tick);
+  // Fired on, a platoon answers the shooter it can see, not the nearest enemy it knows of (§4.0.3).
+  const shooter = self.underFire ? shooterContact(self, knowledge, Number.POSITIVE_INFINITY) : null;
+  const nearest = shooter !== null && tick - shooter.position.observedAt <= doctrine.clearSeconds ? shooter : nearestHostile(self, knowledge, tick);
   if (self.underFire && nearest !== null) {
     const center = nearest.position.center;
     const range = distance(self.position, center);

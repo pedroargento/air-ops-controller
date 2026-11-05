@@ -1,4 +1,5 @@
 import type { ContactEstimate } from './estimates';
+import type { Vec2 } from './geometry';
 
 /*
  * Fire on the ground as the units in it understand it (§7.3). A unit knows when it is being
@@ -16,6 +17,8 @@ export type IncomingFire = Readonly<{
   contact: ContactEstimate | null;
   bearingRad: number;
   spreadRad: number;
+  /** Where the squad that felt the fire was, which the direction is measured from. */
+  origin: Vec2;
   observedAt: number;
 }>;
 

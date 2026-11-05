@@ -124,8 +124,8 @@ describe('fire on the ground (§7.3)', () => {
         intensity: 'heavy',
         since: 90,
         from: [
-          { contact: shooter, bearingRad: 0, spreadRad: 0, observedAt: 100 },
-          { contact: null, bearingRad: Math.PI / 2, spreadRad: 0.35, observedAt: 100 },
+          { contact: shooter, bearingRad: 0, spreadRad: 0, origin: own.center, observedAt: 100 },
+          { contact: null, bearingRad: Math.PI / 2, spreadRad: 0.35, origin: own.center, observedAt: 100 },
         ],
         engaging: [shooter],
       },

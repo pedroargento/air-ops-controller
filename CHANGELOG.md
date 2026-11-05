@@ -10,6 +10,10 @@ Notable changes to Air Operations. Section numbers such as §8.8 refer to `air-o
 - Unit and track panels say who is firing on whom and since when, support request cards say where the fire comes from, and the track list can sort by tracks firing on friendly units.
 - Units carry this in the reports they already send, so the radio gets no busier, and every battle plays out exactly as before.
 
+### React to contact (§4.0.3)
+- Ground units on both sides now answer fire: they target the enemy shooting at them rather than the nearest one, fire back toward fire from a shooter they can't see, and look that way to find it. Units holding ground stay put; units on the move keep going while they fire.
+- Battles change: the outpost with good air work rises from 66% to 74% won, columns warned of nothing do better on Valley Road, and Overwatch is about 5 points easier. Every scenario keeps its spread from no air to good air.
+
 ## 0.2.0 (2026-11-03)
 
 Six scenarios, squads and drills on the ground, crews that fly their own missions, NATO map conventions, tracks, night, and combat search and rescue.

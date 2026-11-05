@@ -135,6 +135,16 @@ A drill is a platoon's shared answer to a situation, taken from published small-
 
 **Rallying:** A doctrine with `rallyMeters` pulls back that far from the enemy and carries on, instead of returning to its authored fallback, unless it is holding ground.
 
+### 4.0.3 React to contact
+
+Every unit on both sides answers fire the same way, from its own picture of its fight (§7.3). It follows the first battle drill every soldier learns (FM 7-8): return fire, take cover, find the enemy, then decide.
+
+- **The shooter first:** Under fire, a unit aims its reaction at a contact it believes is firing on it, not at whatever enemy is nearest. That shooter becomes its target for return fire and behavior choice, and the contact a drill starts from (near ambush, far ambush, bypass).
+- **Unseen fire:** A unit fired on by someone it can't see fires back toward where the fire comes from, at `blindFireRangeMeters`, or its engagement range if that is shorter. Fire lands on whoever is really there, so firing the right way can hit and pin an unseen enemy, and firing the wrong way only spends ammunition. A unit holding ground stays put. A unit going somewhere keeps moving on while it fires.
+- **Looking for the shooter:** Spotting is `fireCueBoost` times likelier toward where unseen fire comes from, so a hidden shooter becomes a contact sooner, and is reported.
+- **Taking cover:** Pinned units still go to ground, as before. Being fired on doesn't add a separate pause, so columns keep their tempo.
+- **Doctrine:** `reactToFire` turns all of this on for a doctrine. It is on for every doctrine by default.
+
 ### 4.1 Statistical ground combat
 
 For the MVP, calculate combat effects at the formation level, not per soldier or bullet. A unit's effective fire depends on current personnel, ammunition, range, terrain/cover, suppression, and its current target assessment. Resolve ammunition usage, suppression and casualties at each combat update. Combat remains seeded and stochastic, but all effects for an update are calculated from one shared snapshot and then applied together, so entity order cannot change the outcome.

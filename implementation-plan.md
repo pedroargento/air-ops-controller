@@ -14,7 +14,7 @@ Version 0.2.0, released 2026-11-03. Six scenarios are playable from a menu, with
 | M8 | Replaced by S1. |
 | M9 | Partly done: Downed Pilot was playtested by hand (finding: an unseen survivor couldn't be called, now fixed). The outpost playtest is still owed. |
 | S0, S1, S4 | Met. S1's no air is 4.4% against S0's 0.3%. |
-| S2 | Met apart from the per-drill benefit. |
+| S2 | Met apart from the per-drill benefit. Followed by React to contact (§4.0.3), done on 2026-11-05. |
 | S3 | Left open on purpose: guns don't change outcomes. |
 | S5, S6 | Not started. |
 | **S7** | **Next.** See its section for what already exists. |
@@ -26,30 +26,30 @@ Version 0.2.0, released 2026-11-03. Six scenarios are playable from a menu, with
 
 ### Current balance
 
-Measured on 2026-11-04 over 300 seeds per bot, with the bots denying danger close (the `…Approve` variants clear it every time and do worse almost everywhere). Wins are percent; the 95% interval at 300 seeds is about ±5 points near 50%. Every bot is listed in `src/cli/policy-registry.ts`.
+Measured on 2026-11-05 over 300 seeds per bot, after units began reacting to fire, with the bots denying danger close (the `…Approve` variants clear it every time and do worse almost everywhere). Wins are percent; the 95% interval at 300 seeds is about ±5 points near 50%. Every bot is listed in `src/cli/policy-registry.ts`.
 
 | Scenario | No air | Lazy air | Good air | Other bots |
 |---|---|---|---|---|
-| Outpost Under Pressure | 4.0 | reactive 21.7 | informed 66.0 | fire first 62.3, without forwarding 49.7, immediate 30.0, lingering on guns 63.7, cautious 48.7, press on 68.3 |
-| Outpost at Night | 0.7 | reactive 4.0 | informed 26.3 | with flares 32.7, **fire first 37.0**, without forwarding 14.7, press on 33.0 |
-| Valley Road | 23.3 | reactive 20.0 | recon and CAS 80.7 | with marks 82.7, without forwarding 44.0, scouting only 68.3 (20.0 unforwarded), cover 80.3, suppress 73.3 |
-| Overwatch | 10.7 | reactive 11.3 | recon and CAS 21.7 | **cover 44.0**, marks 23.7, suppress 25.7, without forwarding 17.3, scouting only 17.7 |
+| Outpost Under Pressure | 5.7 | reactive 22.3 | informed 73.7 | fire first 69.7, without forwarding 49.3, immediate 32.7, lingering on guns 71.3, cautious 59.3, press on 79.7 |
+| Outpost at Night | 0.7 | reactive 4.7 | informed 27.3 | **fire first 43.3**, with flares 32.0, without forwarding 20.7, press on 37.7 |
+| Valley Road | 25.3 | reactive 22.7 | recon and CAS 83.0 | with marks 82.7, without forwarding 50.3, scouting only 69.0 (24.0 unforwarded), cover 81.7, suppress 73.0, fire first 81.0 |
+| Overwatch | 16.3 | reactive 14.7 | recon and CAS 26.0 | **cover 46.3**, marks 25.7, suppress 27.0, without forwarding 22.0, scouting only 16.3, fire first 23.7 |
 | Find Them | 0.0 | one orbit 0.0 | sweep 79.7 | |
 | Downed Pilot | 0.0 | unescorted 81.0 | escorted 98.0 | waiting for daylight 92.7 |
 
-Findings from this run, against the figures recorded earlier:
+Findings, against the figures recorded before units reacted to fire:
 
-- All results match their last recorded figures within noise, so nothing has drifted.
-- **Covering the column on Overwatch doubles its result** (44.0% against 21.7%), which no earlier result recorded. Cover keeps a strike aircraft watching ahead of the lead platoon. Why that pays so much more here than on Valley Road (80.3% against 80.7%) isn't traced yet. It is the first clear case of a task changing an outcome on Overwatch, so trace it before S5 relies on Cover.
-- **Reactive air doesn't beat no air on Valley Road or Overwatch.** Answering requests alone is worth nothing on the road maps. That fits the design, since recon is the lever there, but it means the "lazy air" floor is no air.
-- **Forwarding is worth 16 points at the outpost and 37 on Valley Road,** above the 10-point target in both.
-- **Clearing every danger close costs up to 12 points** at night, where it widens (informed 26.3% against 14.0%), and up to 7 by day.
+- **Covering the column on Overwatch still doubles its result** (46.3% against 26.0%). Why it pays so much more there than on Valley Road (81.7% against 83.0%) isn't traced yet, so trace it before S5 relies on Cover.
+- **Reactive air still doesn't beat no air on Valley Road or Overwatch.** Answering requests alone is worth nothing on the road maps. That fits the design, since recon is the lever there, but it means the "lazy air" floor is no air.
+- **Forwarding is worth 24 points at the outpost and 33 on Valley Road,** above the 10-point target in both.
+- **Striking whatever fires on friends first pays at night** (43.3% against 27.3%) and costs a little by day.
+- **Clearing every danger close costs up to 12 points at night,** where it widens, and up to 7 by day (measured before the reaction; not re-run since).
 
 ### Open items
 
 Most important first. Win-rate tuning waits for M13, so these are recorded rather than fixed.
 
-- **Trace Cover on Overwatch** (44.0% against 21.7% for recon and CAS) before building on it.
+- **Trace Cover on Overwatch** (46.3% against 26.0% for recon and CAS) before building on it.
 - **Guns don't change outcomes** on any map, including Overwatch, which was built for them (S3).
 - **Waiting for air shows no gain.** The weighed rule removed its cost, but no map rewards it yet.
 - **No air wins a few percent at the outpost.** These are real wins, so M5's exit stays unmet.
@@ -499,6 +499,17 @@ Work that came between the scenario milestones, in the order it was done. Each p
 **Scenario menu and units on the net:** A bare URL now opens a menu with a card per scenario: objective, briefing, time of day, length and aircraft, and an optional seed. `?scenario=` and `?seed=` still play directly, and the menu remembers the last scenario. The sidebar's **Units on the net** lists every unit the controller can call, including ones never seen, which fixed the Downed Pilot playtest's main complaint. No battle changed.
 
 **Fire on the ground (§7.3):** Playtest finding: units seemed to stand still, with no sign of who was fighting whom, so it was hard to pick what air should hit first. The map now shows fire only as far as someone saw it or said it. A crew watching a unit fire sees which way the fire goes, and whom it lands on if it can see them too: a solid arrow, or a short stub when the target is unseen. A unit's reports say whether it is under fire, light or heavy, where the fire comes from (a contact it can see, or only a direction, drawn as a wedge) and what it is firing at: dashed arrows. Panels, request cards and a "Firing on friends" track sort put it in words. Units carry this in the reports they already send, on new labeled random streams, so no battle changed: every bot on all six scenarios gave identical results over 4 seeds against the previous commit, and identical win rates over 300 seeds. In an outpost run, the busiest moment holds about 40 lines, readable once zoomed in, and the fresh window (`fireLineFreshSeconds`, 5 minutes) matches how often units report. A bot that strikes tracks firing on friendly units first, over 300 seeds: Outpost at Night 37.0% against 26.3% for informed, Outpost Under Pressure 62.3% against 66.0%, Valley Road 79.3% against 80.7%, Overwatch 21.7% against 21.7%. So it pays at night, where crews find little on their own, and is neutral or slightly worse by day, where the nearest strong group is usually the right target anyway. Ground units don't act on the direction of fire yet.
+
+**React to contact (§4.0.3):** Every unit on both sides now answers fire from its own picture of it. Under fire it targets the contact it believes is shooting at it rather than the nearest enemy, and drills start from that shooter. Fired on by someone it can't see, it fires back toward where the fire comes from at a guessed range (`blindFireRangeMeters`, 250 m), holding ground or still moving on, and spots 2 times likelier in that direction (`fireCueBoost`). Pinned units still go to ground, and there is no new pause, so columns keep their tempo. `reactToFire` turns it off per doctrine, and turned off everywhere it gives exactly the old results (Valley Road, every bot, 300 seeds). Over 300 seeds with it on, before → after:
+
+| Scenario | No air | Lazy air | Good air | Without forwarding |
+|---|---|---|---|---|
+| Outpost Under Pressure | 4.0 → 5.7 | reactive 21.7 → 22.3 | informed 66.0 → 73.7 | 49.7 → 49.3 |
+| Outpost at Night | 0.7 → 0.7 | reactive 4.0 → 4.7 | informed 26.3 → 27.3 | 14.7 → 20.7 |
+| Valley Road | 23.3 → 25.3 | reactive 20.0 → 22.7 | recon and CAS 80.7 → 83.0 | 44.0 → 50.3 |
+| Overwatch | 10.7 → 16.3 | reactive 11.3 → 14.7 | recon and CAS 21.7 → 26.0 | 17.3 → 22.0 |
+
+Find Them and Downed Pilot are unchanged: their hunters and evaders have their own rules. Switching it off for one doctrine at a time shows where it matters: the outpost's informed gain comes from the garrison (64.7% with the garrison not reacting), and Valley Road's unforwarded gain from the column (43.7% with the column not reacting), which now answers an ambush it wasn't warned of. The attackers reacting changes little. Every scenario keeps its spread: no air stays low, good air clearly beats lazy air, and forwarding still pays (24 points at the outpost, now above the 10-point target by more than before). Overwatch got about 5 points easier for every bot; no scenario was retuned, since all stay inside their ranges. Taking cover as a separate pause, and attackers flanking toward unseen fire, are not done.
 
 **README, changelog and manual:** A README, a changelog from 0.1.0, version 0.2.0, and an illustrated 32-page controller's manual in the style of a late-1990s game booklet, with public-domain photographs of every aircraft. `npm run manual` prints it to `docs/manual/air-operations-manual.pdf`, which is attached to releases rather than committed.
 

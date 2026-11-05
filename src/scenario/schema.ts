@@ -39,6 +39,8 @@ const doctrine = z.object({
   airWaitSeconds: z.number().positive().describe('How long a platoon holds for air before deciding without it.'),
   waitForAirStrengthRatio: z.number().nonnegative().default(0.5).describe('Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself.'),
   radioSilent: z.boolean().default(false).describe('Reports only when asked, as a downed aircrew saving its battery does.'),
+  reactToFire: z.boolean().default(true).describe('Under fire, aims its reaction at the shooter: returns fire at it, or toward where unseen fire comes from, and looks that way (§4.0.3).'),
+  blindFireRangeMeters: z.number().positive().default(250).describe('How far off it guesses an unseen shooter is, when firing back toward where the fire comes from.'),
   airRefusedMemorySeconds: z.number().nonnegative().default(900).describe('After air operations says no air is available, it doesn\'t wait for air again for this long.'),
   nearAmbushMeters: z.number().positive().describe('Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance.'),
   drillSeconds: z.number().positive().describe('Every drill ends after this long, so none can hold a platoon forever.'),
@@ -176,6 +178,7 @@ const perception = z.object({
   fireSectorRad: z.number().positive().describe('Unseen fire from directions within this angle is reported as one direction.'),
   engageMatchMeters: z.number().positive().describe('A unit firing this close to one of its contacts reports that it is engaging it.'),
   tracerErrorRad: z.number().nonnegative().describe('Error in the direction of fire a crew sees from the air.'),
+  fireCueBoost: z.number().min(1).describe('Spotting multiplier toward where a unit is taking fire from, so it finds an unseen shooter sooner.'),
 });
 
 const radio = z.object({

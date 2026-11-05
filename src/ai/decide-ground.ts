@@ -5,6 +5,7 @@ import { strengthMidpoint, type ContactEstimate } from '../domain/public/estimat
 import { holdsGround } from '../domain/public/ground';
 import { groupStrength } from './contact-groups';
 import { ambushSprung, nextDrill } from './drills';
+import { blindAim, shooterContact } from './under-fire';
 import { distance, type Vec2 } from '../domain/public/geometry';
 import type {
   Area,
@@ -62,7 +63,7 @@ export function decideGround(
     return decision(returnFire(self, target, destination, rates) ?? { kind: 'move', destination }, 'disengage');
   }
   if (mode === 'recovering') {
-    return decision(returnFire(self, target, null, rates) ?? { kind: 'hold', posture: 'defending' }, 'disengage');
+    return decision(returnFire(self, target, null, rates) ?? fireBack(self, knowledge, null, rates) ?? { kind: 'hold', posture: 'defending' }, 'disengage');
   }
   if (mode === 'broken') return decision({ kind: 'hold', posture: 'defending' }, 'disengage');
 
@@ -85,7 +86,17 @@ export function decideGround(
     return decision({ kind: 'hold', posture: 'prone' }, null);
   }
   if (takingAirCover(self, knowledge, tick)) return decision({ kind: 'hold', posture: 'prone' }, null);
-  return decision(pursueObjective(self, knowledge, patrolIndex, tick), null);
+  const onward = pursueObjective(self, knowledge, patrolIndex, tick);
+  // Fired on by someone it can't see: fire back that way, holding ground or still moving on.
+  const answer = fireBack(self, knowledge, onward.kind === 'move' && !holdsGround(self.objective) ? onward.destination : null, rates);
+  return decision(answer ?? onward, answer === null ? null : 'observe');
+}
+
+/** Return fire toward where unseen fire comes from (§4.0.3), or null if it has no reason or means to. */
+function fireBack(self: UnitSelf, knowledge: UnitKnowledge, moveTo: Vec2 | null, rates: BehaviorFireRates): GroundIntent | null {
+  if (!self.underFire || self.ammunition <= 0) return null;
+  const aim = blindAim(self, knowledge);
+  return aim === null ? null : { kind: 'engage', aim, closeTo: moveTo, fireRate: rates.disengage, prepared: false };
 }
 
 /**
@@ -198,6 +209,9 @@ function nextPatrolIndex(self: UnitSelf): number {
 
 /** Nearest identified hostile the unit itself tracks, breaking ties by contact ID. */
 function chooseTarget(self: UnitSelf, knowledge: UnitKnowledge, tick: number): ContactEstimate | null {
+  // Under fire, the shooter comes first, not whatever enemy is nearest (§4.0.3).
+  const shooter = self.underFire ? shooterContact(self, knowledge, self.doctrine.detectRangeMeters) : null;
+  if (shooter !== null && shooter.identification === 'hostile' && tick - shooter.position.observedAt <= ENGAGE_MEMORY_TICKS) return shooter;
   let best: ContactEstimate | null = null;
   let bestRange = Number.POSITIVE_INFINITY;
   for (const id of Object.keys(knowledge.contacts).sort()) {

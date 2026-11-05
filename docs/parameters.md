@@ -129,6 +129,7 @@ rules or the schema.
 | `perception.fireSectorRad` | `0.52` | Unseen fire from directions within this angle is reported as one direction. |
 | `perception.engageMatchMeters` | `150` | A unit firing this close to one of its contacts reports that it is engaging it. |
 | `perception.tracerErrorRad` | `0.08` | Error in the direction of fire a crew sees from the air. |
+| `perception.fireCueBoost` | `2` | Spotting multiplier toward where a unit is taking fire from, so it finds an unseen shooter sooner. |
 
 ## radio
 

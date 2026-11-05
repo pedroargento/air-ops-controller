@@ -42,6 +42,7 @@ Newest first. Each says what was decided and why, so it isn't reopened by accide
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-11-05 | **Every unit reacts to fire** (§4.0.3): it answers the shooter, fires back toward unseen fire, and looks that way. No scenario was retuned. | Playtest: units seemed to stand still under fire. Both sides use it, it is a doctrine switch so its value can be measured, and every scenario stayed in range (the outpost's good air rose from 66% to 74%). |
 | 2026-11-04 | **The map shows fire only as far as someone saw it or said it** (§7.3): solid arrows for what crews saw, dashed for what units reported, wedges for fire from a shooter nobody saw. It rides on existing reports, so no battle changes. | Playtest: with no sign of who was fighting whom, the controller couldn't choose what to hit first. Showing the truth would end the detective work, so the display follows the same evidence rules as contacts. |
 | 2026-11-04 | **S7, wounded and medevac, comes next,** then Compound support with medevac in it. | It reuses the landing and boarding built for rescue, gives every battle a casualty clock, and medevac is a core incident in the theater game. |
 | 2026-11-04 | The PDF manual stays out of git and is attached to releases. Its source, photos and fonts are in `docs/manual/`. | Keeps a 7 MB binary out of history. Photos are public domain (US government) and fonts are open licensed. |
