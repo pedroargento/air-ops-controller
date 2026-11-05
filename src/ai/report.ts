@@ -11,6 +11,27 @@ import type {
 } from '../domain/public/radio';
 import { groupedContact, groupLeads, groupStrength } from './contact-groups';
 import type { RadioConfig } from '../scenario/schema';
+import type { FireStatus } from '../domain/public/fire';
+
+/**
+ * What the unit can say about its own fight (§7.3): whether it is under fire and how hard,
+ * where the fire comes from, and what it is firing at. Nothing when it is in no fight.
+ */
+export function fireStatus(knowledge: UnitKnowledge): FireStatus | null {
+  const { fire } = knowledge;
+  const engaging = Object.keys(fire.engaging)
+    .sort()
+    .flatMap((id) => {
+      const contact = knowledge.contacts[id];
+      return contact === undefined ? [] : [contact];
+    });
+  if (fire.since === null && engaging.length === 0) return null;
+  const from = Object.keys(fire.from)
+    .sort()
+    .map((key) => fire.from[key] as FireStatus['from'][number]);
+  const heavy = fire.since !== null && fire.heavyAt !== null && fire.heavyAt >= fire.since;
+  return { underFire: fire.since !== null, intensity: heavy ? 'heavy' : 'light', since: fire.since, from, engaging };
+}
 
 const MOVING_DRILLS: ReadonlySet<DrillKind> = new Set(['bypass', 'pushThrough', 'attack', 'farAmbush']);
 
@@ -203,6 +224,8 @@ export function composeReport(
   const contact = known === null ? (need.captured ?? null) : groupedContact(knowledge, known, self.doctrine.groupRadiusMeters);
   const meta = { id, senderId: self.id, sentAt, receivedAt };
   const ownPosition = self.ownPosition;
+  const status = fireStatus(knowledge);
+  const fire = status === null ? {} : { fire: status };
 
   switch (need.kind) {
     case 'TIC':
@@ -212,6 +235,7 @@ export function composeReport(
         observedAt: contact?.position.observedAt ?? ownPosition.observedAt,
         ownPosition,
         contact,
+        ...fire,
       };
     case 'CONTACT_REPORT':
       if (contact !== null) {
@@ -219,10 +243,10 @@ export function composeReport(
       }
       // Asked for a contact update with nothing to report: the unit says where it is instead.
       return need.contactId === null
-        ? { ...meta, kind: 'POSITION_REPORT', observedAt: ownPosition.observedAt, position: ownPosition }
+        ? { ...meta, kind: 'POSITION_REPORT', observedAt: ownPosition.observedAt, position: ownPosition, ...fire }
         : null;
     case 'POSITION_REPORT':
-      return { ...meta, kind: 'POSITION_REPORT', observedAt: ownPosition.observedAt, position: ownPosition };
+      return { ...meta, kind: 'POSITION_REPORT', observedAt: ownPosition.observedAt, position: ownPosition, ...fire };
     case 'SITREP':
       return {
         ...meta,
@@ -232,6 +256,7 @@ export function composeReport(
         personnel: self.personnel,
         ammunitionFraction: self.ammunition / self.initialAmmunition,
         status: objectiveStatus(self),
+        ...fire,
       };
     case 'SUPPORT_REQUEST':
       return {
@@ -244,6 +269,7 @@ export function composeReport(
         target: need.target ?? null,
         targetStrength: need.targetStrength ?? null,
         marked: need.marked === true,
+        ...fire,
       };
     case 'CHECK_FIRE':
       return { ...meta, kind: 'CHECK_FIRE', observedAt: ownPosition.observedAt, ownPosition };

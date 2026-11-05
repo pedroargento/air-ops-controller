@@ -8,7 +8,7 @@ import { contactCondition } from './map-conventions';
  * so they can be worked through without hunting for them on the map.
  */
 
-export type TrackSort = 'threat' | 'age' | 'condition';
+export type TrackSort = 'threat' | 'firing' | 'age' | 'condition';
 
 /** How urgently a track wants attention: air defense first, then whoever is fighting, then the rest. */
 export function threatScore(marker: ContactMarker): number {
@@ -25,13 +25,20 @@ function lostShare(marker: ContactMarker): number {
 }
 
 /** Enemy and unidentified tracks still worth a look, sorted. Destroyed ones go last. */
-export function sortedTracks(contacts: readonly ContactMarker[], sort: TrackSort): readonly ContactMarker[] {
+export function sortedTracks(
+  contacts: readonly ContactMarker[],
+  sort: TrackSort,
+  /** Friendly units each track is known to be firing on (§7.3). */
+  firingOn: (key: string) => number = () => 0,
+): readonly ContactMarker[] {
   const tracks = contacts.filter((marker) => marker.contact.identification !== 'friendly');
   const gone = (marker: ContactMarker): number => (marker.status === 'destroyed' ? 1 : 0);
   const order = (a: ContactMarker, b: ContactMarker): number => {
     switch (sort) {
       case 'threat':
         return threatScore(b) - threatScore(a);
+      case 'firing':
+        return firingOn(b.key) - firingOn(a.key) || threatScore(b) - threatScore(a);
       case 'age':
         return a.ageSeconds - b.ageSeconds;
       case 'condition':

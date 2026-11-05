@@ -178,6 +178,8 @@ async function main(): Promise<void> {
     await page.locator('[data-action="request"][data-kind="sitrep"]').click();
     const status = await page.locator('#selection .request-status').innerText();
     check(status.includes('Waiting for your answer'), 'the unit panel shows its open request and the answers to it');
+    const fireText = await page.locator('#selection .fire-line, #requests .fire-line').allInnerTexts();
+    check(fireText.some((text) => /under (heavy )?fire|heavy fire/i.test(text)), `a unit asking for air says it is under fire: "${fireText[0] ?? ''}"`);
     await page.locator('#selection [data-action="no-air"]').click();
     await setPaused(page, false);
     await page.waitForFunction(() => document.querySelector('#requests')?.textContent?.includes('no air is available'));

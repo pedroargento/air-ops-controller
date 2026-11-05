@@ -1,3 +1,4 @@
+import { emptyKnowledge } from '../../src/domain/public/ground';
 import { describe, expect, it } from 'vitest';
 import { loadScenarioFile } from '../../src/cli/load-scenario';
 import type { AircraftId } from '../../src/domain/public/air';
@@ -221,7 +222,7 @@ describe('forwarded reports', () => {
     while (squad.route.length < 12) step(state, [], valley);
     const ahead = squad.route[8] as { x: number; y: number };
     const wrong = estimate(ahead.x, ahead.y);
-    (state.unitKnowledge['F-C1'] ??= { contacts: {}, reports: {}, pois: {}, suppressions: {}, expectedSupport: null, supportRefusedAt: null, hostileAircraftSeenAt: null, noticedAircraft: null }).reports['CAS-1/C-1'] = {
+    (state.unitKnowledge['F-C1'] ??= emptyKnowledge()).reports['CAS-1/C-1'] = {
       ...wrong,
       position: { ...wrong.position, observedAt: state.tick },
     };

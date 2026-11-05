@@ -20,6 +20,7 @@ import {
   type SpotHeight,
 } from './map-conventions';
 import { drawUnitSymbol, haloText, symbolReach, type Affiliation, type Modifier } from './symbols';
+import { drawFireArrow, drawFireWedge, FRIENDLY_FIRE, HOSTILE_FIRE } from './fire-draw';
 import { paintTopo } from './topo';
 import {
   ceilingField,
@@ -36,6 +37,8 @@ import {
 import type {
   ContactCluster,
   ContactMarker,
+  FireEnd,
+  FireLine,
   FriendlyMarkerView,
   PlayerView,
   GroundFireEffect,
@@ -61,7 +64,7 @@ export type WeatherLayer = Readonly<{
   confidence: number;
 }>;
 
-export type MapLayers = Readonly<{ weather: WeatherLayer | null }>;
+export type MapLayers = Readonly<{ weather: WeatherLayer | null; fireFreshSeconds: number }>;
 
 const HIT_RADIUS_PIXELS = 12;
 const MIN_ZOOM = 0.5;
@@ -94,6 +97,24 @@ const BLINK_PERIOD_TICKS = 4;
 const FACING_LINE_PIXELS = 14;
 const POI_COLOR = '#ffaa3c';
 const REPORT_RING_PIXELS = 15;
+const FIRE_STUB_METERS = 250;
+const FIRE_STUB_MIN_PIXELS = 22;
+const WEDGE_INNER_METERS = 80;
+const WEDGE_OUTER_METERS = 450;
+const FIRE_END_GAP_PIXELS = 11;
+
+/** Whether a fire line touches what is selected, so its older lines show too. */
+function touches(line: FireLine, selection: Selection): boolean {
+  if (selection === null || selection.kind === 'aircraft') return false;
+  const hit = (end: FireEnd | null): boolean =>
+    end !== null && (selection.kind === 'friendly' ? end.kind === 'friendly' && end.unitId === selection.id : end.kind === 'contact' && end.key === selection.key);
+  return hit(line.from) || hit(line.to);
+}
+
+/** Fresh lines always; older ones only for what is selected, so a big fight stays readable. */
+export function shownFireLines(view: PlayerView, selection: Selection, freshSeconds: number): readonly FireLine[] {
+  return view.fire.filter((line) => line.ageSeconds <= freshSeconds || touches(line, selection));
+}
 
 export class MapView {
   private readonly ctx: CanvasRenderingContext2D;
@@ -230,6 +251,8 @@ export class MapView {
     if (flying !== undefined) this.drawElevationFigures(flying.targetAltitudeMeters);
     if (layers.weather !== null) this.drawWeather(layers.weather);
     this.drawNight(view);
+
+    for (const line of shownFireLines(view, selection, layers.fireFreshSeconds)) this.drawFireLine(line);
 
     const contacts = this.shownContacts(view);
     for (const marker of contacts) {
@@ -826,9 +849,57 @@ export class MapView {
         { text: friendly.unitId, color: '#0b3a6a' },
         // Cleared for danger close: crews may fire near this unit until then.
         ...(friendly.dangerCloseUntil === null ? [] : [{ text: `DC until ${clock(friendly.dangerCloseUntil)}`, color: '#c41e1e' }]),
+        // Under fire, by its own word or a crew's sight (§7.3).
+        ...(friendly.underFire === null ? [] : [{ text: friendly.underFire.intensity === 'heavy' ? 'HEAVY FIRE' : 'UNDER FIRE', color: HOSTILE_FIRE }]),
       ],
     });
     ctx.globalAlpha = 1;
+  }
+
+  /**
+   * Who is firing at whom (§7.3). Solid if a crew saw it, dashed if a unit reported it; the
+   * arrow points the way the fire goes. A shooter nobody saw is a wedge pointing in from its
+   * direction. Fire whose target nobody saw is a short stub.
+   */
+  private drawFireLine(line: FireLine): void {
+    const hostile = line.from === null || line.from.kind === 'contact';
+    const style = { color: hostile ? HOSTILE_FIRE : FRIENDLY_FIRE, seen: line.seen, heavy: line.heavy, opacity: line.opacity };
+    const along = (from: Vec2, meters: number, angle: number): Vec2 => ({ x: from.x + Math.cos(angle) * meters, y: from.y + Math.sin(angle) * meters });
+    if (line.from === null) {
+      if (line.to === null) return;
+      // Fire from a direction only: a wedge pointing in at the unit.
+      const target = line.to.position;
+      const source = line.bearingRad + Math.PI;
+      const corners = [
+        along(target, WEDGE_OUTER_METERS, source - line.spreadRad),
+        along(target, WEDGE_INNER_METERS, source),
+        along(target, WEDGE_OUTER_METERS, source + line.spreadRad),
+      ].map((point) => this.toScreen(point)) as [Vec2, Vec2, Vec2];
+      drawFireWedge(this.ctx, corners, style);
+      return;
+    }
+    const start = this.toScreen(line.from.position);
+    let end: Vec2;
+    if (line.to === null) {
+      const stub = this.toScreen(along(line.from.position, FIRE_STUB_METERS, line.bearingRad));
+      const length = Math.hypot(stub.x - start.x, stub.y - start.y);
+      const scale = length < FIRE_STUB_MIN_PIXELS && length > 0 ? FIRE_STUB_MIN_PIXELS / length : 1;
+      end = { x: start.x + (stub.x - start.x) * scale, y: start.y + (stub.y - start.y) * scale };
+    } else {
+      end = this.toScreen(line.to.position);
+    }
+    const length = Math.hypot(end.x - start.x, end.y - start.y);
+    if (length < FIRE_END_GAP_PIXELS * 2) return;
+    const ux = (end.x - start.x) / length;
+    const uy = (end.y - start.y) / length;
+    // Stand off the symbols at both ends, so the arrow points at a unit rather than into it.
+    const gap = line.to === null ? 0 : FIRE_END_GAP_PIXELS;
+    drawFireArrow(
+      this.ctx,
+      { x: start.x + ux * FIRE_END_GAP_PIXELS, y: start.y + uy * FIRE_END_GAP_PIXELS },
+      { x: end.x - ux * gap, y: end.y - uy * gap },
+      style,
+    );
   }
 
   /** Blinks, so the eye finds who just spoke. Urgent senders blink red. */

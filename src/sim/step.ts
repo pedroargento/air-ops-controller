@@ -21,6 +21,7 @@ import { placeMarks } from './marks';
 import { dropFlares, fireIllumination, pruneFlares } from './flares';
 import { onSurvivorTransmission, resolvePickups, updateRescue } from './rescue';
 import { updatePerception } from '../perception/observe';
+import { updateFireKnowledge } from '../perception/fire';
 import { nextGaussian, type RngState } from '../rng/streams';
 import type { Scenario } from '../scenario/load';
 import type { PerceptionConfig } from '../scenario/schema';
@@ -364,6 +365,7 @@ export function step(state: SimState, commands: readonly PlayerCommand[], scenar
 
   if (tactical) {
     updatePerception(truth, state.unitKnowledge, terrain, rng, file.perception, state.tick);
+    updateFireKnowledge(truth, state.unitKnowledge, rng, file.perception, state.tick);
     updateAircraftPerception(truth, state.player, state.radio, terrain, rng, file.perception, file.air, state.tick);
     updateAircraftNotice(truth, state.unitKnowledge, file.air, terrain, rng, state.tick);
     const selves = selfViews(state, scenario);

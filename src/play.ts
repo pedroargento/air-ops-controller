@@ -66,6 +66,7 @@ const app = new App({
   },
   // The player's own order of battle and the HQ estimate: nothing here reveals enemy truth.
   triage: scenario.file.display,
+  fireFreshSeconds: scenario.file.display.fireLineFreshSeconds,
   summary: {
     objective: mission.area.center,
     objectiveRadiusMeters: mission.area.radius,

@@ -18,6 +18,8 @@ const display = {
   freshReportSeconds: 120,
   clusterRadiusMeters: 200,
   reportBlinkSeconds: 20,
+  fireLineFreshSeconds: 120,
+  fireLineSeconds: 300,
   opacityFloor: 0.25,
   fadeSeconds: 900,
   plausibleSpeedMps: 1,

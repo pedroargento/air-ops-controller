@@ -795,7 +795,12 @@
     "claimWindowSeconds": 60,
     "claimOptimism": 1.4,
     "claimNoise": 0.3,
-    "claimAimMeters": 120
+    "claimAimMeters": 120,
+    "fireMemorySeconds": 30,
+    "fireBearingErrorRad": 0.35,
+    "fireSectorRad": 0.52,
+    "engageMatchMeters": 150,
+    "tracerErrorRad": 0.08
   },
   "radio": {
     "prepareSeconds": 15,
@@ -841,7 +846,9 @@
     "notFoundLookSeconds": 60,
     "notFoundCoverage": 0.7,
     "summaryRatioRadiusMeters": 1000,
-    "summaryStaleSeconds": 600
+    "summaryStaleSeconds": 600,
+    "fireLineFreshSeconds": 300,
+    "fireLineSeconds": 600
   },
   "air": {
     "groundNoticeRangeMeters": 800,

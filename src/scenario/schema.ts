@@ -171,6 +171,11 @@ const perception = z.object({
   mediumConfidenceSigmaMeters: z.number().positive().describe('Estimates this tight are medium confidence.'),
   navSigmaMeters: z.number().positive().describe('Error in a unit\'s own reported position.'),
   navDriftPerMeter: z.number().nonnegative().describe('How fast that error drifts as it moves.'),
+  fireMemorySeconds: z.number().int().positive().describe('A unit counts itself under fire, and remembers where fire came from and what it fired at, for this long (§7.3).'),
+  fireBearingErrorRad: z.number().nonnegative().describe('Error in the direction a unit judges unseen fire to come from.'),
+  fireSectorRad: z.number().positive().describe('Unseen fire from directions within this angle is reported as one direction.'),
+  engageMatchMeters: z.number().positive().describe('A unit firing this close to one of its contacts reports that it is engaging it.'),
+  tracerErrorRad: z.number().nonnegative().describe('Error in the direction of fire a crew sees from the air.'),
 });
 
 const radio = z.object({
@@ -220,6 +225,8 @@ const display = z.object({
   hqEnemyEstimate: z.number().positive().describe('Headquarters\' estimate of enemy strength, shown in the summary.'),
   summaryRatioRadiusMeters: z.number().positive().describe('Radius of the summary\'s force ratio.'),
   summaryStaleSeconds: z.number().positive().describe('Reports older than this count as stale in the summary.'),
+  fireLineFreshSeconds: z.number().positive().describe('Fire lines and under-fire marks this young are drawn at full strength.'),
+  fireLineSeconds: z.number().positive().describe('Fire lines and under-fire marks older than this leave the map.'),
 });
 
 const aircraftModel = z.object({

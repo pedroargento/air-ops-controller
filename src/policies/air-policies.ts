@@ -165,11 +165,22 @@ function forwardNew(view: PlayerView, contacts: readonly ContactMarker[], forwar
   return commands;
 }
 
+/** Friendly units a track is known to be firing on, by a crew's sight or a unit's report (§7.3). */
+function friendsFiredOn(view: PlayerView, key: string): number {
+  const units = new Set<string>();
+  for (const line of view.fire) {
+    if (line.from?.kind === 'contact' && line.from.key === key && line.to?.kind === 'friendly') units.add(line.to.unitId);
+  }
+  return units.size;
+}
+
 /** Scouts first, sends CAS to confirmed air contacts, and optionally shares them with ground units. */
 export function reconInformed(
   objective: Vec2,
   forward: boolean,
   launchRangeMeters: number = DEFAULT_LAUNCH_RANGE_METERS,
+  /** Strike whatever is firing on friendly units first, as far as reports and crews say (§7.3). */
+  fireFirst = false,
 ): Policy {
   const forwarded = new Set<string>();
   return (view) => {
@@ -185,10 +196,17 @@ export function reconInformed(
       }
     }
 
-    const fresh = freshAirContacts(view, objective);
+    const fromAir = freshAirContacts(view, objective);
+    // Tracks firing on friends count even when only the ground has reported them.
+    const firing = fireFirst
+      ? view.contacts.filter((marker) => marker.status !== 'destroyed' && friendsFiredOn(view, marker.key) > 0 && !fromAir.includes(marker))
+      : [];
+    const fresh = [...fromAir, ...firing];
     // Known air defense comes first: left alone it keeps taking aircraft out of the fight.
     const byStrength = [...fresh].sort(
-      (a, b) => strengthMidpoint(b.contact.strength) - strengthMidpoint(a.contact.strength),
+      (a, b) =>
+        (fireFirst ? friendsFiredOn(view, b.key) - friendsFiredOn(view, a.key) : 0) ||
+        strengthMidpoint(b.contact.strength) - strengthMidpoint(a.contact.strength),
     );
     const priority = (marker: ContactMarker): boolean => isAntiAirContact(marker) && !recentlyStruck(view, marker);
     const contacts = [...byStrength.filter(priority), ...byStrength.filter((m) => !priority(m))];

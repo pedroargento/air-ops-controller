@@ -24,6 +24,9 @@ import {
 } from './player-knowledge';
 import { markerOpacity, type DisplayParameters } from './reachability';
 import { claimsOf, fuse } from './tracks';
+import { fireLines, underFire, type FireLine, type UnderFire } from './fire-view';
+
+export type { FireEnd, FireLine, UnderFire } from './fire-view';
 
 export type { ContactStatus, UnitStatusReport };
 
@@ -69,6 +72,8 @@ export type FriendlyMarkerView = Readonly<{
   statusReport: UnitStatusReport | null;
   /** Danger close cleared for this unit until then, or null. */
   dangerCloseUntil: number | null;
+  /** Under fire, by its own word or a crew's sight (§7.3), or null. */
+  underFire: UnderFire | null;
 }>;
 
 export type StrikeEffect = Readonly<{
@@ -111,6 +116,8 @@ export type PlayerView = Readonly<{
     dangerCloseUntil: number | null;
   }>[];
   log: readonly RadioMessage[];
+  /** Who is firing at whom, as far as crews saw and units reported (§7.3). */
+  fire: readonly FireLine[];
   aircraft: AircraftTelemetry;
   strikes: readonly StrikeEffect[];
   groundFire: readonly GroundFireEffect[];
@@ -174,6 +181,8 @@ type ViewParameters = DisplayParameters &
     freshReportSeconds: number;
     clusterRadiusMeters: number;
     reportBlinkSeconds: number;
+    fireLineFreshSeconds: number;
+    fireLineSeconds: number;
   }>;
 
 export function couldBeSameReport(a: ContactMarker, b: ContactMarker, plausibleSpeedMps: number): boolean {
@@ -323,6 +332,13 @@ export function project(
     ambiguous: false,
   }));
   const contacts = trackMarkers(player, markers, tick, display);
+  const shown = new Map<string, Readonly<{ key: string; position: Vec2 }>>();
+  for (const marker of contacts) {
+    const at = { key: marker.key, position: marker.contact.position.center };
+    for (const key of [marker.key, ...(player.tracks[marker.key]?.reports ?? []), ...marker.members.map((member) => member.key)]) shown.set(key, at);
+  }
+  const fire = fireLines(player, (key) => shown.get(key) ?? shown.get(player.trackOf[key] ?? '') ?? null, tick, display);
+  const firedOn = underFire(player, fire, tick, display);
   return {
     tick,
     contacts,
@@ -339,6 +355,7 @@ export function project(
       silent: age(marker.position) >= display.friendlySilentSeconds,
       statusReport: player.statusReports[unitId] ?? null,
       dangerCloseUntil: clearedUntil(unitId),
+      underFire: firedOn[unitId] ?? null,
     })),
     ticFlags: sortedEntries(player.ticFlags).map(([unitId, flag]) => ({
       unitId,
@@ -359,6 +376,7 @@ export function project(
       dangerCloseUntil: clearedUntil(unitId),
     })),
     log: player.log,
+    fire,
     aircraft: telemetry,
     strikes: player.strikes
       .filter((strike) => recent(strike.tick))

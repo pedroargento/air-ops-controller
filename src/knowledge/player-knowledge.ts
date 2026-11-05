@@ -7,6 +7,19 @@ import type { ObjectiveStatus, RadioMessage, StrikeAssessment } from '../domain/
 import type { Weather } from '../domain/public/weather';
 import type { TrackRecord } from './tracks';
 import type { Flare } from '../domain/public/light';
+import type { FireStatus } from '../domain/public/fire';
+
+/** A unit's last word on its own fight (§7.3), and where it said it was. */
+export type UnitFireReport = Readonly<{ status: FireStatus; ownPosition: PositionEstimate; receivedAt: number; observedAt: number }>;
+
+/**
+ * One end of a fire line a crew saw: a friendly platoon, or a contact by its report key
+ * (`source/contact`), which the map resolves to whatever track holds it.
+ */
+export type FireEndRef = Readonly<{ kind: 'friendly'; unitId: string } | { kind: 'contact'; key: string; contact: ContactEstimate }>;
+
+/** Fire a crew saw: who was firing, which way, and at whom if the crew could see them too. */
+export type SeenFire = Readonly<{ from: FireEndRef; to: FireEndRef | null; bearingRad: number; seenAt: number; aircraftId: string }>;
 
 export type PositionSource = 'self-report' | 'aircraft';
 
@@ -119,6 +132,10 @@ export type PlayerKnowledge = {
   /** Units cleared for danger close, and until when. */
   dangerCloseClearedUntil: Record<string, number>;
   ticFlags: Record<string, TicFlag>;
+  /** Each unit's last word on its own fight. A report saying nothing about fire clears it. */
+  unitFire: Record<string, UnitFireReport>;
+  /** Fire crews have seen, by shooter. */
+  seenFire: Record<string, SeenFire>;
   statusReports: Record<string, UnitStatusReport>;
   estimatedLosses: number;
   confirmedDestroyed: number;
@@ -144,6 +161,8 @@ export function emptyPlayerKnowledge(): PlayerKnowledge {
     supportRequests: {},
     dangerCloseClearedUntil: {},
     ticFlags: {},
+    unitFire: {},
+    seenFire: {},
     statusReports: {},
     estimatedLosses: 0,
     confirmedDestroyed: 0,
@@ -288,9 +307,16 @@ export function receiveByPlayer(player: PlayerKnowledge, message: RadioMessage, 
   const friendly = (position: PositionEstimate): void =>
     updateFriendly(player, message.senderId, position, 'self-report', message.receivedAt, comparableSeconds);
 
+  // A unit's report about itself says whether it is in a fight; saying nothing means it isn't.
+  const fight = (ownPosition: PositionEstimate, status: FireStatus | undefined): void => {
+    if (status === undefined) delete player.unitFire[message.senderId];
+    else player.unitFire[message.senderId] = { status, ownPosition, receivedAt: message.receivedAt, observedAt: message.observedAt };
+  };
+
   switch (message.kind) {
     case 'POSITION_REPORT':
       friendly(message.position);
+      fight(message.position, message.fire);
       return;
     case 'CONTACT_REPORT':
       updateContact(player, message.contact, message.receivedAt, false);
@@ -303,6 +329,7 @@ export function receiveByPlayer(player: PlayerKnowledge, message: RadioMessage, 
         receivedAt: message.receivedAt,
       };
       if (message.contact !== null) updateContact(player, message.contact, message.receivedAt, false);
+      fight(message.ownPosition, message.fire);
       return;
     case 'SITREP':
       friendly(message.ownPosition);
@@ -314,6 +341,7 @@ export function receiveByPlayer(player: PlayerKnowledge, message: RadioMessage, 
         ...(message.waterMinutes === undefined ? {} : { waterMinutes: message.waterMinutes }),
         ...(message.battery === undefined ? {} : { battery: message.battery }),
       };
+      fight(message.ownPosition, message.fire);
       return;
     case 'DRILL':
       friendly(message.ownPosition);
@@ -332,6 +360,7 @@ export function receiveByPlayer(player: PlayerKnowledge, message: RadioMessage, 
         marked: message.marked,
         answer: null,
       };
+      fight(message.ownPosition, message.fire);
       return;
     case 'CHECK_FIRE':
       friendly(message.ownPosition);

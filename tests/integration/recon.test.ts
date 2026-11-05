@@ -1,3 +1,4 @@
+import { emptyFire } from '../../src/domain/public/fire';
 import { describe, expect, it } from 'vitest';
 import { decidePlatoon } from '../../src/ai/decide-ground';
 import { runBattle } from '../../src/cli/battle';
@@ -76,7 +77,7 @@ describe('reporting a point of interest', () => {
       objective: { kind: 'MoveTo', area: { center: { x: 3000, y: 0 }, radius: 100 } }, fallback: { center: { x: -500, y: 0 }, radius: 100 }, doctrine: column,
     } as unknown as UnitSelf;
     const map = { routeMeters: distance, sees: () => false, cover: () => 0 };
-    const knowledge = { contacts: {}, reports: {}, pois: { 'P-1': poi }, suppressions: {}, expectedSupport: null, supportRefusedAt: null, hostileAircraftSeenAt: null, noticedAircraft: null };
+    const knowledge = { contacts: {}, reports: {}, pois: { 'P-1': poi }, suppressions: {}, expectedSupport: null, supportRefusedAt: null, hostileAircraftSeenAt: null, noticedAircraft: null, fire: emptyFire() };
     expect(decidePlatoon(self, knowledge, 100, map).drill?.target).toEqual(poi.center);
     expect(decidePlatoon(self, { ...knowledge, pois: {} }, 100, map).drill).toBeNull();
   });
@@ -94,7 +95,7 @@ describe('reporting a point of interest', () => {
     } as unknown as UnitSelf;
     const map = { routeMeters: distance, sees: () => false, cover: () => 0 };
     const suppression = { aircraftId: 'CAS-1', center: { x: 520, y: 30 }, radius: 150, fromTick: 50, untilTick: 900 };
-    const knowledge = { contacts: {}, reports: {}, pois: { 'P-1': poi }, suppressions: { 'CAS-1': suppression }, expectedSupport: null, supportRefusedAt: null, hostileAircraftSeenAt: null, noticedAircraft: null };
+    const knowledge = { contacts: {}, reports: {}, pois: { 'P-1': poi }, suppressions: { 'CAS-1': suppression }, expectedSupport: null, supportRefusedAt: null, hostileAircraftSeenAt: null, noticedAircraft: null, fire: emptyFire() };
     expect(decidePlatoon(self, knowledge, 100, map).drill?.kind).toBe('pushThrough');
     // Before it starts, after it ends, or somewhere else, the platoon answers the position as usual.
     expect(decidePlatoon(self, knowledge, 40, map).drill?.kind).not.toBe('pushThrough');

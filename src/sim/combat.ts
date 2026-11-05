@@ -136,6 +136,7 @@ export function applyEffects(
     target.lastHitAtTick = tick;
     const casualties = Math.min(target.personnel, effect.casualties);
     if (casualties > 0) destroySystems(target, casualties, config, rng);
+    if (casualties > 0) target.lastLossAtTick = tick;
     target.personnel -= casualties;
     target.suppression = Math.min(1, target.suppression + effect.suppression);
     const platoon = platoonOf(truth, target);
@@ -210,6 +211,7 @@ export function resolveCombat(
   );
   for (const solution of solutions) {
     solution.firer.lastFiredAtTick = tick;
+    for (const { target } of solution.hits) target.shotBy[solution.firer.id] = tick;
     spendAmmunition(solution, config);
   }
   const platoons = sortedPlatoons(truth);

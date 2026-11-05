@@ -92,6 +92,10 @@ export type GroundUnit = {
   routeDestination: Vec2 | null;
   lastFiredAtTick: number | null;
   lastHitAtTick: number | null;
+  /** Squads that fired at it, and when they last did. It feels the fire; it may not see who (§7.3). */
+  shotBy: Record<string, number>;
+  /** When it last lost men. */
+  lastLossAtTick: number | null;
 };
 
 /**

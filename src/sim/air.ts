@@ -16,7 +16,7 @@ import type { CrewCallKind, MessageId, RadioMessage, StrikeAssessment } from '..
 import { cellAt, elevationAt, type TerrainGrid } from '../domain/public/terrain';
 import { airSightClear, airVisibilityMeters, rangeInVisibility, weatherAt, type Weather } from '../domain/public/weather';
 import type { Aircraft, GroundUnit, WorldTruth } from '../domain/truth/world';
-import { recordStrike, updateContact, updateFriendly, type PlayerKnowledge, type SensorCoverage } from '../knowledge/player-knowledge';
+import { recordStrike, updateContact, updateFriendly, type FireEndRef, type PlayerKnowledge, type SensorCoverage } from '../knowledge/player-knowledge';
 import { lightOn, observeTarget, sightOn, type Observer } from '../perception/observe';
 import { nextBinomial, nextBool, nextFloat, nextGaussian, type RngState } from '../rng/streams';
 import type { Scenario } from '../scenario/load';
@@ -483,11 +483,13 @@ export function updateAircraftPerception(
     };
     seeSmoke(truth, player, aircraft, air, tick);
     let tracked: Vec2[] | null = null;
+    const firing: (readonly [GroundUnit, ContactEstimate])[] = [];
     for (const target of truth.units) {
       if (target.personnel <= 0) continue;
       const estimate = observeTarget(truth, observer, target, terrain, rng, perception, tick);
       if (estimate === null) continue;
       aircraft.contacts[estimate.contactId] = estimate;
+      if (estimate.activity === 'engaging') firing.push([target, estimate]);
       if (estimate.identification === 'friendly') {
         updateFriendly(player, target.platoonId, estimate.position, 'aircraft', tick, perception.contactMemorySeconds);
         if (estimate.activity === 'engaging') player.friendlyEngagedAt[target.platoonId] = tick;
@@ -512,7 +514,58 @@ export function updateAircraftPerception(
     for (const [id, contact] of Object.entries(aircraft.contacts)) {
       if (tick - contact.position.observedAt > perception.contactMemorySeconds) delete aircraft.contacts[id];
     }
+    for (const [shooter, estimate] of firing) seeFire(truth, player, aircraft, shooter, estimate, rng, perception, tick);
   }
+  for (const [key, seen] of Object.entries(player.seenFire)) {
+    if (tick - seen.seenAt > perception.contactMemorySeconds) delete player.seenFire[key];
+  }
+}
+
+/** One end of a fire line as the crew sees it: a friendly platoon, or one of its contacts. */
+function fireEnd(unit: GroundUnit, estimate: ContactEstimate): FireEndRef {
+  return estimate.identification === 'friendly'
+    ? { kind: 'friendly', unitId: unit.platoonId }
+    : { kind: 'contact', key: `${estimate.provenance.sourceId}/${estimate.contactId}`, contact: estimate };
+}
+
+/**
+ * A crew watching a unit fire sees which way the fire goes, and whom it is landing on if the
+ * crew can see them too (§7.3). An unseen target leaves only the direction.
+ */
+function seeFire(
+  truth: WorldTruth,
+  player: PlayerKnowledge,
+  aircraft: Aircraft,
+  shooter: GroundUnit,
+  estimate: ContactEstimate,
+  rng: RngState,
+  perception: PerceptionConfig,
+  tick: number,
+): void {
+  if (shooter.intent.kind !== 'engage') return;
+  const aim = shooter.intent.aim;
+  const seen = truth.tracks[aircraft.id] ?? {};
+  let target: readonly [GroundUnit, ContactEstimate] | null = null;
+  let nearest = perception.engageMatchMeters;
+  for (const unit of truth.units) {
+    if (unit.side === shooter.side || unit.personnel <= 0) continue;
+    const track = seen[unit.id];
+    const contact = track === undefined || track.lastSeenTick !== tick ? undefined : aircraft.contacts[track.contactId];
+    const gap = distance(unit.position, aim);
+    if (contact === undefined || gap > nearest) continue;
+    target = [unit, contact];
+    nearest = gap;
+  }
+  const noise = nextGaussian(rng, `tracer/${aircraft.id}/${shooter.id}`) * perception.tracerErrorRad;
+  const from = fireEnd(shooter, estimate);
+  const key = from.kind === 'friendly' ? `friendly/${from.unitId}` : from.key;
+  player.seenFire[key] = {
+    from,
+    to: target === null ? null : fireEnd(target[0], target[1]),
+    bearingRad: atan2(aim.y - shooter.position.y, aim.x - shooter.position.x) + noise,
+    seenAt: tick,
+    aircraftId: aircraft.id,
+  };
 }
 
 /** A crew that can see smoke reports it, so the controller's map shows where the ground marked. */

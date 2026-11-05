@@ -94,6 +94,7 @@ Select an aircraft to set its **weapons control** (bombs, guns or both, or weapo
 - **Ground fire is real.** Low and slow is easy to hit, and anti-aircraft guns and missiles reach higher. A damaged aircraft goes home.
 - **Night changes everything.** Everyone sees less, and units that are firing show their muzzle flashes. Strike crews attack only targets that are lit or firing. Flares light friends as well as enemies. At night the header offers **Wait for first light**, which fast-forwards the battle and stops for anything urgent.
 - **Rescue takes focus.** A downed pilot stays silent to save battery, and each call can give the pilot's position away. Find the pilot through **Units on the net**. When the helicopter lands, the game drops to normal speed and a panel shows boarding progress, with **Lift off now** one click away.
+- **Fire shows who to hit first.** Arrows on the map show who is firing at whom: solid if a crew saw it, dashed if a unit reported it, and a wedge when a unit is under fire from a shooter it can't see. Select a unit or track for its whole fight, or sort the track list by **Firing on friends**.
 - **The timeline** (T) replays the battle as you knew it. After the run, it also shows where everyone really was.
 
 ## For developers
@@ -134,6 +135,7 @@ Two rules hold the design together. The interface, the bots and the ground AI ne
 
 ### Documents
 
+- `DESIGN.md` is the place to start: the design philosophy, the invariants every change keeps, and the decisions made so far, with their reasons.
 - `air-operations-v0.1-spec.md` is the design: the rules of every system, with section numbers referenced in the code (§8.7 is night, §8.8 is rescue).
 - `implementation-plan.md` covers milestones, the roadmap and balance measurements.
 - `docs/parameters.md` lists every tunable rule with its value and meaning.

@@ -1,5 +1,6 @@
 import { BREVITY, CONDITION_COLORS, ECHELON_MARKS, type Condition, type Echelon } from './map-conventions';
 import { drawUnitSymbol, haloText, type UnitSymbol } from './symbols';
+import { drawFireArrow, drawFireWedge, FRIENDLY_FIRE, HOSTILE_FIRE } from './fire-draw';
 
 /*
  * The map key: every symbol drawn by the same code as the map, with what it means, and the
@@ -251,6 +252,35 @@ const SAMPLES: readonly (readonly [string, readonly (readonly [Sample, string])[
           haloText(ctx, '650m WATCH', 30, h / 2 + 7, '#0b2a4a', '9px monospace');
         },
         'Aircraft with its data block: callsign, altitude and task, then what the crew says it\'s doing.',
+      ],
+    ],
+  ],
+  [
+    'Fire on the ground',
+    [
+      [
+        (ctx, w, h) => drawFireArrow(ctx, { x: 8, y: h / 2 }, { x: w - 10, y: h / 2 }, { color: HOSTILE_FIRE, seen: true, heavy: false, opacity: 1 }),
+        'Solid arrow: a crew saw this fire. It points from the shooter to where the fire lands. Red is enemy fire, blue is friendly.',
+      ],
+      [
+        (ctx, w, h) => drawFireArrow(ctx, { x: 8, y: h / 2 }, { x: w - 10, y: h / 2 }, { color: FRIENDLY_FIRE, seen: false, heavy: false, opacity: 1 }),
+        'Dashed arrow: a unit reported it: fire it is taking from a contact it can see, or the contact it is firing at.',
+      ],
+      [
+        (ctx, w, h) => drawFireArrow(ctx, { x: 8, y: h / 2 }, { x: w - 10, y: h / 2 }, { color: HOSTILE_FIRE, seen: false, heavy: true, opacity: 1 }),
+        'Thick arrow: heavy fire. The unit is losing men or is pinned down.',
+      ],
+      [
+        (ctx, w, h) => drawFireWedge(ctx, [{ x: w - 8, y: 6 }, { x: 14, y: h / 2 }, { x: w - 8, y: h - 6 }], { color: HOSTILE_FIRE, seen: false, heavy: false, opacity: 1 }),
+        'Wedge: a unit under fire from a shooter it can\'t see. It points at the unit and opens toward where the fire seems to come from.',
+      ],
+      [
+        (ctx, _w, h) => drawFireArrow(ctx, { x: 10, y: h / 2 + 8 }, { x: 40, y: h / 2 - 8 }, { color: HOSTILE_FIRE, seen: true, heavy: false, opacity: 1 }),
+        'Short stub: a crew saw a unit firing, but not whom at. It shows only the direction.',
+      ],
+      [
+        symbol({ affiliation: 'friend', echelon: 'platoon', right: [{ text: 'UNDER FIRE', color: HOSTILE_FIRE }] }),
+        'UNDER FIRE or HEAVY FIRE beside a friendly unit: it says so, or a crew saw fire landing on it. Fresh fire shows for everyone; select a unit or track to see its older fire too.',
       ],
     ],
   ],

@@ -124,6 +124,11 @@ rules or the schema.
 | `perception.mediumConfidenceSigmaMeters` | `90` | Estimates this tight are medium confidence. |
 | `perception.navSigmaMeters` | `40` | Error in a unit's own reported position. |
 | `perception.navDriftPerMeter` | `0.6` | How fast that error drifts as it moves. |
+| `perception.fireMemorySeconds` | `30` | A unit counts itself under fire, and remembers where fire came from and what it fired at, for this long (§7.3). |
+| `perception.fireBearingErrorRad` | `0.35` | Error in the direction a unit judges unseen fire to come from. |
+| `perception.fireSectorRad` | `0.52` | Unseen fire from directions within this angle is reported as one direction. |
+| `perception.engageMatchMeters` | `150` | A unit firing this close to one of its contacts reports that it is engaging it. |
+| `perception.tracerErrorRad` | `0.08` | Error in the direction of fire a crew sees from the air. |
 
 ## radio
 
@@ -176,6 +181,8 @@ rules or the schema.
 | `display.notFoundCoverage` | `0.7` | A clear look covers a report only within this share of the sensor radius. |
 | `display.summaryRatioRadiusMeters` | `1000` | Radius of the summary's force ratio. |
 | `display.summaryStaleSeconds` | `600` | Reports older than this count as stale in the summary. |
+| `display.fireLineFreshSeconds` | `300` | Fire lines and under-fire marks this young are drawn at full strength. |
+| `display.fireLineSeconds` | `600` | Fire lines and under-fire marks older than this leave the map. |
 
 ## air
 

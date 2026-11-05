@@ -358,6 +358,26 @@ Air operations works like a track manager: it decides which reports describe one
 
   The debrief also sets aircrew and ground claims against the enemy's real losses.
 
+### 7.3 Fire on the ground
+
+The controller needs to know who is fighting whom, to choose what air should hit first. The map shows fire only as far as someone saw it or said it. There are four levels of evidence, each drawn differently.
+
+| Evidence | Where it comes from | On the map |
+|---|---|---|
+| Seen from the air | A crew watching a unit fire sees which way the fire goes, and whom it lands on if the crew can see them too. | A solid arrow from shooter to target. If the target isn't seen, a short solid stub in the direction of fire. |
+| Under fire | A unit says it is being fired on, light or heavy. | UNDER FIRE or HEAVY FIRE beside its symbol. |
+| Fire from | A unit says where the fire comes from: a contact it can see, or only a direction. | A dashed arrow from the contact's track to the unit, or a pale dashed wedge pointing in at the unit from that direction. |
+| Engaging | A unit says which contact it is firing at. | A dashed arrow from the unit to that contact's track. |
+
+- **What a unit knows (`perception/fire.ts`):** A squad feels any fire landing near it, from the squads that fired. If its platoon holds a fresh contact on the shooter, the fire comes from that contact, errors included. If not, the squad has only a direction, off by `fireBearingErrorRad`, and directions within `fireSectorRad` of each other are one. Fire is **heavy** while the squad is losing men or pinned. A squad firing reports the contact nearest where it aims, within `engageMatchMeters`. All of this lasts `fireMemorySeconds` after the last shot, and is the unit's own picture: it never names a shooter it hasn't seen.
+- **Reports:** Troops-in-contact calls, SITREPs, position reports and support requests carry the sender's fight. No new message is sent for it, so the radio gets no busier and the picture is as late as the unit's last report. A report from the same unit with no fight in it clears the old one. Asking a unit for a SITREP or its position refreshes it.
+- **Crews:** A crew that sees a unit firing sees the direction of fire within `tracerErrorRad`. If it can also see a unit where the fire lands, it sees both ends. Both sides' fire counts, so a crew can find an enemy position that has never reported itself by watching where the fire on a friendly unit comes from.
+- **Never shown:** fire nobody saw or reported, such as enemy fire on enemy, or fire landing on a friendly unit that hasn't said so and that no crew is watching.
+- **Ends:** A line ends on the track that holds the reported contact, so it follows the track as reports are merged. A contact not on any track is drawn at its own reported position.
+- **Clutter:** Lines between the same two ends are one line, a crew's sight outranking a report. Lines up to `fireLineFreshSeconds` old show for everyone, and older ones up to `fireLineSeconds` only for the selected unit or track. Lines fade between the two.
+- **In words:** A friendly unit's panel says whether it is under fire and since when, from whom, and what it is engaging. A track's panel says whom it is firing on and who is firing on it. Support request cards say the unit is under fire and from where. The track list can sort by tracks firing on friendly units.
+- **No battle changes:** Units already knew they were under fire. This adds only what they believe about it, drawn on labeled random streams of its own, so every battle plays out as before. Ground units don't yet act on the direction of fire; returning fire on an estimate is a later step.
+
 ## 8. Aircraft simulation and orders
 
 TICs can change air-tasking priorities, but deciding whether to divert an aircraft, keep supporting an engagement or return to base is the player's responsibility. Pilots retain autonomy for immediate defensive maneuvers; mission aborts and RTB are normally player decisions. The only automatic RTBs in v0.1 are the fuel rule in §8.2 and battle damage in §8.3.

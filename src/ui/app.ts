@@ -38,6 +38,7 @@ import { admiraltyRating, BREVITY, contactCondition } from './map-conventions';
 import { boardSegments, type BoardPhase } from './status-board';
 import { isMoonUp, lightState, nextFirstLight } from '../domain/public/light';
 import { sortedTracks, type TrackSort } from './track-list';
+import { contactFireLines, friendlyFireLines, friendsFiredOn } from './fire-text';
 import { neighbourEvent, Snapshots, SNAPSHOT_SECONDS, timelineEvents } from './timeline';
 import { etaTo, requestStatus, showRequest, supportOptions } from './requests';
 import { legendHtml, paintLegend } from './legend';
@@ -60,6 +61,8 @@ export type UiConfig = Readonly<{
   defaultAltitudeMeters: number;
   summary: SummaryConfig;
   triage: TriageParameters;
+  /** Fire lines this young show without selecting anything (§7.3). */
+  fireFreshSeconds: number;
   durationSeconds: number;
   forecastError: ForecastError;
   speeds: readonly number[];
@@ -1042,6 +1045,7 @@ export class App {
     const shown = this.reviewing ? (this.snapshots.at(this.reviewTick) ?? view) : view;
     this.map.render(shown, this.selection, this.threatAltitude(view), {
       weather: this.reviewing ? null : this.weatherLayer(view),
+      fireFreshSeconds: this.config.fireFreshSeconds,
     });
     if (this.reviewing && this.showTruth) {
       const frames = this.config.truthHistory();
@@ -1174,10 +1178,13 @@ export class App {
             ? `<div class="danger-row"><b class="danger">Danger close cleared until ${clock(request.dangerCloseUntil)}</b>. ` +
               `<button data-action="danger-close" data-id="${unit}" data-kind="deny">Revoke</button></div>`
             : '';
+        const fire = view.friendlies.find((entry) => entry.unitId === request.unitId)?.underFire ?? null;
+        const fromText = friendlyFireLines(view, request.unitId, (other) => displayName(other, names), (point) => gridRef(point, terrain.cellSize)).find((line) => line.startsWith('Taking fire'));
+        const firing = fire === null ? '' : `<div class="fire-line">${fire.intensity === 'heavy' ? 'Heavy fire' : 'Under fire'}${fromText === undefined ? '.' : ` ${escapeHtml(fromText.replace('Taking fire ', ''))}`}</div>`;
         return (
           `<div class="request-card${request.answer === null ? ' open' : ''}">` +
           `<div><button data-action="select-friendly" data-id="${unit}">${name}</button> <span class="hint-quiet">${Math.floor(request.ageSeconds / 60)} min ago</span></div>` +
-          `<div>${ask}</div>${danger}` +
+          `<div>${ask}</div>${firing}${danger}` +
           (sends === '' && none === '' ? '' : `<div class="buttons">${sends}${none}</div>`) +
           cannot +
           `<div class="request-status">${escapeHtml(requestStatus(request, view.aircraft, clock, view.tick))}</div></div>`
@@ -1247,7 +1254,7 @@ export class App {
       morphHtml(panel, this.friendlyPanel(selection.id, view));
     } else {
       const marker = findContact(view, selection.key);
-      morphHtml(panel, marker === undefined ? '<h2>Selected</h2><p>Contact no longer held.</p>' : this.contactPanel(marker));
+      morphHtml(panel, marker === undefined ? '<h2>Selected</h2><p>Contact no longer held.</p>' : this.contactPanel(marker, view));
     }
   }
 
@@ -1338,6 +1345,8 @@ export class App {
         ? '<p>No position report.</p>'
         : `<p>Last reported grid ${gridRef(marker.position.center, terrain.cellSize)}, ${marker.ageSeconds}s ago.` +
           `${marker.statusReport === null ? '' : ` ${marker.statusReport.personnel} effectives, ammunition ${Math.round(marker.statusReport.ammunitionFraction * 100)}%.`}</p>`;
+    const fight = friendlyFireLines(view, unitId, (other) => displayName(other, names), (point) => gridRef(point, terrain.cellSize));
+    const fighting = fight.length === 0 ? '' : `<h3>Fire</h3>${fight.map((line) => `<p class="fire-line">${escapeHtml(line)}</p>`).join('')}`;
     const history = view.log
       .filter((m) => m.senderId === unitId)
       .slice(-4)
@@ -1369,7 +1378,7 @@ export class App {
           '<p class="hint">Every call uses battery and can give its position away to the enemy. It stays silent unless asked.</p>'
         : '';
     return (
-      `<h2>${name}</h2>${position}${survival}${danger}${support}` +
+      `<h2>${name}</h2>${position}${fighting}${survival}${danger}${support}` +
       (marker === undefined || cover === '' ? '' : `<h3>Air cover</h3><div class="buttons">${cover}</div>`) +
       `<h3>Ask for</h3><div class="buttons">` +
       `<button data-action="request" data-id="${id}" data-kind="position">Position</button>` +
@@ -1390,7 +1399,7 @@ export class App {
     return `${status === null ? '' : `<p>${escapeHtml(status)}</p>`}${merged}`;
   }
 
-  private contactPanel(marker: ContactMarker): string {
+  private contactPanel(marker: ContactMarker, view: PlayerView): string {
     const { names, recipients, terrain } = this.config;
     const { contact } = marker;
     const boxes = recipients
@@ -1407,6 +1416,9 @@ export class App {
       `<p>Grid ${gridRef(contact.position.center, terrain.cellSize)} · ${strengthText(contact.strength)} · ${contact.identification}</p>` +
       `<p>${contact.confidence} confidence · rated ${admiraltyRating(marker)} · observed ${clock(contact.position.observedAt)}</p>` +
       conditionLine(marker) +
+      contactFireLines(view, marker.key, (other) => displayName(other, names), (point) => gridRef(point, terrain.cellSize))
+        .map((line) => `<p class="fire-line">${escapeHtml(line)}</p>`)
+        .join('') +
       `<p>${weaponsText(contact.observedWeapons)}</p>` +
       this.contactHistory(marker) +
       this.threatLine(contact.observedWeapons) +
@@ -1440,7 +1452,8 @@ export class App {
     const sort = (id: TrackSort, label: string): string =>
       `<button data-action="track-sort" data-id="${id}"${this.trackSort === id ? ' class="active"' : ''}>${label}</button>`;
     const selected = this.selection?.kind === 'contact' ? this.selection.key : null;
-    const rows = sortedTracks(view.contacts, this.trackSort).map((marker) => {
+    const rows = sortedTracks(view.contacts, this.trackSort, (key) => friendsFiredOn(view, key)).map((marker) => {
+      const firingOn = friendsFiredOn(view, marker.key);
       const { contact } = marker;
       const condition = contactCondition(marker.estimatedLosses, contact.strength);
       const state = marker.status === 'destroyed'
@@ -1461,7 +1474,7 @@ export class App {
       const center = contact.position.center;
       return (
         `<tr class="${classes}" data-action="select-track" data-id="${escapeHtml(marker.key)}" data-x="${center.x}" data-y="${center.y}">` +
-        `<td>${marker.trackNumber === null ? '—' : marker.trackNumber}</td><td>${escapeHtml(what)}${marker.engaging ? ' · firing' : ''}</td>` +
+        `<td>${marker.trackNumber === null ? '—' : marker.trackNumber}</td><td>${escapeHtml(what)}${firingOn > 0 ? ` · <b class="danger">firing on ${firingOn === 1 ? 'a friendly unit' : `${firingOn} friendly units`}</b>` : marker.engaging ? ' · firing' : ''}</td>` +
         `<td class="${antiAir ? 'aa' : ''}">${escapeHtml(weapons)}</td><td>${escapeHtml(state)}</td>` +
         `<td>${clock(contact.position.observedAt)}${marker.stale ? ' ⏲' : ''}</td><td>${admiraltyRating(marker)}</td>` +
         `<td>${gridRef(center, terrain.cellSize)}</td></tr>`
@@ -1469,7 +1482,7 @@ export class App {
     });
     const count = view.contacts.filter((marker) => marker.contact.identification !== 'friendly').length;
     return (
-      `<div class="buttons">Sort by ${sort('threat', 'Threat')}${sort('age', 'Newest')}${sort('condition', 'Least damaged')}</div>` +
+      `<div class="buttons">Sort by ${sort('threat', 'Threat')}${sort('firing', 'Firing on friends')}${sort('age', 'Newest')}${sort('condition', 'Least damaged')}</div>` +
       `<p class="hint-quiet">${count} tracks. Air defense first under Threat. ⏲ not seen for two minutes or more. Click a row to select it and center the map.</p>` +
       `<table><tr><th>TN</th><th>What</th><th>Weapons</th><th>Condition</th><th>Seen</th><th>Rating</th><th>Grid</th></tr>${rows.join('')}</table>`
     );

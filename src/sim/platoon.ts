@@ -128,6 +128,8 @@ export function createSquads(file: PlatoonFile, scenario: Scenario): readonly Gr
       routeDestination: null,
       lastFiredAtTick: null,
       lastHitAtTick: null,
+      shotBy: {},
+      lastLossAtTick: null,
     };
   });
 }

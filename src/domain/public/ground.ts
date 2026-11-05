@@ -1,5 +1,6 @@
 import type { AirWeapon, Equipment } from './equipment';
 import type { ContactEstimate, PositionEstimate } from './estimates';
+import { emptyFire, type FireKnowledge } from './fire';
 import type { Vec2 } from './geometry';
 import type { Poi } from './poi';
 import type { ExpectedSupport, Suppression } from './radio';
@@ -183,10 +184,12 @@ export type UnitKnowledge = {
   supportRefusedAt: number | null;
   hostileAircraftSeenAt: number | null;
   noticedAircraft: NoticedAircraft | null;
+  /** Its own fight: fire on it, where from, and what it is firing at (§7.3). */
+  fire: FireKnowledge;
 };
 
 export function emptyKnowledge(): UnitKnowledge {
-  return { contacts: {}, reports: {}, pois: {}, suppressions: {}, expectedSupport: null, supportRefusedAt: null, hostileAircraftSeenAt: null, noticedAircraft: null };
+  return { contacts: {}, reports: {}, pois: {}, suppressions: {}, expectedSupport: null, supportRefusedAt: null, hostileAircraftSeenAt: null, noticedAircraft: null, fire: emptyFire() };
 }
 
 export type GroundIntent =

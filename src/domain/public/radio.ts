@@ -4,6 +4,7 @@ import type { ContactId, DrillKind, GroundMode } from './ground';
 import type { SupportWeapons } from './air';
 import type { Vec2 } from './geometry';
 import type { Poi } from './poi';
+import type { FireStatus } from './fire';
 
 export const AIR_OPS = 'AIR_OPS';
 export const CECON = 'CECON';
@@ -21,9 +22,9 @@ type MessageMeta = Readonly<{
 export type ObjectiveStatus = 'holding' | 'advancing' | 'withdrawing' | 'combat-ineffective';
 
 export type RadioMessage =
-  | (MessageMeta & Readonly<{ kind: 'TIC'; ownPosition: PositionEstimate; contact: ContactEstimate | null }>)
+  | (MessageMeta & Readonly<{ kind: 'TIC'; ownPosition: PositionEstimate; contact: ContactEstimate | null; fire?: FireStatus }>)
   | (MessageMeta & Readonly<{ kind: 'CONTACT_REPORT'; contact: ContactEstimate }>)
-  | (MessageMeta & Readonly<{ kind: 'POSITION_REPORT'; position: PositionEstimate }>)
+  | (MessageMeta & Readonly<{ kind: 'POSITION_REPORT'; position: PositionEstimate; fire?: FireStatus }>)
   | (MessageMeta &
       Readonly<{
         kind: 'SITREP';
@@ -34,6 +35,8 @@ export type RadioMessage =
         /** A downed aircrew's water left and radio calls left (§8.8). */
         waterMinutes?: number;
         battery?: number;
+        /** The sender's own fight: fire on it, where from, and what it is firing at (§7.3). */
+        fire?: FireStatus;
       }>)
   | (MessageMeta &
       Readonly<{
@@ -45,6 +48,7 @@ export type RadioMessage =
         target: Vec2 | null;
         targetStrength: StrengthEstimate | null;
         marked: boolean;
+        fire?: FireStatus;
       }>)
   | (MessageMeta & Readonly<{ kind: 'CHECK_FIRE'; ownPosition: PositionEstimate }>)
   | (MessageMeta & Readonly<{ kind: 'DANGER_CLOSE_HOLD'; aim: Vec2 }>)

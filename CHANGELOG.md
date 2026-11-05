@@ -2,6 +2,14 @@
 
 Notable changes to Air Operations. Section numbers such as §8.8 refer to `air-operations-v0.1-spec.md`, and balance figures are in `implementation-plan.md`.
 
+## Unreleased
+
+### Fire on the ground (§7.3)
+- The map shows who is firing at whom, as far as crews saw it or units reported it: solid arrows for fire a crew saw, dashed arrows for fire a unit reported, a pale wedge for fire from a shooter the unit can't see, and a short stub for fire whose target no crew could see. Red is enemy fire, blue is friendly.
+- UNDER FIRE and HEAVY FIRE beside friendly units that say so, or that a crew sees being fired on.
+- Unit and track panels say who is firing on whom and since when, support request cards say where the fire comes from, and the track list can sort by tracks firing on friendly units.
+- Units carry this in the reports they already send, so the radio gets no busier, and every battle plays out exactly as before.
+
 ## 0.2.0 (2026-11-03)
 
 Six scenarios, squads and drills on the ground, crews that fly their own missions, NATO map conventions, tracks, night, and combat search and rescue.

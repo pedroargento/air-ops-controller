@@ -1,64 +1,63 @@
-# Air Operations Controller v0.1 — Implementation Plan
+# Air Operations — Implementation Plan
 
-Implements `air-operations-v0.1-spec.md` (revision 11). The spec decides what the game does; this plan decides build order, structure and exit gates. Section references (§) point to the spec.
+Implements `air-operations-v0.1-spec.md`. The spec decides what the game does, and this plan decides build order, structure and exit gates. Section references (§) point to the spec. **Read `DESIGN.md` first:** it holds the design philosophy, the invariants every change must keep, and the decisions already made, with their reasons.
 
 ## Status
 
-- **M0:** Complete.
-- **M1:** Complete; go/no-go gate passed. Abstract air has since been removed. Debug view: `npm run dev`, then open `/debug.html`.
-- **M2:** Complete.
-- **M3:** Complete; all exit checks met.
-- **M4:** Complete. `npm run e2e` plays the Definition of Done in Chromium (`-- --firefox` for Firefox) and replays the session headlessly to the same final hash. It needs `npx playwright install firefox chromium-headless-shell` once and is not part of `npm run check`.
-- **M5:** Rules and scenario roles are implemented. Its exit is **not met**: no-air won 2 of 1,000 runs, and the tempo targets are only partly reached.
-- **M6:** Complete; all exit checks met. Forwarding is neutral, not yet the gain it should be.
-- **M7:** Implemented, and all automated exit checks are met. The exit's human playtest is still owed, and it decides M8.
-- **M7.5:** Implemented, and all automated exit checks are met. The human playtest is still owed, and it decides M8.
-- **M7.55:** Complete. It also fixed garrisons rarely getting SITREPs out in heavy fighting, because contact reports always went first.
-- **M7.6:** Complete as engine work. Whether masking pays is now a scenario question, to test on a map built for it.
-- **M7.7:** Complete.
-- **M7.8:** Complete. Scout and gunship teamwork (pink teams) would suit a later scenario.
-- **M7.9:** Complete.
-- **M8:** Replaced by S1. Squad detail didn't earn its cost in v0.1, but battle drills now need it.
-- **M9:** Not started. Reduced to a playtest, with win-rate tuning moved to M13. See "Roadmap after v0.1" below.
+Version 0.2.0, released 2026-11-03. Six scenarios are playable from a menu, with bots for each.
 
-Replay works across JavaScript engines, which goes beyond invariant 8. Simulation code uses `src/domain/public/det-math.ts` because built-in `Math.log` and similar functions differ between engines and V8 versions; lint bans them there.
+| Milestone | State |
+|---|---|
+| M0–M4 | Complete. M1's go/no-go gate passed. |
+| M5 | Implemented. Exit **not met**: no air still wins a few percent of outpost runs. |
+| M6–M7.9 | Complete. The M7 and M7.5 playtests were folded into M9. |
+| M8 | Replaced by S1. |
+| M9 | Partly done: Downed Pilot was playtested by hand (finding: an unseen survivor couldn't be called, now fixed). The outpost playtest is still owed. |
+| S0, S1, S4 | Met. S1's no air is 4.4% against S0's 0.3%. |
+| S2 | Met apart from the per-drill benefit. |
+| S3 | Left open on purpose: guns don't change outcomes. |
+| S5, S6 | Not started. |
+| **S7** | **Next.** See its section for what already exists. |
+| S8 | First version delivered as Downed Pilot (introduction). The harder rescue is still to do. |
+| M21 | Mostly delivered early as §8.7 (night, light and flares). What remains is in its section. |
+| M10–M20 | Not started. M12 is the go/no-go gate for everything after it. |
 
-| Policy, after M7.9 (1,000 seeds) | Win | Captured | Below strength | Aircraft hits per run | Target |
-|---|---|---|---|---|---|
-| No air | 0.3% | 86.9% | 12.8% | 0.00 | 0 wins |
-| Reactive CAS | 17.4% | 32.1% | 50.5% | 0.33 | 15–50% |
-| Immediate CAS (diagnostic) | 28.7% | 25.2% | 46.1% | 0.24 | None |
-| Recon informed | 61.0% | 13.0% | 26.0% | 0.59 | 55–85% |
-| Recon informed, no forwarding | 45.7% | 17.4% | 36.9% | 0.59 | None |
-| Recon informed, threat-blind | 74.0% | 4.8% | 21.2% | 0.57 | None |
-| Threat-blind, recon climbs after fire | 71.4% | 5.3% | 23.3% | 0.41 | None |
-| Threat-blind, recon climbs, CAS pop-up | 70.7% | 7.0% | 22.3% | 0.52 | None |
-| Threat-blind, flies to suit the forecast | 75.6% | 4.9% | 19.5% | 0.58 | None |
+**Order from here:** S7, then S5 with medevac in it, then S6 and the harder S8 rescue, then the outpost playtest that closes M9, then Phase 1 (M10–M12).
 
-- Informed beats reactive by 43.6 points (95% interval 39.9–47.3); the target is at least 20.
-- Forwarding adds 15.3 points (95% interval 11.9–18.7); the target is about 10.
+### Current balance
 
-Graded visibility cost every air policy 1–10 points of wins against the rain-and-cloud rules it replaced, with no-air unchanged at 0.3%, so weather now matters to the result.
+Measured on 2026-11-04 over 300 seeds per bot, with the bots denying danger close (the `…Approve` variants clear it every time and do worse almost everywhere). Wins are percent; the 95% interval at 300 seeds is about ±5 points near 50%. Every bot is listed in `src/cli/policy-registry.ts`.
 
-M7 removed an aircraft aura that had inflated every earlier result. Each sighting used to restart a 30-second take-cover reaction, so assault formations spent 46% of their steady time held by any nearby aircraft, even one with no ordnance. Formations now take cover once and can't again for 5 minutes. Most of air's earlier value came from that aura: with it gone, reactive fell to 3%. CAS passes were then roughly doubled in strength. So win rates before M7 aren't comparable with these.
+| Scenario | No air | Lazy air | Good air | Other bots |
+|---|---|---|---|---|
+| Outpost Under Pressure | 4.0 | reactive 21.7 | informed 66.0 | fire first 62.3, without forwarding 49.7, immediate 30.0, lingering on guns 63.7, cautious 48.7, press on 68.3 |
+| Outpost at Night | 0.7 | reactive 4.0 | informed 26.3 | with flares 32.7, **fire first 37.0**, without forwarding 14.7, press on 33.0 |
+| Valley Road | 23.3 | reactive 20.0 | recon and CAS 80.7 | with marks 82.7, without forwarding 44.0, scouting only 68.3 (20.0 unforwarded), cover 80.3, suppress 73.3 |
+| Overwatch | 10.7 | reactive 11.3 | recon and CAS 21.7 | **cover 44.0**, marks 23.7, suppress 25.7, without forwarding 17.3, scouting only 17.7 |
+| Find Them | 0.0 | one orbit 0.0 | sweep 79.7 | |
+| Downed Pilot | 0.0 | unescorted 81.0 | escorted 98.0 | waiting for daylight 92.7 |
 
-Forwarding probably helps now because the aura no longer dominates, so warned patrols and prepared garrisons can show up in the result. That explanation hasn't been tested.
+Findings from this run, against the figures recorded earlier:
 
-Open items, most important first. Tuning waits for M13:
+- All results match their last recorded figures within noise, so nothing has drifted.
+- **Covering the column on Overwatch doubles its result** (44.0% against 21.7%), which no earlier result recorded. Cover keeps a strike aircraft watching ahead of the lead platoon. Why that pays so much more here than on Valley Road (80.3% against 80.7%) isn't traced yet. It is the first clear case of a task changing an outcome on Overwatch, so trace it before S5 relies on Cover.
+- **Reactive air doesn't beat no air on Valley Road or Overwatch.** Answering requests alone is worth nothing on the road maps. That fits the design, since recon is the lever there, but it means the "lazy air" floor is no air.
+- **Forwarding is worth 16 points at the outpost and 37 on Valley Road,** above the 10-point target in both.
+- **Clearing every danger close costs up to 12 points** at night, where it widens (informed 26.3% against 14.0%), and up to 7 by day.
 
-- **Hunting air defense doesn't pay.** The `informed` policy wins 61.0%, against 74.0% for threat-blind, because it spends passes on the team. Answering fire by climbing recon cuts hits (0.41 per run against 0.57) with no significant change in wins (71.4%), so altitude is the better reaction for now.
-- **Reactive and informed are both inside their bands,** but reactive (17.4%) is now near the bottom of its band. The best policies reach the mid 70s, so a good human may still find the scenario too easy.
-- **Forecasts don't clearly pay yet.** Flying to suit the forecast wins 75.6% against 74.0% for ignoring it, which is within noise, even though weather now costs real wins. Altitude may be too blunt a response, and the policy doesn't yet route or time missions around storms.
-- **Immediate CAS (28.7%) beats reactive (17.4%).** Simply launching at the first report shouldn't beat answering requests, so this diagnostic needs watching.
-- **Forwarding is above its 10-point design target,** which may mean it is now too strong.
-- **No-air still wins rarely** (0.3%). These are real wins: the garrison beats the waves in detail, so `successMinDefenders` can't remove them. M5's exit stays unmet.
-- **Fire is too continuous:** 73% of minutes without air against a 30–50% target, and 4 bouts against at least 5. The first decisive assault is at minute 43.4, against about 45.
-- `probe` is about 2% of behavior time, almost all of it scouts.
-- **Scenario win conditions need a rethink.** "Below strength" is hidden from the player, and it counts a recovering unit as zero defenders. Over 400 seeds, counting all but broken units would take reactive from 10.5% to 24.3% and informed from 34.0% to 50.7%, with no-air barely moving (0.5% to 0.8%). An alternative is a report card on the outpost's status when a relief force arrives. This is scenario work, not engine work.
+### Open items
 
-Earlier findings that still apply:
+Most important first. Win-rate tuning waits for M13, so these are recorded rather than fixed.
 
-- No-air losses come from morale and casualties under massed attack. Ammunition also matters: more garrison ammunition produced rare no-air wins at the deadline.
+- **Trace Cover on Overwatch** (44.0% against 21.7% for recon and CAS) before building on it.
+- **Guns don't change outcomes** on any map, including Overwatch, which was built for them (S3).
+- **Waiting for air shows no gain.** The weighed rule removed its cost, but no map rewards it yet.
+- **No air wins a few percent at the outpost.** These are real wins, so M5's exit stays unmet.
+- **Downed Pilot is too easy for anything but an introduction,** and landing at night costs nothing extra (S8).
+- **Forwarding may be too strong:** at the outpost it is worth more than the 10-point design target.
+- **Fire is too continuous at the outpost,** and the first decisive assault comes a little early (M5's tempo targets).
+- **Scenario win conditions need a rethink.** "Below strength" is hidden from the player, and it counts a recovering unit as zero defenders. A report card on the outpost's status when a relief force arrives is the alternative. This becomes M13's shift report.
+- **No continuous integration.** The repository is on GitHub, but nothing runs `npm run check` on a push.
 
 ## 1. Approach
 
@@ -71,7 +70,7 @@ Earlier findings that still apply:
 
 | Topic | Decision | Reason |
 |---|---|---|
-| Runtime | Node 26, npm | Already installed |
+| Runtime | Node 26 for development, npm. The README asks for 22 or newer | Already installed |
 | Project root | Repo root, no nested `air-operations/` | Repo holds only this project |
 | Scenario validation | Zod | Schema and types come from one definition |
 | Headless execution | `tsx` CLI scripts | Runs TypeScript directly, needs no build step |
@@ -81,7 +80,9 @@ Earlier findings that still apply:
 | Boundary checks | ESLint `no-restricted-imports` per directory | No extra tool required |
 | Banned in sim code | `Math.random`, `Date.now`, `performance.now` | Enforced by ESLint |
 | TypeScript flags | `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` | Catches missing-entity bugs at compile time |
-| CI | None for now | The repo has no remote; `npm run check` runs everything locally |
+| CI | None yet | The repo is on GitHub (`pedroargento/air-ops-controller`), but `npm run check` and `npm run e2e` only run locally. A GitHub Actions job running `npm run check` is the obvious next step |
+| Deterministic math | `src/domain/public/det-math.ts` in simulation code | Built-in `Math.log` and similar functions differ between engines and V8 versions; lint bans them there. Replay works across JavaScript engines, beyond invariant 8 |
+| Documents and manual | `README.md`, `CHANGELOG.md`, `DESIGN.md`, `docs/parameters.md` (generated), `docs/manual/` (`npm run manual`; the PDF is attached to releases, not committed) | Each has one job; see `DESIGN.md` |
 
 ## 3. Code structure
 
@@ -90,24 +91,30 @@ This extends the suggested layout in §10 with `ai/`, `debug/` and `cli/`.
 ```text
 src/
   domain/
-    public/       # IDs, Vec2, estimates, messages, orders: no hidden state
-    truth/        # WorldTruth, true unit state, combat state
-  rng/            # PRNG, labeled streams
-  sim/            # step(), movement, combat, capture, radio progress, aircraft
-  perception/     # truth in, Observation out
-  ai/             # decideGround, utility rules, response to information
-  knowledge/      # UnitKnowledge, PlayerKnowledge, PlayerView, project(), cone geometry
-  scenario/       # Zod schema, ASCII terrain parser, initial-state loader
-  policies/       # automated players
-  ui/             # player-facing Canvas and panels
-  debug/          # omniscient debug canvas, excluded from normal gameplay
-  cli/            # batch runner, replay tool, reports
-  main.ts
+    public/       # IDs, Vec2, estimates, messages, orders, det-math: no hidden state
+    truth/        # WorldTruth, platoons and squads, aircraft, combat state
+  rng/            # PCG32, labeled streams
+  sim/            # step(): movement, combat, air, ground fire, radio, flares, marks, rescue, outcome
+  perception/     # truth in, observations out
+  ai/             # decideGround, battle drills, decideCrew, evade and search, reports
+  knowledge/      # unit and player knowledge, tracks, project() into the PlayerView
+  scenario/       # Zod schema, rules, scenario catalog, loader
+  game/           # the browser session that owns the SimState and the clock
+  policies/       # automated players (bots)
+  ui/             # player-facing canvas, panels, key, scenario menu
+  debug/          # omniscient debug view, never linked from the game
+  cli/            # batch runner, replay, parameters page, terrain generation, manual PDF
+  main.ts         # entry point: scenario menu, or play.ts when a scenario or seed is given
+  play.ts         # the game page
 scenarios/
-  outpost-under-pressure.json
-  outpost-under-pressure/  # ASCII terrain layers
+  *.json          # one file per scenario
+  <name>/         # terrain layers for scenarios that have them
+  rules/standard.json   # every shared rule value, each with a description
 tests/
-  unit/  integration/  balance/
+  unit/  integration/  e2e/  support/
+docs/
+  parameters.md   # generated by npm run params
+  manual/         # the illustrated manual's source
 ```
 
 ### Import rules
@@ -118,36 +125,36 @@ tests/
 | `domain/truth` | `domain/public` | Everything else |
 | `perception`, `sim`, `scenario` | `domain/*`, `rng`, `ai`, `knowledge` | `ui`, `policies`, `debug`, `cli` |
 | `ai`, `knowledge` | `domain/public`, `rng` | `domain/truth`, `sim`, `perception` |
-| `policies`, `ui` | `domain/public`, PlayerView types from `knowledge` | `domain/truth`, `sim` internals, `perception` |
-| `debug`, `cli` | Anything | Nothing is imported from them except `main.ts` |
+| `policies`, `ui` | `domain/public`, `knowledge/player-view` | `domain/truth`, `sim`, `perception`, `ai`, the rest of `knowledge`, `game`, `debug`, `cli` |
+| `debug`, `cli` | Anything, except that `debug` runs in the browser and can't import Node modules | Nothing imports them |
+| `game`, `main.ts`, `play.ts` | Anything the browser can run | Nothing imports `game` except the pages |
 
 `sim` calls `ai` and `knowledge` directly and passes them filtered inputs. The import rules stop those modules reaching truth themselves.
 
 ### Core contracts
 
 ```ts
-type SimState = Readonly<{
+type SimState = {            // mutated in place by step()
   tick: number;
   truth: WorldTruth;
-  unitKnowledge: ReadonlyMap<UnitId, UnitKnowledge>; // beliefs, kept apart from truth
-  trackAssociation: TrackAssociation;                // private observer/unit map (§5.1)
+  unitKnowledge: Record<string, UnitKnowledge>; // beliefs, kept apart from truth
   radio: RadioState;
   player: PlayerKnowledge;
   rng: RngState;
-}>;
+};
 
-step(state: SimState, commands: readonly PlayerCommand[], config: SimConfig):
-  { state: SimState; events: readonly SimEvent[] };
+step(state: SimState, commands: readonly PlayerCommand[], scenario: Scenario): SimState;
 
-project(player: PlayerKnowledge, telemetry: AircraftTelemetry, tick: number): PlayerView;
+project(player: PlayerKnowledge, telemetry: AircraftTelemetry, tick: number, display: ViewParameters): PlayerView;
 
-decideGround(self: UnitSelf, knowledge: UnitKnowledge, terrain: LocalTerrain, tick: number):
-  GroundIntent;
+decideGround(self: UnitSelf, knowledge: UnitKnowledge, tick: number, rates: BehaviorFireRates, map: DrillMap): GroundDecision;
+
+decideCrew(self: CrewSelf): CrewDecision;
 
 type Policy = (view: PlayerView) => readonly PlayerCommand[];
 ```
 
-`UnitSelf` carries only what a unit can know about itself. That includes true position (§4), but no data about other units.
+`UnitSelf` carries only what a unit can know about itself. That includes true position (§4), but no data about other units. `CrewSelf` is the same for a crew: its aircraft, its own contacts, the fire it has met, the forecast and the controller's map. These contracts are the code's, as of version 0.2. The spec's §10.2 contracts are the original design and differ in detail.
 
 ## 4. Milestones
 
@@ -331,11 +338,54 @@ Replaced the original calibration milestone. The theater work changes what needs
 
 **Exit:** The outpost has been played by hand several times, and the findings are written down. The open items in Status stay open unless they still matter.
 
+**Progress:** Downed Pilot was played by hand on 2026-11-03. It played well, but the survivor could only be called once an aircraft had seen it, so the controller scouted blind and had an aircraft damaged. Every unit on the radio net is now listed and callable. The outpost playtest is still owed.
+
+### v0.1 results (history)
+
+These were the outpost's figures at the end of v0.1, before crews, tracks and danger close. Later rule changes moved every figure, so they aren't comparable with the current balance. They are kept for the reasoning in the notes.
+
+| Policy, after M7.9 (1,000 seeds) | Win | Captured | Below strength | Aircraft hits per run | Target |
+|---|---|---|---|---|---|
+| No air | 0.3% | 86.9% | 12.8% | 0.00 | 0 wins |
+| Reactive CAS | 17.4% | 32.1% | 50.5% | 0.33 | 15–50% |
+| Immediate CAS (diagnostic) | 28.7% | 25.2% | 46.1% | 0.24 | None |
+| Recon informed | 61.0% | 13.0% | 26.0% | 0.59 | 55–85% |
+| Recon informed, no forwarding | 45.7% | 17.4% | 36.9% | 0.59 | None |
+| Recon informed, threat-blind | 74.0% | 4.8% | 21.2% | 0.57 | None |
+| Threat-blind, recon climbs after fire | 71.4% | 5.3% | 23.3% | 0.41 | None |
+| Threat-blind, recon climbs, CAS pop-up | 70.7% | 7.0% | 22.3% | 0.52 | None |
+| Threat-blind, flies to suit the forecast | 75.6% | 4.9% | 19.5% | 0.58 | None |
+
+- Informed beats reactive by 43.6 points (95% interval 39.9–47.3); the target is at least 20.
+- Forwarding adds 15.3 points (95% interval 11.9–18.7); the target is about 10.
+
+Graded visibility cost every air policy 1–10 points of wins against the rain-and-cloud rules it replaced, with no-air unchanged at 0.3%, so weather now matters to the result.
+
+M7 removed an aircraft aura that had inflated every earlier result. Each sighting used to restart a 30-second take-cover reaction, so assault formations spent 46% of their steady time held by any nearby aircraft, even one with no ordnance. Formations now take cover once and can't again for 5 minutes. Most of air's earlier value came from that aura: with it gone, reactive fell to 3%. CAS passes were then roughly doubled in strength. So win rates before M7 aren't comparable with these.
+
+Forwarding probably helps now because the aura no longer dominates, so warned patrols and prepared garrisons can show up in the result. That explanation hasn't been tested.
+
+Open items at the time:
+
+- **Hunting air defense doesn't pay.** The `informed` policy wins 61.0%, against 74.0% for threat-blind, because it spends passes on the team. Answering fire by climbing recon cuts hits (0.41 per run against 0.57) with no significant change in wins (71.4%), so altitude is the better reaction for now.
+- **Reactive and informed are both inside their bands,** but reactive (17.4%) is now near the bottom of its band. The best policies reach the mid 70s, so a good human may still find the scenario too easy.
+- **Forecasts don't clearly pay yet.** Flying to suit the forecast wins 75.6% against 74.0% for ignoring it, which is within noise, even though weather now costs real wins. Altitude may be too blunt a response, and the policy doesn't yet route or time missions around storms.
+- **Immediate CAS (28.7%) beats reactive (17.4%).** Simply launching at the first report shouldn't beat answering requests, so this diagnostic needs watching.
+- **Forwarding is above its 10-point design target,** which may mean it is now too strong.
+- **No-air still wins rarely** (0.3%). These are real wins: the garrison beats the waves in detail, so `successMinDefenders` can't remove them. M5's exit stays unmet.
+- **Fire is too continuous:** 73% of minutes without air against a 30–50% target, and 4 bouts against at least 5. The first decisive assault is at minute 43.4, against about 45.
+- `probe` is about 2% of behavior time, almost all of it scouts.
+- **Scenario win conditions need a rethink.** "Below strength" is hidden from the player, and it counts a recovering unit as zero defenders. Over 400 seeds, counting all but broken units would take reactive from 10.5% to 24.3% and informed from 34.0% to 50.7%, with no-air barely moving (0.5% to 0.8%). An alternative is a report card on the outpost's status when a relief force arrives. This is scenario work, not engine work.
+
+Earlier findings that still apply:
+
+- No-air losses come from morale and casualties under massed attack. Ammunition also matters: more garrison ammunition produced rare no-air wins at the deadline.
+
 ## 5. Roadmap after v0.1
 
 The direction is a larger map covering a slice of a fictional, Afghanistan-like country in the Vietnam era, about 200 km across as a starting value. It has several bases with different aircraft, and sites that zoom into today's 5 km grid. Play is continuous, with no win condition, and ops requests appear at random. Today's aircraft models stay, with no drones or satellites.
 
-Each milestone needs its own spec section before it starts. **Status:** S0, S1 and S4 are complete, and S2 is complete apart from the per-drill benefit.
+Each milestone needs its own spec section before it starts. The Status table at the top is the current state of every milestone.
 
 Scenarios come first: they give playable missions sooner, test the ground AI on new maps, and become incident templates later, so each scenario's objective is written as an incident: a place, a time window, what it needs, and what happens if nobody comes. Timed orders are fine in a scenario, but each ground action is reusable, so an assault works the same for either side, in any scenario, however it was started. A scenario's stated objective is the mission only: threats and what to do about them are for the player to discover through recon. Numbers below are provisional.
 
@@ -406,15 +456,31 @@ Armed aircraft carry two weapon classes, each with its own ammunition, replacing
 
 What they're worth, over 300 seeds on Valley Road: suppressing marked ambushes as the column nears them loses 4.3 points against marks alone (paired, −7.8 to −0.8), answering requests with suppression gives 15.7% against reactive's 20.7% (Outpost 6% against 20%), and covering the lead platoon gives 81.7% against 79.0% for sending CAS at sightings (paired +2.7, −2.5 to +7.8). Traces show why suppression loses here. The aircraft is taken off bombing to do it, and Valley Road's ambushes sit 70–150 m from the road, so once the column is close the crew has to hold or risk hitting it. Before the friendly margin was added, gun runs walked onto the column and broke its morale, and it withdrew. Guns still show no situation where they win, so S3's exit is still not met. A suppression mission should matter where the enemy is set back from friends and bombs are gone or too risky, which no current map has.
 
+**Overwatch (S3's guns test):** A new scenario, Overwatch, puts three 22-man positions with two machine guns each 230–280 m off the Valley Road, an air defense team behind them, and CAS-1 with two bombs. Scenarios can now give an aircraft its own bomb load. It spreads the bots well: none 10%, reactive 13%, recon and CAS 20%, with marks 24%. Guns still don't matter: over 300 seeds paired, suppressing the positions as the column nears them gives +0.3 points against marks alone (−4.0 to +4.6), lingering on guns +0.7 (−3.8 to +5.1), and suppression against lingering −0.3 (−5.8 to +5.1). This was the map most in favour of guns: enemy outside danger close, bombs scarce. So S3's exit isn't met, and the measured answer is that guns are a fallback for when bombs are gone, not a weapon that changes outcomes.
+
+**S3 left open on purpose:** Balancing guns is deferred. The likely way to give them a role is a scenario where bombs are too few for every target, so the controller has to choose where they go and use guns everywhere else.
+
+#### S4: Find them, and Convoy
+
+**Find them** is recon only: locate an infiltrating force and be scored on how close the picture was to the truth. **Convoy** has a column moving through a valley, with the player scouting for ambushes and covering it when hit.
+
+**Ambush recognition** arrives with Convoy. The sim never labels anything an ambush. Crews report only what they can see: stationary squads, their weapons, and which way they face, which is a new observation. The player reads the pattern and marks a suspected kill zone, which is forwarded as an area with a new command. It enters the platoon's picture as a low-confidence enemy position, so it can trigger a bypass or deliberate attack. A wrong mark costs real time, and an ambush the player missed still gets sprung. This brings in the player-authored assessments and area markers that v0.1 ruled out.
+
+**Exit:** In both, better recon gives measurably better results.
+
+**Result:** Met. Over 1,000 seeds, Find Them scores 0% with no aircraft, 0% with one fixed orbit and 81.6% with a planned sweep. Valley Road, which is Convoy for now, gets through 27.5% of the time with no air and 26.4% with reactive CAS. With scouting only it's 23.3% unforwarded, 38.0% forwarded and 44.4% with kill-zone marks, and with CAS it's 67.2%, 77.1% and 80.8%. The kill zone is the first kind of a generic point of interest: right-click the map, choose recipients and report, and a new kind is one entry in `POI_KINDS`. Crews now sometimes see which way a still squad faces, drawn as a short line, and nothing labels an ambush. Limiting wide flanks to platoons of three or more squads stopped far ambush hurting, so it's now neutral rather than useful. The marking bot needs two squads seen facing the same ground. A wrong mark isn't a real risk yet: two marks on empty road cost about 80 seconds and no measurable success (81.0% against 76.8%, over 400 seeds), because the 2-hour limit leaves plenty of slack.
+
+### Delivered alongside the scenarios
+
+Work that came between the scenario milestones, in the order it was done. Each paragraph's figures were current when it was written. The Status table at the top has today's.
+
+**After the code review, the truth pass and danger close:** These figures replaced the ones in the S1, S2 and S4 results, and came before crew autonomy (S3). Deciding uses only estimates and resolving uses truth (§10.4): ground fire goes at a point and hits whoever is near it, and crews commit strikes on their estimate. Strikes now hit friends too, crews hold off friendly markers unless the controller clears a unit's danger close request (§8.1.1), and the bots deny by default. Over 1,000 seeds, the outpost is none 3.3%, reactive 29.8%, immediate 30.7%, informed 61.2% and without forwarding 52.6%; approving every request drops reactive to 8.5% and informed to 54.6%. Valley Road is none 19.6% and reactive 17.3%; scouting only is 17.2% unforwarded, 61.0% forwarded and 70.0% with marks; with CAS it's 53.5%, 83.2% and 85.4%. The drill and wrong-mark measurements were taken just before danger close: attack worth 18 points without air and 24 with it, far ambush 7 and 6, near ambush, hasty ambush and wait for air nothing, and bypass costing 4. Two marks on empty road cost about 250 seconds and 1.5 points, within noise.
+
 **Map conventions:** The map now borrows from real military maps. Units are APP-6-style symbols: frames by side with suspect and unknown, icons, size marks, (−) and an operational-condition bar from claimed losses, solid and dashed ✕ for destroyed and probably destroyed, movement arrows and last-seen times. The terrain is a 1:50,000-style sheet: land cover in color, relief as light hillshading with 20 m contours and labeled 100 m index contours, spot heights, roads and streams as smooth lines, and a labeled 1 km grid. Selecting an aircraft shows maximum elevation figures, red where the ground is above its altitude. Aircraft carry data blocks with brevity words, contact reports read in SALUTE order, and contacts carry an Admiralty rating. The uncertainty circles and cones are gone: a contact not seen for two minutes gets a dashed frame and its last-seen time at its last known position, keeps its movement arrow, and where it went is the player's call. Display only: no battle changed. The condition bar fills only from aircraft strike claims until ground units report what they inflict, which is the next step together with tracks.
 
 **Tracks, claims and source ratings:** Air operations now keeps tracks (§7.2). Each report is matched once against the live tracks through a gate: three times the combined position error plus plausible movement, side, size within a factor of two, and no second contact from the same source. The map shows one fused marker per track, numbered from TN 4001, with each part taken from the best source. The first gate was the old strict test, which gave 1.7 tracks per enemy squad, because independent errors from two crews often fall outside the sum of their sigmas and neighbouring size bands never overlap. With the gate, fresh tracks never outnumber the true squads, and the extras are stale last-known positions, drawn dashed. Ground units now claim the men they see fall near where they're firing, at 1.4 times with noise. The map deconflicts claims per track: each source once at its highest, the largest ground claim rather than the sum, plus aircrew assessments. Per track the condition is about right: across four outpost runs, 15–19 tracks showed combat-ineffective or probably destroyed, against 16–20 squads that really were. The bar uses NATO's thresholds: neutralized at a tenth, combat-ineffective at three tenths. The debrief sets claims against the truth and rates each source A to E from its real error and wrong-side reports. In a sample outpost run, four platoons claimed 172 against 64 really lost, about one each per platoon. Over 300 seeds, with bots reading tracks: outpost informed 71.7%, without forwarding 49.3%, reactive 20.0%, lingering 68.7%, cautious 46.3%, press on 65.3%; Valley Road recon and CAS 78.0%, without forwarding 43.3%, with marks 77.0%, scouting only 69.0%, cover 81.3%. Lingering rose and cautious and Valley Road without forwarding fell by more than noise; the rest is within it.
 
 **Crew calls, 9-line requests and smoke:** Crews call JOKER, BINGO, bombs expended and WINCHESTER once each per sortie. Support requests carry the target, its size, the mark and the friendlies' position, and a platoon expecting air throws smoke on the hostile it knows of nearest it, which helps crews find and identify targets near it and warns the enemy. The reactive bot now centers on the requesting platoon, not the named target. Over 300 seeds none of this changes the bots' results: outpost informed 69.0%, reactive 21.7%, Valley Road recon and CAS 77.3%, with marks 77.3%, all within noise of the track results. Smoke is a tool for the human controller more than for bots that already know where to look.
-
-**Overwatch (S3's guns test):** A new scenario, Overwatch, puts three 22-man positions with two machine guns each 230–280 m off the Valley Road, an air defense team behind them, and CAS-1 with two bombs. Scenarios can now give an aircraft its own bomb load. It spreads the bots well: none 10%, reactive 13%, recon and CAS 20%, with marks 24%. Guns still don't matter: over 300 seeds paired, suppressing the positions as the column nears them gives +0.3 points against marks alone (−4.0 to +4.6), lingering on guns +0.7 (−3.8 to +5.1), and suppression against lingering −0.3 (−5.8 to +5.1). This was the map most in favour of guns: enemy outside danger close, bombs scarce. So S3's exit isn't met, and the measured answer is that guns are a fallback for when bombs are gone, not a weapon that changes outcomes.
-
-**S3 left open on purpose:** Balancing guns is deferred. The likely way to give them a role is a scenario where bombs are too few for every target, so the controller has to choose where they go and use guns everywhere else.
 
 **Air status board:** The Summary tab ends with each aircraft's next hour from its telemetry: en route, on station, returning, rearming, ready.
 
@@ -430,17 +496,11 @@ What they're worth, over 300 seeds on Valley Road: suppressing marked ambushes a
 
 **Downed pilot (§8.8):** A rescue mission with one survivor, who evades with water and a survival radio, and hunters who search for it. The survivor keeps radio silence. Each answer it gives costs battery and hands every hunter a direction-finding fix 250 m off. Its SITREP gives the water and calls left, and its panel shows them. When the water runs out it slows to half speed, and two hours later it dies. Hunters start knowing roughly where the parachute fell. They close on their freshest lead and sweep around it, and they take the survivor only if they have seen it and come within 40 m. The HH-3E is the first aircraft with seats. Pickup is ordered from the right-click menu: the helicopter lands, the survivor runs to it from up to 1.5 km, and boarding takes 20 s with the survivor beside it, counted per second so that casualties can reuse it later. On the ground it is eight times easier to hit. It lifts off under fire by its risk limit, or whenever the controller gives it another order, and lifting off loses the boarding so far. When it lands, the game drops to 1× and a panel shows the boarding bar, the survivor coming, fire taken, escorts, and Lift off now. At night the header offers Wait for first light, which fast-forwards and stops for anything urgent or a landing. Every existing scenario and bot gives identical results before and after. Downed Pilot starts at 1730 with the helicopter ready at 1820, near dusk. Over 200 seeds: no air 0%, all captured; an unescorted rescue 79.5%; a rescue escorted by two A-1Es 98.5%; and the same waiting for daylight 94.0%. The night costs the waiting bot because the hunters keep searching. The landing is not yet more dangerous after dark. Because the escorted rescue is close to certain, Downed Pilot is kept as an introduction, with headquarters messages that teach the steps. A harder rescue, with stronger hunters or air defense and night landings that cost something, is still to come.
 
-#### S4: Find them, and Convoy
+**Scenario menu and units on the net:** A bare URL now opens a menu with a card per scenario: objective, briefing, time of day, length and aircraft, and an optional seed. `?scenario=` and `?seed=` still play directly, and the menu remembers the last scenario. The sidebar's **Units on the net** lists every unit the controller can call, including ones never seen, which fixed the Downed Pilot playtest's main complaint. No battle changed.
 
-**Find them** is recon only: locate an infiltrating force and be scored on how close the picture was to the truth. **Convoy** has a column moving through a valley, with the player scouting for ambushes and covering it when hit.
+**Fire on the ground (§7.3):** Playtest finding: units seemed to stand still, with no sign of who was fighting whom, so it was hard to pick what air should hit first. The map now shows fire only as far as someone saw it or said it. A crew watching a unit fire sees which way the fire goes, and whom it lands on if it can see them too: a solid arrow, or a short stub when the target is unseen. A unit's reports say whether it is under fire, light or heavy, where the fire comes from (a contact it can see, or only a direction, drawn as a wedge) and what it is firing at: dashed arrows. Panels, request cards and a "Firing on friends" track sort put it in words. Units carry this in the reports they already send, on new labeled random streams, so no battle changed: every bot on all six scenarios gave identical results over 4 seeds against the previous commit, and identical win rates over 300 seeds. In an outpost run, the busiest moment holds about 40 lines, readable once zoomed in, and the fresh window (`fireLineFreshSeconds`, 5 minutes) matches how often units report. A bot that strikes tracks firing on friendly units first, over 300 seeds: Outpost at Night 37.0% against 26.3% for informed, Outpost Under Pressure 62.3% against 66.0%, Valley Road 79.3% against 80.7%, Overwatch 21.7% against 21.7%. So it pays at night, where crews find little on their own, and is neutral or slightly worse by day, where the nearest strong group is usually the right target anyway. Ground units don't act on the direction of fire yet.
 
-**Ambush recognition** arrives with Convoy. The sim never labels anything an ambush. Crews report only what they can see: stationary squads, their weapons, and which way they face, which is a new observation. The player reads the pattern and marks a suspected kill zone, which is forwarded as an area with a new command. It enters the platoon's picture as a low-confidence enemy position, so it can trigger a bypass or deliberate attack. A wrong mark costs real time, and an ambush the player missed still gets sprung. This brings in the player-authored assessments and area markers that v0.1 ruled out.
-
-**Exit:** In both, better recon gives measurably better results.
-
-**After the code review, the truth pass and danger close:** These figures replace the ones in the results above and in S1 and S2. Deciding uses only estimates and resolving uses truth (§10.4): ground fire goes at a point and hits whoever is near it, and crews commit strikes on their estimate. Strikes now hit friends too, crews hold off friendly markers unless the controller clears a unit's danger close request (§8.1.1), and the bots deny by default. Over 1,000 seeds, the outpost is none 3.3%, reactive 29.8%, immediate 30.7%, informed 61.2% and without forwarding 52.6%; approving every request drops reactive to 8.5% and informed to 54.6%. Valley Road is none 19.6% and reactive 17.3%; scouting only is 17.2% unforwarded, 61.0% forwarded and 70.0% with marks; with CAS it's 53.5%, 83.2% and 85.4%. The drill and wrong-mark measurements were taken just before danger close: attack worth 18 points without air and 24 with it, far ambush 7 and 6, near ambush, hasty ambush and wait for air nothing, and bypass costing 4. Two marks on empty road cost about 250 seconds and 1.5 points, within noise.
-
-**Result:** Met. Over 1,000 seeds, Find Them scores 0% with no aircraft, 0% with one fixed orbit and 81.6% with a planned sweep. Valley Road, which is Convoy for now, gets through 27.5% of the time with no air and 26.4% with reactive CAS. With scouting only it's 23.3% unforwarded, 38.0% forwarded and 44.4% with kill-zone marks, and with CAS it's 67.2%, 77.1% and 80.8%. The kill zone is the first kind of a generic point of interest: right-click the map, choose recipients and report, and a new kind is one entry in `POI_KINDS`. Crews now sometimes see which way a still squad faces, drawn as a short line, and nothing labels an ambush. Limiting wide flanks to platoons of three or more squads stopped far ambush hurting, so it's now neutral rather than useful. The marking bot needs two squads seen facing the same ground. A wrong mark isn't a real risk yet: two marks on empty road cost about 80 seconds and no measurable success (81.0% against 76.8%, over 400 seeds), because the 2-hour limit leaves plenty of slack.
+**README, changelog and manual:** A README, a changelog from 0.1.0, version 0.2.0, and an illustrated 32-page controller's manual in the style of a late-1990s game booklet, with public-domain photographs of every aircraft. `npm run manual` prints it to `docs/manual/air-operations-manual.pdf`, which is attached to releases rather than committed.
 
 #### S5: Compound support
 
@@ -465,11 +525,25 @@ An aircraft drops ammunition to a ground unit. The drop can scatter or land near
 
 **Exit:** Faster medevac measurably reduces deaths, and time on the ground has a real cost.
 
+**Already in place from rescue (§8.8):** aircraft seats (the HH-3E), landing at a point by hover-taxiing, `landed` aircraft eight times easier to hit, loading counted per second, lifting off by risk limit or any new order, the pickup panel with Lift off now, the drop to 1× on landing, and crew calls for wheels down, lifting off and aboard. S7 generalizes boarding from one survivor to casualties as numbers.
+
+**What is new:**
+
+1. **Casualties:** split losses into killed and wounded by a rules share. Wounded stop fighting, stay with their squad, slow it, and die at a rules rate that rises the longer they wait. SITREPs report wounded. Morale reacts to wounded who aren't being taken out.
+2. **Request:** a platoon with wounded asks for medevac, with the number, the pickup point and whether it is under fire (the essentials of a 9-line medevac request). It arrives as a card like a support request, with "Send" per aircraft with seats and "No air available".
+3. **Aircraft:** a UH-1 medevac (Dustoff) with seats, and loading at a rate per minute, slowed by fire, up to the seats. The aircraft flies to base, which counts as the hospital. Load limits at high altitude wait until a map has the height for them.
+4. **Debrief:** killed, died of wounds, evacuated, and average time from wound to hospital.
+5. **Scenarios and bots:** medevac requests in Outpost Under Pressure, a bot that answers them, one that doesn't, and one that waits for escorts, measured over at least 300 seeds.
+
+**Questions to settle in the spec first:** whether a squad below a share of fit men stops to wait for medevac or keeps fighting (the same rules for both sides, so the enemy's wounded matter too), whether the enemy targets a landing helicopter on purpose or only by chance, and how the pickup point is chosen (the platoon's own covered spot, from its own picture).
+
 #### S8: Downed crew
 
 The crew starts on the ground, so no shoot-down rule is needed. They evade while the enemy closes in and may set a flak trap, and the player protects a rescue aircraft with escorts.
 
-**Exit:** Escorts and timing change the result, and rushing in can lose the rescue aircraft.
+**Exit:** Escorts and timing change the result, and rushing in costs the rescue: the helicopter is damaged and sent home, since hits never destroy an aircraft (DESIGN.md, invariant 10).
+
+**First version delivered:** Downed Pilot (see "Delivered alongside the scenarios"). Escorts change the result (unescorted 79.5%, escorted 98.5%, over 200 seeds), but the escorted rescue is too reliable for anything but an introduction. **Still to do:** a harder rescue scenario with stronger hunters, a flak trap set around the survivor, and night landings that cost something (a landing in the dark is harder to find and to defend).
 
 Further scenario ideas: Hunt the flak, Last lift, and Last light once night exists.
 
@@ -555,14 +629,18 @@ A day cycle feeding the visibility figure, only some aircraft types working at n
 
 **Exit:** Night shifts play differently from day shifts, and flares change the outcome of night fights.
 
+**Mostly delivered early** as §8.7, for Outpost at Night: light from the sun, the moon and cloud, darkness as a visibility cut that spares units firing, strike crews attacking only lit or firing targets, flares from aircraft and illumination rounds from the ground, and Wait for first light. Flares change night fights (informed 27.5% without, 34.5% with, over 200 seeds). **Still to do:** only some aircraft types working at night, flares that must be dropped under the cloud base, attacks that choose darkness, and a day cycle running through continuous play, which needs M13.
+
 ### Candidates, not scheduled
 
-- **Shooting down aircraft:** Aircraft can be lost in any scenario, reversing the rule that a hit never destroys one, which makes search and rescue an incident type.
-- **Danger close:** Strikes near friendly troops carry a risk the player chooses to accept. Lifts the ban on friendly-fire damage.
+- **Shooting down aircraft:** Aircraft can be lost in any scenario, reversing invariant 10 in `DESIGN.md`, which makes search and rescue an incident type. A major decision: every scenario becomes a possible rescue.
 - **Artillery and check fire:** Friendly guns have to stop while aircraft cross their fire path.
-- **Forward air controllers:** Recon marks targets for more accurate strikes, at the cost of staying exposed.
+- **Forward air controllers:** Recon marks targets for more accurate strikes, at the cost of staying exposed. Ground units already throw smoke for crews; an airborne mark is the missing half.
 - **Flak suppression:** A dedicated role against air defense, reusable for rescue escorts.
 - **Weather on the ground:** Effects on troop movement, and valley fog.
+- **Continuous integration:** A GitHub Actions job that runs `npm run check` on every push.
+
+Done since they were listed: danger close (§8.1.1, with friendly fire) and ground units marking targets with smoke (§8.1.3).
 
 ## 6. Testing
 
@@ -570,8 +648,10 @@ A day cycle feeding the visibility figure, only some aircraft types working at n
 |---|---|---|
 | Unit | `npm run check` | §12 domain tests |
 | Integration | `npm run check` | §12 integration tests, golden replay hash |
-| Quick balance | `npm run check` | About 50 seeds per policy, to catch breakage rather than judge balance |
-| Full balance | `npm run balance` | 1,000+ seeds per policy, with a saved report |
+| Quick balance | `npm run check` | 4 to 60 seeds per check inside the integration tests, to catch breakage rather than judge balance |
+| Browser | `npm run e2e` | Plays the Definition of Done in Chromium, then the menu, a second scenario, night and a rescue, and replays the session to the same hash (63 checks). Add `--screenshots dir` to keep pictures |
+| Scenario bots | `npx tsx src/cli/batch.ts --scenario <name> --policy all --seeds 300` | Every scenario's bots; the source of the balance table in Status |
+| Full balance | `npm run balance` | 1,000 seeds per outpost policy, with a saved report |
 
 Golden replay hashes change whenever rules or tuning change, so a hash update must be a deliberate part of the change that caused it.
 
@@ -591,4 +671,7 @@ Golden replay hashes change whenever rules or tuning change, so a hash update mu
 | Per-weapon combat quietly changes the balance | Move constants across unchanged in M6, and compare tempo reports |
 | One unlucky hit ends a sortie and decides a run | Damage forces RTB but never destroys; measure hits per run and tune team placement and hit chance |
 | Equipment leaks into the player's view | `observedWeapons` starts empty and is set only by perception; extend the non-interference test |
-| Abstract air outlives its purpose | Removal is an M3 task |
+| Documents drift from the code | Result paragraphs carry dates and sample sizes; the Status table is the one current summary; `DESIGN.md` records decisions so they aren't reopened by accident |
+| Scenarios that are too easy hide balance problems | Every scenario's bots must spread from no air to good air; a scenario kept easy on purpose (Downed Pilot) says so |
+| The theater's scale is too slow to simulate | S1 kept a 1,000-seed batch within three times v0.1's cost; M11 and M16 must measure ticks per second with several sites before going further |
+| Features that change no results pile up | A feature that measures as neutral is recorded as such (guns, waiting for air) and isn't tuned to look useful |
