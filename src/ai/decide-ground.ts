@@ -66,6 +66,10 @@ export function decideGround(
     return decision(returnFire(self, target, null, rates) ?? fireBack(self, knowledge, null, rates) ?? { kind: 'hold', posture: 'defending' }, 'disengage');
   }
   if (mode === 'broken') return decision({ kind: 'hold', posture: 'defending' }, 'disengage');
+  // Too few men free to fight to go on: it holds where it is until its wounded are out (§4.1.1).
+  if (holdsForWounded(self)) {
+    return decision(returnFire(self, target, null, rates) ?? fireBack(self, knowledge, null, rates) ?? { kind: 'hold', posture: 'defending' }, 'observe');
+  }
 
   // Hunters hunt rather than fight; pinned down, they wait for it to lift.
   if (self.objective.kind === 'SearchArea') {
@@ -90,6 +94,13 @@ export function decideGround(
   // Fired on by someone it can't see: fire back that way, holding ground or still moving on.
   const answer = fireBack(self, knowledge, onward.kind === 'move' && !holdsGround(self.objective) ? onward.destination : null, rates);
   return decision(answer ?? onward, answer === null ? null : 'observe');
+}
+
+/** A platoon on the move with too few men free to fight stops for its wounded; one holding ground already stays. */
+export function holdsForWounded(self: UnitSelf): boolean {
+  const share = self.doctrine.woundedHoldShare;
+  if (share === null || self.platoonWounded <= 0 || holdsGround(self.objective)) return false;
+  return self.platoonFree < share * self.platoonInitialPersonnel;
 }
 
 /** Return fire toward where unseen fire comes from (§4.0.3), or null if it has no reason or means to. */

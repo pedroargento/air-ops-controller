@@ -71,3 +71,39 @@ export function showRequest(request: SupportRequestView, aircraft: readonly Airc
   const answer = request.answer;
   return answer.kind === 'inbound' && aircraft.find((entry) => entry.aircraftId === answer.aircraftId)?.status !== 'onStation';
 }
+
+export type MedevacRequestView = PlayerView['medevacRequests'][number];
+
+/** Every helicopter with seats, with how soon it could land at the pickup point or why it can't go (§8.9). */
+export function medevacOptions(request: MedevacRequestView, aircraft: readonly AircraftTelemetryEntry[], clock: (tick: number) => string, tick: number): readonly SupportOption[] {
+  return aircraft
+    .filter((entry) => entry.seats > 0)
+    .map((entry): SupportOption => {
+      const unavailable = (reason: string): SupportOption => ({ aircraftId: entry.aircraftId, available: false, etaSeconds: null, reason });
+      if (entry.damaged) return unavailable(`damaged, repaired by ${clock(tick + entry.availableInSeconds)}`);
+      if (entry.status === 'turnaround') return unavailable(`refuelling until ${clock(tick + entry.availableInSeconds)}`);
+      if (entry.status === 'returning') return unavailable(`returning to base, ready about ${clock(tick + entry.availableInSeconds)}`);
+      if (entry.woundedAboard > 0) return unavailable(`carrying ${entry.woundedAboard} wounded`);
+      if (entry.landed) return unavailable('on the ground at another pickup');
+      return { aircraftId: entry.aircraftId, available: true, etaSeconds: etaTo(entry, request.pickup), reason: null };
+    })
+    .sort((a, b) => Number(b.available) - Number(a.available) || (a.etaSeconds ?? 0) - (b.etaSeconds ?? 0) || (a.aircraftId < b.aircraftId ? -1 : 1));
+}
+
+/** Where the medevac stands, in one line. */
+export function medevacStatus(request: MedevacRequestView, aircraft: readonly AircraftTelemetryEntry[], clock: (tick: number) => string): string {
+  const { answer } = request;
+  if (answer === null) return 'Waiting for your answer.';
+  if (answer.kind === 'none') return `Told no medevac is available (${clock(answer.answeredAt)}).`;
+  const entry = aircraft.find((candidate) => candidate.aircraftId === answer.aircraftId);
+  if (entry === undefined) return `${answer.aircraftId} sent.`;
+  if (entry.landed) return `${answer.aircraftId} on the ground: ${entry.woundedAboard} aboard.`;
+  if (entry.woundedAboard > 0) return `${answer.aircraftId} heading for the hospital with ${entry.woundedAboard} wounded.`;
+  if (entry.order?.kind !== 'Pickup') return `${answer.aircraftId} was given something else.`;
+  return `${answer.aircraftId} on its way to the pickup point.`;
+}
+
+/** A medevac request stays until it's answered, and for a while after. */
+export function showMedevac(request: MedevacRequestView, tick: number): boolean {
+  return request.answer === null || tick - request.answer.answeredAt <= ANSWERED_SHOW_SECONDS;
+}

@@ -186,7 +186,8 @@ export function reconInformed(
   return (view) => {
     const commands: PlayerCommand[] = [...recallEmpty(view)];
     for (const recon of view.aircraft) {
-      if (recon.aircraftType === 'recon' && recon.status === 'ready') {
+      // A helicopter with seats is kept for pickups, not sent scouting.
+      if (recon.aircraftType === 'recon' && recon.seats === 0 && recon.status === 'ready') {
         commands.push({
           kind: 'aircraftOrder',
           tick: view.tick,
@@ -307,7 +308,7 @@ export function markingKillZones(policy: Policy, minContacts = 2): Policy {
 /** Works through a list of areas in turn: a planned search rather than a single orbit. */
 export function sweepingRecon(areas: readonly Vec2[], radiusMeters: number, dwellSeconds: number): Policy {
   return (view) => {
-    const recon = view.aircraft.filter((aircraft) => aircraft.aircraftType === 'recon');
+    const recon = view.aircraft.filter((aircraft) => aircraft.aircraftType === 'recon' && aircraft.seats === 0);
     const leg = Math.floor(view.tick / dwellSeconds);
     return recon.flatMap((aircraft, index) => {
       const center = areas[(leg + index * Math.ceil(areas.length / recon.length)) % areas.length] as Vec2;
@@ -541,6 +542,78 @@ export function rescuing(survivorId: string, byDayOnly: boolean, escorted = true
     const going = helicopter?.order?.kind === 'Pickup';
     if (helicopter !== undefined && !going && fresh && clear && (!byDayOnly || light >= DAYLIGHT)) {
       commands.push({ kind: 'aircraftOrder', tick: view.tick, aircraftId: helicopter.aircraftId, order: { kind: 'Pickup', center: where, radius: 50 } });
+    }
+    return commands;
+  };
+}
+
+const ESCORT_METERS = 600;
+
+/** A helicopter with seats that can take a medevac now: on the ground and ready, or overhead and empty. */
+function freeHelicopter(view: PlayerView, taken: ReadonlySet<string>): AircraftTelemetryEntry | undefined {
+  return view.aircraft.find(
+    (aircraft) =>
+      aircraft.seats > 0 &&
+      !aircraft.damaged &&
+      !taken.has(aircraft.aircraftId) &&
+      aircraft.woundedAboard === 0 &&
+      (aircraft.status === 'ready' || (aircraft.status === 'onStation' && aircraft.order?.kind === 'Watch')),
+  );
+}
+
+/** A strike aircraft working over a point, or on its way there. */
+function escortOver(view: PlayerView, point: Vec2): AircraftTelemetryEntry | undefined {
+  return cas(view).find((aircraft) => {
+    const center = aircraft.order !== null && aircraft.order.kind !== 'ReturnToBase' ? aircraft.order.center : null;
+    return aircraft.status === 'onStation' && center !== null && distance(center, point) <= ESCORT_METERS;
+  });
+}
+
+/**
+ * Answers medevac requests (§8.9) with a helicopter with seats, sent to the platoon's own pickup
+ * point. With `escort`, a hot pickup waits until a strike aircraft is over it, and a ready one is
+ * sent there first; the policy underneath doesn't get that aircraft back until the helicopter is
+ * on its way home.
+ */
+export function answeringMedevac(policy: Policy, escort: boolean): Policy {
+  const escorts = new Map<string, string>();
+  return (view) => {
+    const pending = view.medevacRequests.filter((request) => request.answer === null);
+    const inbound = new Set(view.aircraft.filter((aircraft) => aircraft.order?.kind === 'Pickup').map((aircraft) => aircraft.aircraftId as string));
+    // An escort stays while its pickup is still waiting for a helicopter or has one on the way.
+    for (const [unitId, aircraftId] of escorts) {
+      const waiting = pending.some((request) => request.unitId === unitId);
+      const answered = view.medevacRequests.find((request) => request.unitId === unitId)?.answer;
+      const flying = answered?.kind === 'sent' && inbound.has(answered.aircraftId);
+      const fit = cas(view).find((aircraft) => aircraft.aircraftId === aircraftId);
+      if ((!waiting && !flying) || fit === undefined || fit.status === 'returning' || fit.status === 'turnaround') escorts.delete(unitId);
+    }
+    const held = new Set(escorts.values());
+    const commands: PlayerCommand[] = policy(view).filter((command) => !('aircraftId' in command) || !held.has(command.aircraftId));
+    const taken = new Set<string>();
+    for (const request of pending) {
+      if (escort && request.hot) {
+        const over = escortOver(view, request.pickup);
+        if (over === undefined) {
+          if (!escorts.has(request.unitId)) {
+            const ready = cas(view).find((aircraft) => aircraft.status === 'ready' && !held.has(aircraft.aircraftId));
+            if (ready !== undefined) {
+              escorts.set(request.unitId, ready.aircraftId);
+              held.add(ready.aircraftId);
+              commands.push(...order(view, ready.aircraftId, request.pickup, SUPPORT_RADIUS_METERS));
+            }
+          }
+          continue;
+        }
+        escorts.set(request.unitId, over.aircraftId);
+      }
+      const helicopter = freeHelicopter(view, taken);
+      if (helicopter === undefined) {
+        commands.push({ kind: 'answerMedevac', tick: view.tick, unitId: request.unitId, helicopterId: null });
+        continue;
+      }
+      taken.add(helicopter.aircraftId);
+      commands.push({ kind: 'answerMedevac', tick: view.tick, unitId: request.unitId, helicopterId: helicopter.aircraftId });
     }
     return commands;
   };

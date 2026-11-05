@@ -677,6 +677,10 @@
       {
         "id": "GUNSHIP-1",
         "model": "UH-1B"
+      },
+      {
+        "id": "DUSTOFF-1",
+        "model": "UH-1H"
       }
     ]
   }

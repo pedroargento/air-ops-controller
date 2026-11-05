@@ -1,17 +1,18 @@
 import type { PlayerAction, PlayerCommand } from '../domain/public/commands';
-import type { Debrief, TruthFrame } from '../domain/public/debrief';
+import type { CasualtyOutcome, Debrief, TruthFrame } from '../domain/public/debrief';
 
 /** How often the true positions are kept for the after-action timeline. */
 const HISTORY_INTERVAL_TICKS = 30;
 import { sourceScorecard } from '../sim/scorecard';
 import { hashState } from '../domain/public/hash';
-import type { Outcome, Platoon } from '../domain/truth/world';
+import type { Outcome, Platoon, WorldTruth } from '../domain/truth/world';
 import { project, type PlayerView } from '../knowledge/player-view';
 import type { Scenario } from '../scenario/load';
 import { aircraftTelemetry } from '../sim/air';
 import { platoonPersonnel, sortedPlatoons } from '../sim/platoon';
 import { createInitialState, type SimState } from '../sim/state';
 import { step } from '../sim/step';
+import { woundedCount } from '../sim/wounded';
 
 export type CommandLog = Readonly<{
   scenario: string;
@@ -24,6 +25,21 @@ export type CommandLog = Readonly<{
  * Owns a running game: the simulation state, actions waiting for the next tick,
  * and the replayable log. It is the only thing between the player and the sim.
  */
+/** What became of one side's casualties, from the truth, for the debrief. */
+function casualtyOutcome(truth: WorldTruth, side: 'friendly' | 'enemy'): CasualtyOutcome {
+  const ledger = truth.casualties[side];
+  const waiting = truth.units.filter((unit) => unit.side === side).reduce((sum, unit) => sum + woundedCount(unit.wounded), 0);
+  return {
+    killed: ledger.killed,
+    wounded: ledger.wounded,
+    diedOfWounds: ledger.diedOfWounds,
+    evacuated: ledger.evacuated,
+    aboard: side === 'friendly' ? truth.aircraft.reduce((sum, aircraft) => sum + woundedCount(aircraft.casualtiesAboard), 0) : 0,
+    waiting,
+    hospitalMinutes: ledger.evacuated === 0 ? null : Math.round(ledger.hospitalSeconds / ledger.evacuated / 60),
+  };
+}
+
 export class GameSession {
   private readonly state: SimState;
   private readonly log: PlayerCommand[] = [];
@@ -100,6 +116,7 @@ export class GameSession {
       friendlyDestroyed: platoons.filter((p) => p.side === 'friendly' && lost(p)).length,
       locatedShare: truth.locatedShare,
       friendlyFireCasualties: truth.friendlyFireCasualties,
+      casualties: { friendly: casualtyOutcome(truth, 'friendly'), enemy: casualtyOutcome(truth, 'enemy') },
       airClaims: this.state.player.estimatedLosses,
       groundClaims: sources.filter((source) => !this.isAircraft(source.sourceId)).reduce((sum, source) => sum + source.claimed, 0),
       sources,

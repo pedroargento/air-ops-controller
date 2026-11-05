@@ -516,7 +516,7 @@ describe('altitude and ground fire', () => {
     expect(plane.damaged).toBe(true);
     expect(plane.status).toBe('returning');
     expect(plane.order).toBeNull();
-    expect(state.truth.aircraft).toHaveLength(4);
+    expect(state.truth.aircraft).toHaveLength(scenario.file.air.aircraft.length);
   });
 
   it('tells the player: telemetry at once, and a report with an estimated source', () => {
@@ -882,7 +882,7 @@ describe('aircraft models', () => {
   it('tells the player which model each aircraft is', () => {
     const state = createInitialState(scenario, 1);
     const names = aircraftTelemetry(state.truth, air).map((a) => a.model);
-    expect(names).toEqual(['A-1E Skyraider', 'F-100D Super Sabre', 'UH-1B Huey gunship', 'O-1E Bird Dog']);
+    expect(names).toEqual(['A-1E Skyraider', 'F-100D Super Sabre', 'UH-1H Dustoff', 'UH-1B Huey gunship', 'O-1E Bird Dog']);
   });
 
   it('a spent aircraft with fuel left stays on station until ordered home', () => {

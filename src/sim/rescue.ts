@@ -3,7 +3,10 @@ import type { ContactId } from '../domain/public/ground';
 import { distance, type Vec2 } from '../domain/public/geometry';
 import { emptyKnowledge, type UnitKnowledge } from '../domain/public/ground';
 import type { CrewCallKind, MessageId, RadioMessage } from '../domain/public/radio';
-import type { Aircraft, Platoon, WorldTruth } from '../domain/truth/world';
+import type { Aircraft, GroundUnit, Platoon, WorldTruth } from '../domain/truth/world';
+import type { AirConfig } from '../scenario/schema';
+import { modelOf } from './air';
+import { takeWounded, woundedCount } from './wounded';
 import type { PlayerKnowledge } from '../knowledge/player-knowledge';
 import { nextGaussian, type RngState } from '../rng/streams';
 import type { Scenario } from '../scenario/load';
@@ -18,6 +21,8 @@ import type { RadioState } from './radio';
 type RescueMission = Extract<Scenario['file']['mission'], { kind: 'Rescue' }>;
 
 const FIRE_RECENT_SECONDS = 2;
+/** A squad hit this recently is loading under fire. */
+const SQUAD_UNDER_FIRE_SECONDS = 15;
 const SPOTTED_SECONDS = 30;
 const HUNTER_STRENGTH = { kind: 'range', min: 1, max: 5 } as const;
 
@@ -136,7 +141,7 @@ function contact(truth: WorldTruth, knowledge: Record<string, UnitKnowledge>, pl
   }
 }
 
-function crewCall(player: PlayerKnowledge, radio: RadioState, aircraft: Aircraft, call: CrewCallKind, tick: number): void {
+function crewCall(player: PlayerKnowledge, radio: RadioState, aircraft: Aircraft, call: CrewCallKind, tick: number, aboard?: number): void {
   radio.nextMessageNumber += 1;
   player.log.push({
     id: `M-${radio.nextMessageNumber}` as MessageId,
@@ -148,6 +153,7 @@ function crewCall(player: PlayerKnowledge, radio: RadioState, aircraft: Aircraft
     call,
     minutesLeft: 0,
     gunBursts: aircraft.gunBursts,
+    ...(aboard === undefined ? {} : { aboard }),
   });
 }
 
@@ -155,6 +161,7 @@ function crewCall(player: PlayerKnowledge, radio: RadioState, aircraft: Aircraft
 export function liftOff(truth: WorldTruth, aircraft: Aircraft): void {
   aircraft.landed = false;
   aircraft.boardingSeconds = 0;
+  aircraft.loadProgress = 0;
   for (const platoon of Object.values(truth.platoons)) {
     const objective = platoon.objective;
     if (objective.kind === 'Evade' && objective.boardAt !== null && platoon.survival?.state === 'evading') platoon.objective = { ...objective, boardAt: null };
@@ -191,9 +198,22 @@ export function resolvePickups(truth: WorldTruth, player: PlayerKnowledge, radio
     const shotAt = aircraft.firedOn.filter((entry) => tick - entry.tick <= FIRE_RECENT_SECONDS);
     const leave = aircraft.risk === 'cautious' ? shotAt.length > 0 : aircraft.risk === 'normal' ? shotAt.some((entry) => entry.hit || entry.weapon === 'AAA' || entry.weapon === 'MANPADS') : false;
     if (leave) {
-      aircraft.order = { kind: 'Watch', center: order.center, radius: 300 };
+      // With wounded aboard it heads for the hospital; with nobody it waits overhead.
+      if (woundedCount(aircraft.casualtiesAboard) > 0) {
+        aircraft.order = { kind: 'ReturnToBase' };
+        aircraft.status = 'returning';
+      } else {
+        aircraft.order = { kind: 'Watch', center: order.center, radius: 300 };
+      }
       liftOff(truth, aircraft);
-      crewCall(player, radio, aircraft, 'LIFTING_OFF', tick);
+      crewCall(player, radio, aircraft, 'LIFTING_OFF', tick, woundedCount(aircraft.casualtiesAboard));
+      continue;
+    }
+    if (loadWounded(truth, aircraft, air, shotAt.length > 0, tick)) {
+      crewCall(player, radio, aircraft, 'WOUNDED_ABOARD', tick, woundedCount(aircraft.casualtiesAboard));
+      aircraft.order = { kind: 'ReturnToBase' };
+      aircraft.status = 'returning';
+      liftOff(truth, aircraft);
       continue;
     }
     for (const platoon of Object.values(truth.platoons).sort((a, b) => (a.id < b.id ? -1 : 1))) {
@@ -216,6 +236,60 @@ export function resolvePickups(truth: WorldTruth, player: PlayerKnowledge, radio
       aircraft.status = 'returning';
       liftOff(truth, aircraft);
     }
+  }
+}
+
+/**
+ * Loads wounded from friendly squads within reach, longest-waiting first, at a rate fire slows
+ * (§8.9). Returns true when the crew should go: seats full, or none left within reach of what
+ * it has started loading.
+ */
+function loadWounded(truth: WorldTruth, aircraft: Aircraft, air: AirConfig, shotAt: boolean, tick: number): boolean {
+  const seats = modelOf(aircraft, air).seats - aircraft.passengers.length - woundedCount(aircraft.casualtiesAboard);
+  const aboard = woundedCount(aircraft.casualtiesAboard);
+  if (seats <= 0) return aboard > 0;
+  const squads = truth.units.filter(
+    (unit) => unit.side === 'friendly' && unit.personnel > 0 && unit.wounded.length > 0 && distance(unit.position, aircraft.position) <= air.loadReachMeters,
+  );
+  if (squads.length === 0) return aboard > 0;
+  const underFire = shotAt || squads.some((unit) => unit.lastHitAtTick !== null && tick - unit.lastHitAtTick <= SQUAD_UNDER_FIRE_SECONDS);
+  aircraft.loadProgress += (air.loadPerMinute / 60) * (underFire ? air.loadUnderFireShare : 1);
+  let left = seats;
+  while (aircraft.loadProgress >= 1 && left > 0) {
+    const next = oldestWounded(squads);
+    if (next === null) break;
+    aircraft.casualtiesAboard.push(...takeWounded(next, 1));
+    aircraft.loadProgress -= 1;
+    left -= 1;
+  }
+  return left <= 0 || squads.every((unit) => unit.wounded.length === 0);
+}
+
+/** The squad whose wounded have waited longest, breaking ties by ID. */
+function oldestWounded(squads: readonly GroundUnit[]): GroundUnit | null {
+  let best: GroundUnit | null = null;
+  let bestSince = Number.POSITIVE_INFINITY;
+  for (const unit of squads) {
+    for (const group of unit.wounded) {
+      if (group.since < bestSince || (group.since === bestSince && best !== null && unit.id < best.id)) {
+        best = unit;
+        bestSince = group.since;
+      }
+    }
+  }
+  return best;
+}
+
+/** Wounded reach the hospital when their helicopter is back at base (§8.9). */
+export function deliverWounded(truth: WorldTruth, tick: number): void {
+  for (const aircraft of truth.aircraft) {
+    if (aircraft.casualtiesAboard.length === 0 || (aircraft.status !== 'turnaround' && aircraft.status !== 'ready')) continue;
+    const ledger = truth.casualties.friendly;
+    for (const group of aircraft.casualtiesAboard) {
+      ledger.evacuated += group.count;
+      ledger.hospitalSeconds += group.count * (tick - group.since);
+    }
+    aircraft.casualtiesAboard = [];
   }
 }
 

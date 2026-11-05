@@ -1,6 +1,7 @@
 import type { ContactEstimate } from '../domain/public/estimates';
 import { distance } from '../domain/public/geometry';
-import { holdsGround, type DrillKind, type UnitKnowledge, type UnitSelf } from '../domain/public/ground';
+import { holdsGround, type DrillKind, type DrillMap, type UnitKnowledge, type UnitSelf } from '../domain/public/ground';
+import { chooseLandingZone } from './medevac';
 import type {
   MessageId,
   ObjectiveStatus,
@@ -39,6 +40,7 @@ export const REPORT_PRIORITY: Readonly<Record<ReportKind, number>> = {
   TIC: 0,
   CHECK_FIRE: 0,
   SUPPORT_REQUEST: 1,
+  MEDEVAC_REQUEST: 1,
   // Ahead of contact reports: a unit in a heavy fight always has another contact to
   // report, and its own casualties would otherwise never get through.
   SITREP: 2,
@@ -53,6 +55,7 @@ export function initialRadioMemory(personnel: number): RadioMemory {
     lastTicAt: null,
     lastSupportRequestAt: null,
     lastDangerCloseAt: null,
+    lastMedevacAt: null,
     lastSitrepPersonnel: personnel,
     lastSitrepAt: null,
     reportedContacts: {},
@@ -127,6 +130,8 @@ export function decideReports(
   config: RadioConfig,
   canRequestSupport: boolean,
   tick: number,
+  /** What the platoon can tell of the ground around it, for choosing a pickup point. */
+  sees: DrillMap['sees'] = () => true,
 ): ReportDecision {
   const needs: ReportNeed[] = [];
   let next = memory;
@@ -162,6 +167,16 @@ export function decideReports(
     // Holding short of a position for air: guns on it, so the platoon can pass.
     needs.push({ kind: 'SUPPORT_REQUEST', contactId: null, wants: 'guns', target: self.drill.target });
     next = { ...next, lastSupportRequestAt: tick };
+  }
+
+  // Wounded waiting: ask for medevac, again if nobody has answered for a while (§8.9).
+  const medevacDue =
+    (next.lastMedevacAt === null || tick - next.lastMedevacAt >= config.medevacRequestCooldownSeconds) &&
+    (knowledge.medevacAnsweredAt === null || tick - knowledge.medevacAnsweredAt >= config.medevacRequestCooldownSeconds);
+  if (canRequestSupport && self.wounded >= config.medevacMinWounded && medevacDue) {
+    const zone = chooseLandingZone(self, knowledge, sees, config.lzSearchMeters, config.ticRangeMeters);
+    needs.push({ kind: 'MEDEVAC_REQUEST', contactId: null, pickup: zone.pickup, hot: zone.hot });
+    next = { ...next, lastMedevacAt: tick };
   }
 
   for (const contact of groupLeads(knowledge, self.doctrine.groupRadiusMeters)) {
@@ -256,6 +271,7 @@ export function composeReport(
         personnel: self.personnel,
         ammunitionFraction: self.ammunition / self.initialAmmunition,
         status: objectiveStatus(self),
+        wounded: self.wounded,
         ...fire,
       };
     case 'SUPPORT_REQUEST':
@@ -270,6 +286,16 @@ export function composeReport(
         targetStrength: need.targetStrength ?? null,
         marked: need.marked === true,
         ...fire,
+      };
+    case 'MEDEVAC_REQUEST':
+      return {
+        ...meta,
+        kind: 'MEDEVAC_REQUEST',
+        observedAt: ownPosition.observedAt,
+        ownPosition,
+        wounded: self.wounded,
+        pickup: need.pickup ?? ownPosition.center,
+        hot: need.hot === true,
       };
     case 'CHECK_FIRE':
       return { ...meta, kind: 'CHECK_FIRE', observedAt: ownPosition.observedAt, ownPosition };

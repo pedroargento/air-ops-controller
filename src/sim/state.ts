@@ -8,6 +8,7 @@ import { createPlatoon, createSquads } from './platoon';
 import { createRadioState, type RadioState } from './radio';
 import { generateWeather, skyOf } from './weather';
 import { startRescue } from './rescue';
+import { emptyLedger } from './wounded';
 
 export type SimState = {
   tick: number;
@@ -44,6 +45,7 @@ export function createInitialState(scenario: Scenario, seed: number): SimState {
       captureProgressSeconds: 0,
       locatedShare: null,
       friendlyFireCasualties: 0,
+      casualties: { friendly: emptyLedger(), enemy: emptyLedger() },
       marks: [],
       outcome: 'running',
       endedAtTick: null,

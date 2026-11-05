@@ -20,6 +20,7 @@ import {
   type PlayerKnowledge,
   type PositionSource,
   type RequestAnswer,
+  type MedevacAnswer,
   type UnitStatusReport,
 } from './player-knowledge';
 import { markerOpacity, type DisplayParameters } from './reachability';
@@ -114,6 +115,15 @@ export type PlayerView = Readonly<{
     answer: RequestAnswer | null;
     /** Danger close cleared for this unit until then, or null. */
     dangerCloseUntil: number | null;
+  }>[];
+  medevacRequests: readonly Readonly<{
+    unitId: string;
+    position: PositionEstimate;
+    wounded: number;
+    pickup: Vec2;
+    hot: boolean;
+    ageSeconds: number;
+    answer: MedevacAnswer | null;
   }>[];
   log: readonly RadioMessage[];
   /** Who is firing at whom, as far as crews saw and units reported (§7.3). */
@@ -374,6 +384,15 @@ export function project(
       ageSeconds: tick - request.receivedAt,
       answer: request.answer,
       dangerCloseUntil: clearedUntil(unitId),
+    })),
+    medevacRequests: sortedEntries(player.medevacRequests).map(([unitId, request]) => ({
+      unitId,
+      position: request.position,
+      wounded: request.wounded,
+      pickup: request.pickup,
+      hot: request.hot,
+      ageSeconds: tick - request.receivedAt,
+      answer: request.answer,
     })),
     log: player.log,
     fire,

@@ -302,8 +302,9 @@ const BREVITY_WORDS: Readonly<Record<string, string>> = {
   'CHECK FIRE': 'Stop firing: friendly troops are being hit.',
   'DANGER CLOSE': 'Friendly troops close enough to the target to be hit. Only you can clear it.',
   'WHEELS DOWN': 'A helicopter has landed for a pickup. It is an easy target until it lifts.',
-  'LIFTING OFF': 'The crew left the pickup under fire, by its risk limit. Boarding starts again next time.',
+  'LIFTING OFF': 'The crew left the pickup under fire, by its risk limit. Boarding starts again next time; wounded already aboard stay aboard.',
   'SURVIVOR ABOARD': 'The pickup is made. It flies home; the rescue succeeds when it lands there.',
+  'WOUNDED ABOARD': 'A medevac is full, or has everyone within reach. It flies them to the hospital at base.',
 };
 
 const TASK_WORDS: readonly (readonly [string, string])[] = [
@@ -321,6 +322,7 @@ const REPORT_WORDS: readonly (readonly [string, string])[] = [
   ['B2', 'Admiralty rating. The letter is the source: B an aircraft, C a ground unit. The figure is the information: 1 confirmed by another source, 2 to 4 by confidence.'],
   ['Spot', 'A contact report in SALUTE order: size and unit, activity, location, time, equipment.'],
   ['9-line', 'A support request: the target, its size, whether it will be marked with smoke, and where the friendlies are.'],
+  ['MEDEVAC', 'A 9-line medevac request: how many wounded, where to land, and whether the enemy is near. Every minute they wait, more die.'],
   ['Claims', 'Casualties a unit believes it caused. Units in a fight count high; the debrief shows the truth.'],
 ];
 

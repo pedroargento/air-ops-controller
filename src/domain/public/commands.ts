@@ -26,7 +26,9 @@ export type PlayerCommand =
   | Readonly<{ kind: 'sendPickupPoint'; tick: number; unitId: string; point: Vec2 }>
   | Readonly<{ kind: 'answerDangerClose'; tick: number; unitId: string; approved: boolean }>
   | Readonly<{ kind: 'requestReport'; tick: number; unitId: string; report: ReportRequest }>
-  | Readonly<{ kind: 'acknowledge'; tick: number; unitId: string; casAircraftId: AircraftId | null }>;
+  | Readonly<{ kind: 'acknowledge'; tick: number; unitId: string; casAircraftId: AircraftId | null }>
+  /** Answers a medevac request: a helicopter with seats to its pickup point, or none (§8.9). */
+  | Readonly<{ kind: 'answerMedevac'; tick: number; unitId: string; helicopterId: AircraftId | null }>;
 
 type WithoutTick<T> = T extends unknown ? Omit<T, 'tick'> : never;
 

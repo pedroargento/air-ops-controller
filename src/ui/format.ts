@@ -266,14 +266,15 @@ export function triage(
 
 export type RadioLine = Readonly<{ text: string; coordinates: readonly Vec2[] }>;
 
-const CREW_CALL_TEXT: Readonly<Record<CrewCallKind, (minutes: number, bursts: number) => string>> = {
+const CREW_CALL_TEXT: Readonly<Record<CrewCallKind, (minutes: number, bursts: number, aboard: number) => string>> = {
   JOKER: (minutes) => `JOKER: about ${minutes} minutes left on station.`,
   BINGO: () => 'BINGO: fuel for the trip home only, returning to base.',
   BOMBS_EXPENDED: (_, bursts) => `Bombs expended, ${bursts} gun ${bursts === 1 ? 'burst' : 'bursts'} left.`,
   WINCHESTER: () => 'WINCHESTER: no ordnance left.',
   WHEELS_DOWN: () => 'Wheels down at the pickup point. Exposed until we lift.',
-  LIFTING_OFF: () => 'Taking fire, lifting off. Pickup not made.',
+  LIFTING_OFF: (_, __, aboard) => (aboard > 0 ? `Taking fire, lifting off with ${aboard} wounded aboard.` : 'Taking fire, lifting off. Pickup not made.'),
   SURVIVOR_ABOARD: () => 'Survivor aboard, lifting off for home.',
+  WOUNDED_ABOARD: (_, __, aboard) => `${aboard} wounded aboard, lifting off for the hospital.`,
 };
 
 /** Natural-language template for a message, plus the reported points it mentions. */
@@ -296,14 +297,22 @@ export function radioLine(message: RadioMessage, cellSize: number): RadioLine {
     case 'SITREP':
       return {
         text: message.waterMinutes === undefined
-          ? `SITREP from ${grid(message.ownPosition.center)}: ${message.personnel} effectives, ammunition ${Math.round(message.ammunitionFraction * 100)}%, ${message.status}.`
+          ? `SITREP from ${grid(message.ownPosition.center)}: ${message.personnel} effectives${message.wounded !== undefined && message.wounded > 0 ? `, ${message.wounded} wounded` : ''}, ammunition ${Math.round(message.ammunitionFraction * 100)}%, ${message.status}.`
           : `Survivor at ${grid(message.ownPosition.center)}: water for about ${Math.floor(message.waterMinutes / 60)} h ${message.waterMinutes % 60} min, ${message.battery ?? 0} radio calls left.`,
         coordinates: [message.ownPosition.center],
       };
+    case 'MEDEVAC_REQUEST':
+      // The 9-line medevac essentials: pickup site, number of patients, and enemy in the area.
+      return {
+        text: `MEDEVAC request: ${message.wounded} wounded, pickup at ${grid(message.pickup)}, ${message.hot ? 'enemy in the area, escort needed' : 'no enemy in the area'}.`,
+        coordinates: [message.pickup],
+      };
+    case 'MEDEVAC_ANSWER':
+      return { text: message.aircraftId === null ? 'No medevac available.' : `Medevac ${message.aircraftId} on its way to your pickup point.`, coordinates: [] };
     case 'CHECK_FIRE':
       return { text: `CHECK FIRE! Friendly strike on our position at ${grid(message.ownPosition.center)}.`, coordinates: [message.ownPosition.center] };
     case 'CREW_CALL':
-      return { text: CREW_CALL_TEXT[message.call](message.minutesLeft, message.gunBursts), coordinates: [] };
+      return { text: CREW_CALL_TEXT[message.call](message.minutesLeft, message.gunBursts, message.aboard ?? 0), coordinates: [] };
     case 'DANGER_CLOSE_HOLD':
       return { text: `Holding: friendlies too close to the target at ${grid(message.aim)}.`, coordinates: [message.aim] };
     case 'DRILL':

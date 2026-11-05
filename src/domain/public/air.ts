@@ -168,6 +168,9 @@ export type AircraftTelemetryEntry = Readonly<{
   passengers: number;
   /** How far the survivor running for it is, as the crew sees it, or null if nobody is coming. */
   survivorMeters: number | null;
+  /** Wounded aboard, and while landed, wounded the crew sees waiting within reach (§8.9). */
+  woundedAboard: number;
+  woundedInReach: number | null;
 }>;
 
 export type AircraftTelemetry = readonly AircraftTelemetryEntry[];

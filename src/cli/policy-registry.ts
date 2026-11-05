@@ -1,5 +1,5 @@
 import type { Vec2 } from '../domain/public/geometry';
-import { answeringDangerClose, answeringRequests, atRisk, lingeringOnGuns, illuminatingAtNight, immediateCas, noAir, reactiveCas, markingKillZones, reconInformed, rescuing, scoutingOnly, suppressingKillZones, coveringLead, sweepingRecon, type Policy } from '../policies/air-policies';
+import { answeringDangerClose, answeringMedevac, answeringRequests, atRisk, lingeringOnGuns, illuminatingAtNight, immediateCas, noAir, reactiveCas, markingKillZones, reconInformed, rescuing, scoutingOnly, suppressingKillZones, coveringLead, sweepingRecon, type Policy } from '../policies/air-policies';
 import type { Scenario } from '../scenario/load';
 
 type PolicySet = Readonly<Record<string, () => Policy>>;
@@ -17,6 +17,11 @@ function outpostPolicies(scenario: Scenario): PolicySet {
     informedLinger: () => lingeringOnGuns(reconInformed(objective, true)),
     informedCautious: () => atRisk(reconInformed(objective, true), 'cautious'),
     informedPressOn: () => atRisk(reconInformed(objective, true), 'pressOn'),
+    // Medevac (§8.9): answered at once, or held for an escort when the pickup is hot. Every bot
+    // above leaves the requests unanswered.
+    informedMedevac: () => answeringMedevac(reconInformed(objective, true), false),
+    informedMedevacEscort: () => answeringMedevac(reconInformed(objective, true), true),
+    reactiveMedevac: () => answeringMedevac(reactiveCas(), false),
   };
 }
 

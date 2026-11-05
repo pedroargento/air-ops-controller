@@ -17,6 +17,7 @@ import { emptyKnowledge } from '../domain/public/ground';
 import { receiveByPlayer, type PlayerKnowledge } from '../knowledge/player-knowledge';
 import { receiveByUnit } from '../knowledge/unit-knowledge';
 import type { Scenario } from '../scenario/load';
+import { hasGroundLos } from '../domain/public/terrain';
 import type { RadioConfig } from '../scenario/schema';
 
 export type UnitRadio = {
@@ -109,6 +110,7 @@ export function planReports(
       scenario.file.radio,
       canRequestSupport,
       tick,
+      (from, to) => hasGroundLos(scenario.terrain, from, to),
     );
     unitRadio.memory = memory;
     for (const need of needs) enqueue(unitRadio, need, tick);

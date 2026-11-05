@@ -163,6 +163,17 @@ Suppression, morale and attrition are separate tracks:
 - Formations can exchange fire for extended periods without necessarily suffering substantial casualties.
 - An air strike's morale effect is a discrete shock and isn't limited by the floor.
 
+### 4.1.1 Wounded
+
+Casualties are numbers, not individuals (DESIGN.md, philosophy 7). The same rules hold for both sides; only the enemy has no medevac to call.
+
+- **Killed and wounded:** Each casualty is wounded with chance `woundedShare` and killed otherwise. Wounded leave the fight at once, as casualties always have, but stay with their squad. They are kept as groups by the time they were hit, so each group knows how long it has waited.
+- **Dying of wounds:** A group of wounded loses men at `woundDeathPerHour`, a rate that grows with the time waited: it doubles after `woundWorsenSeconds`, triples after twice that, and so on. Wounded aboard a helicopter stop dying; the flight counts as care. Wounded whose squad has no fit men left are lost with it and count as killed.
+- **Carers:** Each wounded man ties down `carersPerWounded` of a fit man. Carers don't fire, so a squad fires with its fit men less its carers. Carrying slows a squad on the move: its speed falls by `woundedSlow` times the ratio of wounded to fit men, at most that much.
+- **Holding for the wounded:** A platoon on the move whose men free to fight (fit men less carers) fall below `woundedHoldShare` of its starting strength stops advancing and holds where it is until its wounded are out, by helicopter or by dying. A platoon holding ground already stays put. Withdrawal and its thresholds are unchanged and count only fit men, as before.
+- **Morale:** Wounded waiting longer than `woundedMoraleSeconds` are a deteriorating condition, like isolation (§4.1): they take morale below the fire floor while the platoon is under fire. They don't stop it recovering out of contact; a first version that did made every scenario unwinnable.
+- **Reports:** A SITREP gives the wounded with the unit, as well as its fit men.
+
 ### 4.2 Disengagement, recovery and return
 
 - **Disengagement:** A formation withdraws toward its configured fallback when risk, morale or casualty thresholds are exceeded. Low morale may make it abandon its objective rather than fight until destroyed.
@@ -572,6 +583,20 @@ A downed aircrew evades on the ground while air operations finds it, protects it
 - **On the ground:** A landed helicopter is `landedHitFactor` times easier to hit. Its crew lifts off under fire by its risk limit: cautious at any fire, normal when hit or under air defense fire, press on never. The controller can lift off at any time by giving it another order. Lifting off loses the boarding so far, and the survivor goes back to hiding.
 - **Outcome:** Success when the survivor is home or linked up with friends; failure when it's captured or dead; partial at the deadline with it still missing.
 - **On screen:** When a helicopter lands the game drops to normal speed, and a panel shows the boarding bar, the survivor coming, the fire taken and the escorts on station, with Lift off now one click away. At night the header offers Wait for first light, which runs the battle fast until dawn and stops for anything urgent from a unit or an aircraft, or a landing.
+
+### 8.9 Medevac
+
+A platoon with wounded asks for a helicopter, and every minute that helicopter sits on the ground saves more men and risks the aircraft. It reuses the landing and boarding of §8.8: casualties board as numbers instead of one survivor.
+
+- **The request:** A platoon linked to air operations with at least `medevacMinWounded` wounded sends a MEDEVAC request, the essentials of a 9-line medevac request: how many wounded, the pickup point, and whether the enemy is near it. It asks again every `medevacRequestCooldownSeconds` while it still has wounded, unless air operations has answered within that time, yes or no. The request is urgent.
+- **The pickup point:** The platoon chooses it from its own picture, never from the truth. It looks at points within `lzSearchMeters` of itself and picks the one that none of its known enemy contacts can see, furthest from the nearest of them, and then nearest to itself. With no enemy known, it is where the platoon is. It gives the point as it reckons its own position, error and all. The pickup is hot when the platoon is under fire or knows of an enemy within `ticRangeMeters` of the point.
+- **Sending:** Only a helicopter with seats can be sent. The request card offers "Send" per helicopter with seats, and "No air available". Sending gives the helicopter Pickup at the pickup point and tells the platoon it is coming; a no tells it too. To land somewhere else, the controller gives the helicopter Pickup there from the map, as in §8.8.
+- **Loading:** Once landed (§8.8), the helicopter takes wounded from every friendly squad within `loadReachMeters`, at `loadPerMinute`, counted per second. Fire slows it: while the helicopter or a squad loading it is under fire, loading runs at `loadUnderFireShare` of the rate. Loading takes the longest-waiting wounded first. It stops at the helicopter's seats.
+- **Lifting off:** The crew lifts off and flies home when the seats are full, or when no wounded are left within reach. Fire makes it lift off by its risk limit, as in §8.8, keeping the wounded already aboard. The controller can lift off at any time, and the panel's Lift off now keeps those aboard too. A hit damages the helicopter and sends it home with whoever is aboard (invariant 10).
+- **The enemy and the helicopter:** The enemy doesn't aim at a landed helicopter on purpose. It fires at it as at any aircraft, and a landed helicopter is already `landedHitFactor` times easier to hit.
+- **The hospital:** The airbase counts as the hospital. Wounded aboard are evacuated when the helicopter lands there, and the time from wound to hospital is recorded for each.
+- **Debrief:** For each side, killed, wounded, died of wounds, and wounded still waiting at the end; for friendly units, evacuated, still in the air on their way, and the mean time from wound to hospital.
+- **On screen:** The request is a card like a support request, with the number of wounded, the pickup point and whether it is hot. The pickup panel shows wounded aboard against seats, and the wounded still within reach as the crew sees them.
 
 ## 9. Player interface
 

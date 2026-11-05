@@ -54,6 +54,8 @@ export type UnitStatusReport = Readonly<{
   ammunitionFraction: number;
   status: ObjectiveStatus;
   receivedAt: number;
+  /** Wounded it said it has (§4.1.1). */
+  wounded?: number;
   /** A downed aircrew's last word on its water and battery (§8.8). */
   waterMinutes?: number;
   battery?: number;
@@ -93,6 +95,21 @@ export type RequestAnswer =
   | Readonly<{ kind: 'none'; answeredAt: number }>
   | Readonly<{ kind: 'cancelled'; aircraftId: string; answeredAt: number }>;
 
+/** A platoon's medevac request (§8.9), and how air operations answered it. */
+export type MedevacRequest = Readonly<{
+  unitId: string;
+  position: PositionEstimate;
+  receivedAt: number;
+  wounded: number;
+  pickup: Vec2;
+  hot: boolean;
+  answer: MedevacAnswer | null;
+}>;
+
+export type MedevacAnswer =
+  | Readonly<{ kind: 'sent'; aircraftId: string; answeredAt: number }>
+  | Readonly<{ kind: 'none'; answeredAt: number }>;
+
 export type TicFlag = Readonly<{ unitId: string; position: PositionEstimate; receivedAt: number }>;
 
 export type StrikeMark = Readonly<{
@@ -129,6 +146,7 @@ export type PlayerKnowledge = {
   friendlies: Record<string, FriendlyMarker>;
   discrepancies: Discrepancy[];
   supportRequests: Record<string, SupportRequest>;
+  medevacRequests: Record<string, MedevacRequest>;
   /** Units cleared for danger close, and until when. */
   dangerCloseClearedUntil: Record<string, number>;
   ticFlags: Record<string, TicFlag>;
@@ -159,6 +177,7 @@ export function emptyPlayerKnowledge(): PlayerKnowledge {
     friendlies: {},
     discrepancies: [],
     supportRequests: {},
+    medevacRequests: {},
     dangerCloseClearedUntil: {},
     ticFlags: {},
     unitFire: {},
@@ -338,6 +357,7 @@ export function receiveByPlayer(player: PlayerKnowledge, message: RadioMessage, 
         ammunitionFraction: message.ammunitionFraction,
         status: message.status,
         receivedAt: message.receivedAt,
+        ...(message.wounded === undefined ? {} : { wounded: message.wounded }),
         ...(message.waterMinutes === undefined ? {} : { waterMinutes: message.waterMinutes }),
         ...(message.battery === undefined ? {} : { battery: message.battery }),
       };
@@ -362,6 +382,18 @@ export function receiveByPlayer(player: PlayerKnowledge, message: RadioMessage, 
       };
       fight(message.ownPosition, message.fire);
       return;
+    case 'MEDEVAC_REQUEST':
+      friendly(message.ownPosition);
+      player.medevacRequests[message.senderId] = {
+        unitId: message.senderId,
+        position: message.ownPosition,
+        receivedAt: message.receivedAt,
+        wounded: message.wounded,
+        pickup: message.pickup,
+        hot: message.hot,
+        answer: null,
+      };
+      return;
     case 'CHECK_FIRE':
       friendly(message.ownPosition);
       return;
@@ -373,6 +405,7 @@ export function receiveByPlayer(player: PlayerKnowledge, message: RadioMessage, 
     case 'POI_REPORT':
     case 'SUPPRESSION':
     case 'PICKUP_POINT':
+    case 'MEDEVAC_ANSWER':
     case 'STRIKE_RESULT':
     case 'GROUND_FIRE':
       return;

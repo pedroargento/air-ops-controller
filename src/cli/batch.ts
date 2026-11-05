@@ -44,8 +44,20 @@ export type Summary = Readonly<{
   meanResponseMinutes: number | null;
   meanAircraftHits: number;
   runsWithHit: number;
+  /** Per run, on average: killed, wounded, died of wounds, evacuated and still waiting (§8.9). */
+  friendlyCasualties: CasualtySummary;
+  enemyCasualties: CasualtySummary;
+  meanHospitalMinutes: number | null;
+  meanHelicopterHits: number;
   tempo: TempoSummary;
 }>;
+
+export type CasualtySummary = Readonly<{ killed: number; wounded: number; diedOfWounds: number; evacuated: number; aboard: number; waiting: number }>;
+
+function casualtySummary(results: readonly BattleResult[], side: 'friendly' | 'enemy'): CasualtySummary {
+  const of = (read: (ledger: BattleResult['casualties']['friendly']) => number): number => rounded(mean(results.map((r) => read(r.casualties[side]))));
+  return { killed: of((l) => l.killed), wounded: of((l) => l.wounded), diedOfWounds: of((l) => l.diedOfWounds), evacuated: of((l) => l.evacuated), aboard: of((l) => l.aboard), waiting: of((l) => l.waiting) };
+}
 
 export type TempoSummary = Readonly<{
   fireMinuteShare: number;
@@ -115,6 +127,13 @@ function summarizeTempo(results: readonly BattleResult[]): TempoSummary {
   };
 }
 
+/** Mean time from wound to hospital over everyone evacuated in all runs. */
+function hospitalMinutes(results: readonly BattleResult[]): number | null {
+  const evacuated = results.reduce((sum, r) => sum + r.casualties.friendly.evacuated, 0);
+  if (evacuated === 0) return null;
+  return rounded(results.reduce((sum, r) => sum + r.casualties.friendly.hospitalSeconds, 0) / evacuated / 60);
+}
+
 export function summarize(policy: string, results: readonly BattleResult[]): Summary {
   const rate = (outcome: BattleResult['outcome']): number =>
     rounded(results.filter((r) => r.outcome === outcome).length / results.length);
@@ -138,6 +157,10 @@ export function summarize(policy: string, results: readonly BattleResult[]): Sum
     meanResponseMinutes: responses.length > 0 ? rounded(mean(responses)) : null,
     meanAircraftHits: rounded(mean(results.map((r) => r.aircraftHits))),
     runsWithHit: rounded(results.filter((r) => r.aircraftHits > 0).length / results.length),
+    friendlyCasualties: casualtySummary(results, 'friendly'),
+    enemyCasualties: casualtySummary(results, 'enemy'),
+    meanHospitalMinutes: hospitalMinutes(results),
+    meanHelicopterHits: rounded(mean(results.map((r) => r.helicopterHits))),
     tempo: summarizeTempo(results),
   };
 }

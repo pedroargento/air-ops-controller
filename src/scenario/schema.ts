@@ -40,6 +40,7 @@ const doctrine = z.object({
   waitForAirStrengthRatio: z.number().nonnegative().default(0.5).describe('Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself.'),
   radioSilent: z.boolean().default(false).describe('Reports only when asked, as a downed aircrew saving its battery does.'),
   reactToFire: z.boolean().default(true).describe('Under fire, aims its reaction at the shooter: returns fire at it, or toward where unseen fire comes from, and looks that way (§4.0.3).'),
+  woundedHoldShare: unit.nullable().default(null).describe('A platoon on the move with fewer men free to fight than this share of its starting strength holds where it is until its wounded are out; null never holds for them (§4.1.1).'),
   blindFireRangeMeters: z.number().positive().default(250).describe('How far off it guesses an unseen shooter is, when firing back toward where the fire comes from.'),
   airRefusedMemorySeconds: z.number().nonnegative().default(900).describe('After air operations says no air is available, it doesn\'t wait for air again for this long.'),
   nearAmbushMeters: z.number().positive().describe('Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance.'),
@@ -137,6 +138,12 @@ const combat = z.object({
   moraleRecoveryCap: unit.describe('Highest morale a platoon can recover to, before losses.'),
   postureCover: z.object({ moving: unit, firing: unit, defending: unit, prone: unit, hidden: unit }).describe('Extra protection from each posture.'),
   fireReach: z.number().positive().describe('Fire finds nobody beyond this many spreads from the aiming point.'),
+  woundedShare: unit.describe('Share of casualties who are wounded rather than killed (§4.1.1).'),
+  woundDeathPerHour: unit.describe('Chance per hour that a wounded man dies, before the wait makes it worse.'),
+  woundWorsenSeconds: z.number().positive().describe('Each time the wounded have waited this long, their death rate rises by its starting value.'),
+  carersPerWounded: z.number().nonnegative().describe('Fit men each wounded man ties down; carers don\'t fire.'),
+  woundedSlow: unit.describe('Speed a squad loses carrying as many wounded as it has fit men.'),
+  woundedMoraleSeconds: z.number().positive().nullable().describe('Wounded waiting longer than this wear down morale like isolation; null never.'),
 });
 
 const perception = z.object({
@@ -201,6 +208,9 @@ const radio = z.object({
   supportStrengthRatio: z.number().positive().describe('Asks for air against an enemy at least this many times its strength.'),
   supportCasualtyFraction: unit.describe('…or after losing this share.'),
   supportAmmunitionFraction: unit.describe('…or below this share of ammunition.'),
+  medevacMinWounded: z.number().int().positive().describe('A platoon with at least this many wounded asks for medevac (§8.9).'),
+  medevacRequestCooldownSeconds: z.number().int().positive().describe('Shortest gap between one platoon\'s medevac requests.'),
+  lzSearchMeters: z.number().positive().describe('How far from itself a platoon looks for a pickup point out of the enemy\'s sight.'),
 });
 
 const display = z.object({
@@ -304,6 +314,9 @@ const air = z.object({
   directionFindingErrorMeters: z.number().nonnegative().describe('How far off a hunter\'s fix on a survival radio is, typically.'),
   captureMeters: z.number().positive().describe('Hunters this close to a survivor take it.'),
   landedHitFactor: z.number().min(1).describe('How many times easier a helicopter on the ground is to hit than one flying.'),
+  loadPerMinute: z.number().positive().describe('Wounded loaded per minute into a landed helicopter (§8.9).'),
+  loadReachMeters: z.number().positive().describe('Squads this close to a landed helicopter load their wounded into it.'),
+  loadUnderFireShare: unit.describe('Loading rate, as a share of the full rate, while the helicopter or a squad loading it is under fire.'),
   markSeconds: z.number().positive().describe('How long a smoke mark lasts.'),
   markIntervalSeconds: z.number().positive().describe('Shortest gap between one platoon\'s marks.'),
   markErrorMeters: z.number().nonnegative().describe('How far smoke typically lands from where the platoon aimed it.'),

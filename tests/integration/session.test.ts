@@ -38,7 +38,7 @@ describe('GameSession', () => {
     const session = new GameSession(scenario, 1);
     session.advance();
     const view = JSON.stringify(session.view());
-    expect(session.view().aircraft).toHaveLength(4);
+    expect(session.view().aircraft).toHaveLength(5);
     expect(view).not.toContain('E-N1');
   });
 });

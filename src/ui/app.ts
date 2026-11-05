@@ -40,7 +40,7 @@ import { isMoonUp, lightState, nextFirstLight } from '../domain/public/light';
 import { sortedTracks, type TrackSort } from './track-list';
 import { contactFireLines, friendlyFireLines, friendsFiredOn } from './fire-text';
 import { neighbourEvent, Snapshots, SNAPSHOT_SECONDS, timelineEvents } from './timeline';
-import { etaTo, requestStatus, showRequest, supportOptions } from './requests';
+import { etaTo, medevacOptions, medevacStatus, requestStatus, showMedevac, showRequest, supportOptions } from './requests';
 import { legendHtml, paintLegend } from './legend';
 import { POI_KINDS, type PoiKind } from '../domain/public/poi';
 import { morphHtml } from './morph';
@@ -223,6 +223,15 @@ function findContact(view: PlayerView, key: string): ContactMarker | undefined {
   return view.contacts.flatMap((marker) => [marker, ...marker.members]).find((marker) => marker.key === key);
 }
 
+/** Killed, wounded and what became of the wounded (§8.9). */
+function casualtyLine(label: string, outcome: Debrief['casualties']['friendly'], evacuation: boolean): string {
+  if (outcome.killed + outcome.wounded === 0) return '';
+  const evacuated = evacuation
+    ? ` ${outcome.evacuated} evacuated${outcome.hospitalMinutes === null ? '' : `, ${outcome.hospitalMinutes} min from wound to hospital on average`}${outcome.aboard > 0 ? `, and ${outcome.aboard} on their way there` : ''}.`
+    : '';
+  return `<p>${label}: ${outcome.killed} killed and ${outcome.wounded} wounded. ${outcome.diedOfWounds} died of wounds, ${outcome.waiting} still waiting at the end.${evacuated}</p>`;
+}
+
 /** Each source's real record, so the player learns whose reports to trust next time. */
 function sourcesTable(debrief: Debrief): string {
   if (debrief.sources.length === 0) return '';
@@ -251,6 +260,8 @@ function debriefHtml(debrief: Debrief, summary: BattleSummary): string {
     (debrief.locatedShare === null ? '' : `<p>Your picture had ${Math.round(debrief.locatedShare * 100)}% of the enemy's squads about right.</p>`) +
     (debrief.friendlyFireCasualties === 0 ? '' : `<p>${debrief.friendlyFireCasualties} of your men were hit by your own strikes.</p>`) +
     `<p>Friendly: ${debrief.friendlyStart} at start, ${debrief.friendlyLeft} left, ${debrief.friendlyDestroyed} formations lost.</p>` +
+    casualtyLine('Your casualties', debrief.casualties.friendly, true) +
+    casualtyLine('Enemy casualties', debrief.casualties.enemy, false) +
     `<p>Enemy casualties claimed: ${debrief.airClaims} by aircrews, ${debrief.groundClaims} by ground units. Really lost: ${enemyLost}. Claims from different sources can count the same men.</p>` +
     sourcesTable(debrief)
   );
@@ -395,7 +406,10 @@ export class App {
     if (down.length === 0) return;
     const rows = down.map((aircraft) => {
       const share = Math.min(1, aircraft.boardingSeconds / aircraft.boardNeedSeconds);
+      // Wounded load as numbers; a survivor boards over a fixed time (§8.8, §8.9).
+      const medevac = aircraft.woundedAboard > 0 || (aircraft.woundedInReach ?? 0) > 0;
       const coming = aircraft.survivorMeters === null ? 'No survivor coming yet.' : aircraft.survivorMeters <= 25 ? 'Survivor at the door, boarding.' : `Survivor ${Math.round(aircraft.survivorMeters)} m away, running for it.`;
+      const loading = `Wounded aboard ${aircraft.woundedAboard} of ${aircraft.seats} seats. ${aircraft.woundedInReach ?? 0} more waiting within reach.`;
       const fire = view.log.filter((message) => message.kind === 'GROUND_FIRE' && message.senderId === aircraft.aircraftId && view.tick - message.receivedAt <= 15).length;
       const escorts = view.aircraft
         .filter((other) => other.aircraftType === 'cas' && (other.order?.kind === 'Cover' || other.order?.kind === 'Suppress') && other.status === 'onStation')
@@ -403,8 +417,8 @@ export class App {
       const center = aircraft.order === null || aircraft.order.kind === 'ReturnToBase' ? aircraft.position : aircraft.order.center;
       return (
         `<div class="pickup-row"><b>${escapeHtml(aircraft.aircraftId)} on the ground</b>` +
-        `<div class="pickup-bar"><span style="width:${(share * 100).toFixed(0)}%"></span></div>` +
-        `<span>Boarding ${Math.round(aircraft.boardingSeconds)} of ${aircraft.boardNeedSeconds} s. ${escapeHtml(coming)}</span>` +
+        `<div class="pickup-bar"><span style="width:${((medevac ? aircraft.woundedAboard / Math.max(1, aircraft.seats) : share) * 100).toFixed(0)}%"></span></div>` +
+        `<span>${medevac ? escapeHtml(loading) : `Boarding ${Math.round(aircraft.boardingSeconds)} of ${aircraft.boardNeedSeconds} s. ${escapeHtml(coming)}`}</span>` +
         `<span class="${fire > 0 ? 'danger' : 'hint-quiet'}">${fire > 0 ? `Taking fire: ${fire} burst${fire === 1 ? '' : 's'} in the last 15 s.` : 'No fire taken.'}</span>` +
         `<span class="hint-quiet">Escorts: ${escorts.length === 0 ? 'none on station' : escapeHtml(escorts.join(', '))}.</span>` +
         `<div class="buttons"><button class="lift" data-action="lift-off" data-id="${escapeHtml(aircraft.aircraftId)}">Lift off now</button>` +
@@ -959,6 +973,16 @@ export class App {
       case 'send-support':
         if (id !== undefined && kind !== undefined) this.sendSupport(id, kind);
         return;
+      case 'send-medevac':
+        if (id !== undefined && kind !== undefined) {
+          this.issue({ kind: 'answerMedevac', unitId: id, helicopterId: kind as AircraftId }, `To ${displayName(id, this.config.names)}: medevac ${kind} on its way to your pickup point.`, true);
+        }
+        return;
+      case 'no-medevac':
+        if (id !== undefined) {
+          this.issue({ kind: 'answerMedevac', unitId: id, helicopterId: null }, `To ${displayName(id, this.config.names)}: no medevac available.`, true);
+        }
+        return;
       case 'no-air':
         if (id !== undefined) {
           this.issue({ kind: 'acknowledge', unitId: id, casAircraftId: null }, `To ${displayName(id, this.config.names)}: no air available.`, true);
@@ -1190,7 +1214,38 @@ export class App {
           `<div class="request-status">${escapeHtml(requestStatus(request, view.aircraft, clock, view.tick))}</div></div>`
         );
       });
-    morphHtml(element('requests'), `<h2>Support requests</h2>${cards.join('') || '<p>None pending</p>'}`);
+    const medevac = view.medevacRequests
+      .filter((request) => showMedevac(request, view.tick))
+      .map((request) => {
+        const unit = escapeHtml(request.unitId);
+        const name = escapeHtml(displayName(request.unitId, names));
+        const answering = request.answer === null;
+        const options = answering ? medevacOptions(request, view.aircraft, clock, view.tick) : [];
+        const sends = options
+          .filter((option) => option.available)
+          .map(
+            (option) =>
+              `<button class="primary" data-action="send-medevac" data-id="${unit}" data-kind="${escapeHtml(option.aircraftId)}">` +
+              `Send ${escapeHtml(option.aircraftId)} · ETA ${clock(view.tick + Math.ceil(option.etaSeconds ?? 0))}</button>`,
+          )
+          .join('');
+        const cannot = options
+          .filter((option) => !option.available)
+          .map((option) => `<div class="hint-quiet">${escapeHtml(option.aircraftId)}: ${escapeHtml(option.reason ?? '')}</div>`)
+          .join('');
+        const none = answering ? `<button data-action="no-medevac" data-id="${unit}">No air available</button>` : '';
+        const pickup = request.pickup;
+        return (
+          `<div class="request-card medevac${answering ? ' open' : ''}">` +
+          `<div><b>MEDEVAC</b> <button data-action="select-friendly" data-id="${unit}">${name}</button> <span class="hint-quiet">${Math.floor(request.ageSeconds / 60)} min ago</span></div>` +
+          `<div>${request.wounded} wounded. Pickup at <button data-action="center" data-x="${pickup.x}" data-y="${pickup.y}">${gridRef(pickup, terrain.cellSize)}</button>.</div>` +
+          `<div class="${request.hot ? 'fire-line' : 'hint-quiet'}">${request.hot ? 'Enemy in the area: the pickup is hot.' : 'No enemy reported near the pickup.'}</div>` +
+          (sends === '' && none === '' ? '' : `<div class="buttons">${sends}${none}</div>`) +
+          cannot +
+          `<div class="request-status">${escapeHtml(medevacStatus(request, view.aircraft, clock))}</div></div>`
+        );
+      });
+    morphHtml(element('requests'), `<h2>Support requests</h2>${[...medevac, ...cards].join('') || '<p>None pending</p>'}`);
   }
 
   /**

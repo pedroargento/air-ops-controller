@@ -47,6 +47,7 @@ function setup() {
     secondsLeft: 3600,
     canCallAir: false,
     platoonPersonnel: squad.personnel,
+    wounded: 0, platoonWounded: 0, platoonFree: 24, platoonInitialPersonnel: 24, woundedWaitSeconds: null,
     ownPosition: { center: { x: 512, y: 488 }, sigmaMeters: 40, headingRad: null, speedMps: null, observedAt: 0 },
     personnel: squad.personnel,
     initialPersonnel: squad.initialPersonnel,

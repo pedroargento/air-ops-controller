@@ -82,7 +82,7 @@ async function main(): Promise<void> {
     console.log('Load the scenario');
     await page.goto(`http://localhost:${PORT}/?seed=1&speed=40`);
     await page.waitForSelector('#clock');
-    check((await page.locator('.aircraft-row').count()) === 4, 'four aircraft are listed');
+    check((await page.locator('.aircraft-row').count()) === 5, 'five aircraft are listed, the Dustoff among them');
     await page.waitForSelector('.log-row.command_update');
     check(true, 'CECON message is in the log');
     await shot(page, '1-start');
@@ -171,9 +171,9 @@ async function main(): Promise<void> {
     check(kinds.includes('forwardContact'), 'the forward command reached the simulation');
 
     console.log('Answer a support request');
-    await page.waitForSelector('#requests button', { timeout: 120000 });
+    await page.waitForSelector('#requests .request-card:not(.medevac) button', { timeout: 120000 });
     await setPaused(page, true);
-    await page.locator('#requests button').first().click();
+    await page.locator('#requests .request-card:not(.medevac) button').first().click();
     await page.waitForSelector('[data-action="request"][data-kind="sitrep"]');
     await page.locator('[data-action="request"][data-kind="sitrep"]').click();
     const status = await page.locator('#selection .request-status').innerText();

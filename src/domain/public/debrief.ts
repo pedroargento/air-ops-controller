@@ -9,6 +9,8 @@ export type Debrief = Readonly<{
   friendlyLeft: number;
   friendlyDestroyed: number;
   friendlyFireCasualties: number;
+  /** What became of each side's casualties (§4.1.1, §8.9). */
+  casualties: Readonly<Record<'friendly' | 'enemy', CasualtyOutcome>>;
   /** Share of the enemy your picture had about right, on a search mission. */
   locatedShare: number | null;
   /** Enemy casualties claimed by crews' strike assessments and by ground units, against the truth. */
@@ -16,6 +18,19 @@ export type Debrief = Readonly<{
   groundClaims: number;
   /** How good each source's reports really were. */
   sources: readonly SourceScore[];
+}>;
+
+export type CasualtyOutcome = Readonly<{
+  killed: number;
+  wounded: number;
+  diedOfWounds: number;
+  evacuated: number;
+  /** Wounded in a helicopter on its way to hospital when the run ended. */
+  aboard: number;
+  /** Wounded still with their units when the run ended. */
+  waiting: number;
+  /** Mean minutes from wound to hospital for those evacuated, or null if nobody was. */
+  hospitalMinutes: number | null;
 }>;
 
 /** Where every squad really was at one moment: kept by the session, shown only after the run. */

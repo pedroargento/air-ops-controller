@@ -32,6 +32,8 @@ export type RadioMessage =
         personnel: number;
         ammunitionFraction: number;
         status: ObjectiveStatus;
+        /** Wounded with the unit, apart from its fit men (§4.1.1). */
+        wounded?: number;
         /** A downed aircrew's water left and radio calls left (§8.8). */
         waterMinutes?: number;
         battery?: number;
@@ -50,9 +52,19 @@ export type RadioMessage =
         marked: boolean;
         fire?: FireStatus;
       }>)
+  | (MessageMeta &
+      Readonly<{
+        kind: 'MEDEVAC_REQUEST';
+        ownPosition: PositionEstimate;
+        /** The 9-line medevac essentials: how many, where to land, and whether the enemy is near (§8.9). */
+        wounded: number;
+        pickup: Vec2;
+        hot: boolean;
+      }>)
+  | (MessageMeta & Readonly<{ kind: 'MEDEVAC_ANSWER'; aircraftId: string | null }>)
   | (MessageMeta & Readonly<{ kind: 'CHECK_FIRE'; ownPosition: PositionEstimate }>)
   | (MessageMeta & Readonly<{ kind: 'DANGER_CLOSE_HOLD'; aim: Vec2 }>)
-  | (MessageMeta & Readonly<{ kind: 'CREW_CALL'; call: CrewCallKind; minutesLeft: number; gunBursts: number }>)
+  | (MessageMeta & Readonly<{ kind: 'CREW_CALL'; call: CrewCallKind; minutesLeft: number; gunBursts: number; aboard?: number }>)
   | (MessageMeta & Readonly<{ kind: 'DRILL'; ownPosition: PositionEstimate; drill: DrillKind }>)
   | (MessageMeta & Readonly<{ kind: 'COMMAND_UPDATE'; text: string }>)
   | (MessageMeta &
@@ -77,7 +89,7 @@ export type RadioMessage =
  * A crew's fuel and ordnance calls, in brevity words: JOKER means fuel to stay only a little
  * longer, BINGO fuel for the trip home only, WINCHESTER nothing left to fire.
  */
-export type CrewCallKind = 'JOKER' | 'BINGO' | 'BOMBS_EXPENDED' | 'WINCHESTER' | 'WHEELS_DOWN' | 'LIFTING_OFF' | 'SURVIVOR_ABOARD';
+export type CrewCallKind = 'JOKER' | 'BINGO' | 'BOMBS_EXPENDED' | 'WINCHESTER' | 'WHEELS_DOWN' | 'LIFTING_OFF' | 'SURVIVOR_ABOARD' | 'WOUNDED_ABOARD';
 
 /** A suppression mission as air operations announces it on the net: where, and when. */
 export type Suppression = Readonly<{
@@ -97,7 +109,7 @@ export type ExpectedSupport = Readonly<{
   lapsesAt: number;
 }>;
 
-export type ReportKind = 'TIC' | 'CONTACT_REPORT' | 'POSITION_REPORT' | 'SITREP' | 'SUPPORT_REQUEST' | 'DRILL' | 'CHECK_FIRE';
+export type ReportKind = 'TIC' | 'CONTACT_REPORT' | 'POSITION_REPORT' | 'SITREP' | 'SUPPORT_REQUEST' | 'MEDEVAC_REQUEST' | 'DRILL' | 'CHECK_FIRE';
 
 // `captured` holds the observation as first noticed (§6.2), so a report still goes out
 // if the contact ages out of memory while the report waits in the queue.
@@ -111,6 +123,8 @@ export type ReportNeed = Readonly<{
   target?: Vec2;
   targetStrength?: StrengthEstimate;
   marked?: boolean;
+  pickup?: Vec2;
+  hot?: boolean;
 }>;
 
 export type RadioTaskPhase = 'queued' | 'preparing' | 'transmitting' | 'interrupted';
@@ -131,6 +145,7 @@ export type RadioMemory = Readonly<{
   lastTicAt: number | null;
   lastSupportRequestAt: number | null;
   lastDangerCloseAt: number | null;
+  lastMedevacAt: number | null;
   lastSitrepPersonnel: number;
   lastSitrepAt: number | null;
   reportedContacts: Readonly<Record<string, number>>;
@@ -146,6 +161,7 @@ export function reportLevel(message: RadioMessage): ReportLevel {
   switch (message.kind) {
     case 'TIC':
     case 'SUPPORT_REQUEST':
+    case 'MEDEVAC_REQUEST':
     case 'GROUND_FIRE':
     case 'CHECK_FIRE':
     case 'DANGER_CLOSE_HOLD':
@@ -163,6 +179,7 @@ export function reportLevel(message: RadioMessage): ReportLevel {
     case 'POI_REPORT':
     case 'SUPPRESSION':
     case 'PICKUP_POINT':
+    case 'MEDEVAC_ANSWER':
       return 'routine';
   }
 }

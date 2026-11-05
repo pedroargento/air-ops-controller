@@ -69,7 +69,7 @@ describe('reporting a point of interest', () => {
     const column = valley.doctrines['column'];
     if (column === undefined) throw new Error('No column doctrine');
     const self = {
-      id: 'P', side: 'friendly', position: { x: 0, y: 0 }, slot: { x: 0, y: 0 }, platoonPersonnel: 24, squads: 2, drill: null, role: null,
+      id: 'P', side: 'friendly', position: { x: 0, y: 0 }, slot: { x: 0, y: 0 }, platoonPersonnel: 24, wounded: 0, platoonWounded: 0, platoonFree: 24, platoonInitialPersonnel: 24, woundedWaitSeconds: null, squads: 2, drill: null, role: null,
       viaDone: false, ambushSprung: false, handled: [], routeAhead: [100, 200, 300, 400, 500, 600, 700].map((x) => ({ x, y: 0 })), secondsLeft: 7200, canCallAir: false,
       ownPosition: { center: { x: 0, y: 0 }, sigmaMeters: 40, headingRad: null, speedMps: null, observedAt: 0 }, personnel: 24, initialPersonnel: 24,
       ammunition: 1000, initialAmmunition: 1000, equipment: [], supportWeapons: 1, airWeapons: [], morale: 0.8, suppression: 0, underFire: false,
@@ -77,7 +77,7 @@ describe('reporting a point of interest', () => {
       objective: { kind: 'MoveTo', area: { center: { x: 3000, y: 0 }, radius: 100 } }, fallback: { center: { x: -500, y: 0 }, radius: 100 }, doctrine: column,
     } as unknown as UnitSelf;
     const map = { routeMeters: distance, sees: () => false, cover: () => 0 };
-    const knowledge = { contacts: {}, reports: {}, pois: { 'P-1': poi }, suppressions: {}, expectedSupport: null, supportRefusedAt: null, hostileAircraftSeenAt: null, noticedAircraft: null, fire: emptyFire() };
+    const knowledge = { contacts: {}, reports: {}, pois: { 'P-1': poi }, suppressions: {}, expectedSupport: null, supportRefusedAt: null, medevacAnsweredAt: null, hostileAircraftSeenAt: null, noticedAircraft: null, fire: emptyFire() };
     expect(decidePlatoon(self, knowledge, 100, map).drill?.target).toEqual(poi.center);
     expect(decidePlatoon(self, { ...knowledge, pois: {} }, 100, map).drill).toBeNull();
   });
@@ -86,7 +86,7 @@ describe('reporting a point of interest', () => {
     const column = valley.doctrines['column'];
     if (column === undefined) throw new Error('No column doctrine');
     const self = {
-      id: 'P', side: 'friendly', position: { x: 0, y: 0 }, slot: { x: 0, y: 0 }, platoonPersonnel: 24, squads: 2, drill: null, role: null,
+      id: 'P', side: 'friendly', position: { x: 0, y: 0 }, slot: { x: 0, y: 0 }, platoonPersonnel: 24, wounded: 0, platoonWounded: 0, platoonFree: 24, platoonInitialPersonnel: 24, woundedWaitSeconds: null, squads: 2, drill: null, role: null,
       viaDone: false, ambushSprung: false, handled: [], routeAhead: [100, 200, 300, 400, 500, 600, 700].map((x) => ({ x, y: 0 })), secondsLeft: 7200, canCallAir: false,
       ownPosition: { center: { x: 0, y: 0 }, sigmaMeters: 40, headingRad: null, speedMps: null, observedAt: 0 }, personnel: 24, initialPersonnel: 24,
       ammunition: 1000, initialAmmunition: 1000, equipment: [], supportWeapons: 1, airWeapons: [], morale: 0.8, suppression: 0, underFire: false,
@@ -95,7 +95,7 @@ describe('reporting a point of interest', () => {
     } as unknown as UnitSelf;
     const map = { routeMeters: distance, sees: () => false, cover: () => 0 };
     const suppression = { aircraftId: 'CAS-1', center: { x: 520, y: 30 }, radius: 150, fromTick: 50, untilTick: 900 };
-    const knowledge = { contacts: {}, reports: {}, pois: { 'P-1': poi }, suppressions: { 'CAS-1': suppression }, expectedSupport: null, supportRefusedAt: null, hostileAircraftSeenAt: null, noticedAircraft: null, fire: emptyFire() };
+    const knowledge = { contacts: {}, reports: {}, pois: { 'P-1': poi }, suppressions: { 'CAS-1': suppression }, expectedSupport: null, supportRefusedAt: null, medevacAnsweredAt: null, hostileAircraftSeenAt: null, noticedAircraft: null, fire: emptyFire() };
     expect(decidePlatoon(self, knowledge, 100, map).drill?.kind).toBe('pushThrough');
     // Before it starts, after it ends, or somewhere else, the platoon answers the position as usual.
     expect(decidePlatoon(self, knowledge, 40, map).drill?.kind).not.toBe('pushThrough');

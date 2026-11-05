@@ -1,6 +1,7 @@
 import type { DrillKind } from '../domain/public/ground';
 import { totalAmmunition } from '../domain/public/equipment';
-import type { Outcome, WorldTruth } from '../domain/truth/world';
+import type { CasualtyLedger, Outcome, WorldTruth } from '../domain/truth/world';
+import { woundedCount } from '../sim/wounded';
 import { project } from '../knowledge/player-view';
 import type { Policy } from '../policies/air-policies';
 import type { Scenario } from '../scenario/load';
@@ -34,10 +35,21 @@ export type BattleResult = Readonly<{
   groundFireReports: number;
   drills: readonly DrillKind[];
   tempo: Tempo;
+  /** What really happened to each side's men (§4.1.1), with wounded still waiting at the end. */
+  casualties: Readonly<Record<'friendly' | 'enemy', CasualtyLedger & Readonly<{ waiting: number; aboard: number }>>>;
+  /** Hits that sent a helicopter with seats home (§8.9). */
+  helicopterHits: number;
 }>;
 
 function personnel(truth: WorldTruth, side: 'friendly' | 'enemy'): number {
   return truth.units.filter((u) => u.side === side).reduce((sum, u) => sum + u.personnel, 0);
+}
+
+function ledger(truth: WorldTruth, side: 'friendly' | 'enemy'): CasualtyLedger & Readonly<{ waiting: number; aboard: number }> {
+  const waiting = truth.units.filter((u) => u.side === side).reduce((sum, u) => sum + woundedCount(u.wounded), 0);
+  // Helicopters only ever carry friendly wounded.
+  const aboard = side === 'friendly' ? truth.aircraft.reduce((sum, a) => sum + woundedCount(a.casualtiesAboard), 0) : 0;
+  return { ...truth.casualties[side], waiting, aboard };
 }
 
 export function runBattle(
@@ -99,5 +111,7 @@ export function runBattle(
     groundFireReports: fired.length,
     drills: state.player.log.flatMap((m) => (m.kind === 'DRILL' ? [m.drill] : [])),
     tempo: tempo.finish(state),
+    casualties: { friendly: ledger(truth, 'friendly'), enemy: ledger(truth, 'enemy') },
+    helicopterHits: fired.filter((m) => m.damaged && truth.aircraft.some((a) => a.id === m.senderId && air.models[a.model]?.seats !== undefined && (air.models[a.model]?.seats ?? 0) > 0)).length,
   };
 }

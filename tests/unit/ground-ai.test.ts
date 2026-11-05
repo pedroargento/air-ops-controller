@@ -66,6 +66,7 @@ const doctrine: Doctrine = {
   radioSilent: false,
   reactToFire: true,
   blindFireRangeMeters: 250,
+  woundedHoldShare: null,
   airRefusedMemorySeconds: 900,
   objectiveMarginMeters: 60,
   attackRadiusMeters: 100,
@@ -108,6 +109,7 @@ const self = (overrides: Partial<UnitSelf> = {}): UnitSelf => ({
   objective: { kind: 'MoveTo', area: { center: { x: 1000, y: 0 }, radius: 40 } },
   fallback: { center: { x: -500, y: 0 }, radius: 100 },
   doctrine,
+  wounded: 0, platoonWounded: 0, platoonFree: 24, platoonInitialPersonnel: 24, woundedWaitSeconds: null,
   ...overrides,
   platoonPersonnel: overrides.personnel ?? 40,
 });
@@ -517,5 +519,21 @@ describe('react to contact (§4.0.3)', () => {
   it('applies to both sides alike', () => {
     const knowledge = firedOn(nothing, { contact: null, bearingRad: 1 });
     expect(decide(self({ side: 'friendly', underFire: true }), knowledge)).toEqual(decide(self({ side: 'enemy', underFire: true }), knowledge));
+  });
+});
+
+describe('holding for the wounded (§4.1.1)', () => {
+  const carrying = (objective: UnitSelf['objective'], free: number): UnitSelf =>
+    self({ objective, platoonWounded: 6, platoonFree: free, platoonInitialPersonnel: 40, doctrine: { ...doctrine, woundedHoldShare: 0.5 } });
+  const move = { kind: 'MoveTo', area: { center: { x: 1000, y: 0 }, radius: 40 } } as const;
+
+  it('stops a platoon on the move with too few men free to fight', () => {
+    expect(decideGround(carrying(move, 15), emptyKnowledge(), 0, rates, flatMap).intent).toEqual({ kind: 'hold', posture: 'defending' });
+  });
+
+  it('lets it go on with enough men free, or with no hold share in its doctrine', () => {
+    expect(decideGround(carrying(move, 25), emptyKnowledge(), 0, rates, flatMap).intent.kind).toBe('move');
+    const unlimited = { ...carrying(move, 15), doctrine: { ...doctrine, woundedHoldShare: null } };
+    expect(decideGround(unlimited, emptyKnowledge(), 0, rates, flatMap).intent.kind).toBe('move');
   });
 });

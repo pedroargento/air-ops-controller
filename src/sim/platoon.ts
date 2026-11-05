@@ -130,6 +130,7 @@ export function createSquads(file: PlatoonFile, scenario: Scenario): readonly Gr
       lastHitAtTick: null,
       shotBy: {},
       lastLossAtTick: null,
+      wounded: [],
     };
   });
 }
@@ -203,6 +204,7 @@ export function platoonSelf(
     position,
     slot: { x: 0, y: 0 },
     platoonPersonnel: personnel,
+    wounded: leadSelf.platoonWounded,
     squads: squads.length,
     ownPosition: {
       ...leadSelf.ownPosition,

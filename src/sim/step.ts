@@ -19,12 +19,13 @@ import { reviewContacts } from '../knowledge/player-knowledge';
 import { correlateReports } from '../knowledge/tracks';
 import { placeMarks } from './marks';
 import { dropFlares, fireIllumination, pruneFlares } from './flares';
-import { onSurvivorTransmission, resolvePickups, updateRescue } from './rescue';
+import { deliverWounded, onSurvivorTransmission, resolvePickups, updateRescue } from './rescue';
 import { updatePerception } from '../perception/observe';
 import { updateFireKnowledge } from '../perception/fire';
 import { nextGaussian, type RngState } from '../rng/streams';
 import type { Scenario } from '../scenario/load';
-import type { PerceptionConfig } from '../scenario/schema';
+import type { CombatConfig, PerceptionConfig } from '../scenario/schema';
+import { fightingMen, longestWait, updateWounds, woundedCount, woundedSpeedFactor } from './wounded';
 import { advanceAircraft, crewCalls, updateCrews, resolveCas, sensorCoverage, updateAircraftNotice, updateAircraftPerception } from './air';
 import { resolveGroundFire } from './ground-fire';
 import { issueForecast } from './weather';
@@ -49,6 +50,8 @@ function selfView(unit: GroundUnit, platoon: Platoon, personnel: number, scenari
     position: unit.position,
     slot: unit.slot,
     platoonPersonnel: personnel,
+    wounded: woundedCount(unit.wounded),
+    ...platoonWounds(platoon, file.combat, tick),
     ownPosition: {
       center: { x: unit.position.x + unit.navOffset.x, y: unit.position.y + unit.navOffset.y },
       sigmaMeters: config.navSigmaMeters,
@@ -84,6 +87,18 @@ function selfView(unit: GroundUnit, platoon: Platoon, personnel: number, scenari
     objective: platoon.objective,
     fallback: platoon.fallback,
     doctrine: unit.doctrine,
+  };
+}
+
+/** The platoon's wounded as it knows them: its own men, so no estimate is needed (§4.1.1). */
+function platoonWounds(platoon: Platoon, config: CombatConfig, tick: number): Pick<UnitSelf, 'platoonWounded' | 'platoonFree' | 'platoonInitialPersonnel' | 'woundedWaitSeconds'> {
+  const squads = livingSquads(platoon);
+  const groups = squads.flatMap((squad) => squad.wounded);
+  return {
+    platoonWounded: woundedCount(groups),
+    platoonFree: squads.reduce((sum, squad) => sum + fightingMen(squad, config), 0),
+    platoonInitialPersonnel: platoon.initialPersonnel,
+    woundedWaitSeconds: longestWait(groups, tick),
   };
 }
 
@@ -291,7 +306,7 @@ function destinationOf(unit: GroundUnit): Vec2 | null {
   }
 }
 
-function moveUnit(unit: GroundUnit, terrain: TerrainGrid): void {
+function moveUnit(unit: GroundUnit, terrain: TerrainGrid, config: CombatConfig): void {
   const destination = destinationOf(unit);
   if (destination === null || unit.personnel <= 0) return;
 
@@ -307,7 +322,7 @@ function moveUnit(unit: GroundUnit, terrain: TerrainGrid): void {
   }
 
   const speed =
-    (unit.doctrine.speedMps * (1 - unit.suppression)) / cellAt(terrain, unit.position).moveCost;
+    (unit.doctrine.speedMps * (1 - unit.suppression) * woundedSpeedFactor(unit, config)) / cellAt(terrain, unit.position).moveCost;
   const start = unit.position;
   let remaining = speed;
   while (remaining > 0 && unit.route.length > 0) {
@@ -377,7 +392,7 @@ export function step(state: SimState, commands: readonly PlayerCommand[], scenar
 
   if (tactical) updateCrews(truth, state.player, file.air, file.combat, state.tick);
   for (const unit of truth.units) {
-    moveUnit(unit, terrain);
+    moveUnit(unit, terrain, file.combat);
     if (tactical) driftNavigation(unit, file.perception, rng);
   }
   for (const aircraft of truth.aircraft) advanceAircraft(aircraft, file.air, terrain);
@@ -388,11 +403,13 @@ export function step(state: SimState, commands: readonly PlayerCommand[], scenar
   pruneFlares(truth, state.player, state.tick);
   resolvePickups(truth, state.player, state.radio, scenario, state.tick);
   updateRescue(truth, state.unitKnowledge, scenario, state.tick);
+  deliverWounded(truth, state.tick);
 
   resolveCas(truth, state.player, state.radio, terrain, file.air, file.combat, file.display, file.perception.engageMemorySeconds, rng, state.tick);
 
   if (tactical) {
     resolveCombat(truth, terrain, file.combat, rng, state.tick);
+    updateWounds(truth, file.combat, rng, state.tick);
     resolveGroundFire(truth, state.player, state.radio, file.combat, file.air, terrain, rng, state.tick);
     reviewContacts(state.player, sensorCoverage(truth, file.air), file.display, TACTICAL_INTERVAL_TICKS, state.tick);
   }

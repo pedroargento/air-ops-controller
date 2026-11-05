@@ -33,7 +33,7 @@ const self = (overrides: Partial<UnitSelf> = {}): UnitSelf => ({
   side: 'friendly',
   position: { x: 0, y: 0 },
   slot: { x: 0, y: 0 },
-  platoonPersonnel: 24,
+  platoonPersonnel: 24, wounded: 0, platoonWounded: 0, platoonFree: 24, platoonInitialPersonnel: 24, woundedWaitSeconds: null,
   squads: 2,
   drill: null,
   role: null,

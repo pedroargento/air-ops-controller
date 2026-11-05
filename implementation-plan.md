@@ -16,30 +16,33 @@ Version 0.2.0, released 2026-11-03. Six scenarios are playable from a menu, with
 | S0, S1, S4 | Met. S1's no air is 4.4% against S0's 0.3%. |
 | S2 | Met apart from the per-drill benefit. Followed by React to contact (§4.0.3), done on 2026-11-05. |
 | S3 | Left open on purpose: guns don't change outcomes. |
-| S5, S6 | Not started. |
-| **S7** | **Next.** See its section for what already exists. |
+| **S5**, S6 | **S5 next**, with medevac in it. S6 not started. |
+| S7 | Met on 2026-11-05: medevac cuts deaths from wounds by 0.29 a run and the helicopter is hit 0.34 times a run (outpost, 300 paired seeds). See its section. |
 | S8 | First version delivered as Downed Pilot (introduction). The harder rescue is still to do. |
 | M21 | Mostly delivered early as §8.7 (night, light and flares). What remains is in its section. |
 | M10–M20 | Not started. M12 is the go/no-go gate for everything after it. |
 
-**Order from here:** S7, then S5 with medevac in it, then S6 and the harder S8 rescue, then the outpost playtest that closes M9, then Phase 1 (M10–M12).
+**Order from here:** S5 with medevac in it, then S6 and the harder S8 rescue, then the outpost playtest that closes M9, then Phase 1 (M10–M12).
 
 ### Current balance
 
-Measured on 2026-11-05 over 300 seeds per bot, after units began reacting to fire, with the bots denying danger close (the `…Approve` variants clear it every time and do worse almost everywhere). Wins are percent; the 95% interval at 300 seeds is about ±5 points near 50%. Every bot is listed in `src/cli/policy-registry.ts`.
+Measured on 2026-11-05 over 300 seeds per bot, after wounded and medevac (S7), with the bots denying danger close (the `…Approve` variants clear it every time and do worse almost everywhere). Wins are percent; the 95% interval at 300 seeds is about ±5 points near 50%. Every bot is listed in `src/cli/policy-registry.ts`.
 
 | Scenario | No air | Lazy air | Good air | Other bots |
 |---|---|---|---|---|
-| Outpost Under Pressure | 5.7 | reactive 22.3 | informed 73.7 | fire first 69.7, without forwarding 49.3, immediate 32.7, lingering on guns 71.3, cautious 59.3, press on 79.7 |
-| Outpost at Night | 0.7 | reactive 4.7 | informed 27.3 | **fire first 43.3**, with flares 32.0, without forwarding 20.7, press on 37.7 |
-| Valley Road | 25.3 | reactive 22.7 | recon and CAS 83.0 | with marks 82.7, without forwarding 50.3, scouting only 69.0 (24.0 unforwarded), cover 81.7, suppress 73.0, fire first 81.0 |
-| Overwatch | 16.3 | reactive 14.7 | recon and CAS 26.0 | **cover 46.3**, marks 25.7, suppress 27.0, without forwarding 22.0, scouting only 16.3, fire first 23.7 |
+| Outpost Under Pressure | 4.3 | reactive 32.0 | informed 78.3 | **with medevac 82.3**, medevac with escort 81.3, reactive with medevac 33.0, without forwarding 63.7 |
+| Outpost at Night | 1.0 | reactive 5.7 | informed 29.3 | **fire first 44.7**, without forwarding 21.0 |
+| Valley Road | 24.7 | reactive 21.7 | recon and CAS 78.3 | without forwarding 49.3 |
+| Overwatch | 15.0 | reactive 14.7 | recon and CAS 17.7 | **cover 40.0**, without forwarding 22.3 |
 | Find Them | 0.0 | one orbit 0.0 | sweep 79.7 | |
-| Downed Pilot | 0.0 | unescorted 81.0 | escorted 98.0 | waiting for daylight 92.7 |
+| Downed Pilot | 0.0 | unescorted 81.0 | escorted 97.3 | |
 
-Findings, against the figures recorded before units reacted to fire:
+Bots not listed were not re-run after S7; their last figures are in the React to contact entry below.
 
-- **Covering the column on Overwatch still doubles its result** (46.3% against 26.0%). Why it pays so much more there than on Valley Road (81.7% against 83.0%) isn't traced yet, so trace it before S5 relies on Cover.
+Findings, against the figures recorded before S7:
+
+- **Wounded make the road maps harder:** a column carrying wounded is slower, so more runs end with too few arriving. Valley Road recon and CAS fell from 83.0% to 78.3% and Overwatch from 26.0% to 17.7%; with no air, Valley Road's failures rose from 17% to 37%. Neither map has a helicopter.
+- **Covering the column on Overwatch still more than doubles its result** (40.0% against 17.7%). Why it pays so much more there than on Valley Road (81.7% against 83.0%) isn't traced yet, so trace it before S5 relies on Cover.
 - **Reactive air still doesn't beat no air on Valley Road or Overwatch.** Answering requests alone is worth nothing on the road maps. That fits the design, since recon is the lever there, but it means the "lazy air" floor is no air.
 - **Forwarding is worth 24 points at the outpost and 33 on Valley Road,** above the 10-point target in both.
 - **Striking whatever fires on friends first pays at night** (43.3% against 27.3%) and costs a little by day.
@@ -49,7 +52,9 @@ Findings, against the figures recorded before units reacted to fire:
 
 Most important first. Win-rate tuning waits for M13, so these are recorded rather than fixed.
 
-- **Trace Cover on Overwatch** (46.3% against 26.0% for recon and CAS) before building on it.
+- **Trace Cover on Overwatch** (40.0% against 17.7% for recon and CAS) before building on it.
+- **Medevac saves lives but not battles yet:** at the outpost it is worth 4 points (95% interval −0.1 to +8.1). The outpost's wounded mostly come in its last 25 minutes and the base is 25 km away, so S5 should put medevac where it can change the fight.
+- **Wound rates are provisional:** `woundDeathPerHour` and `woundWorsenSeconds` were raised once so that medevac had lives to save. They have no source yet.
 - **Guns don't change outcomes** on any map, including Overwatch, which was built for them (S3).
 - **Waiting for air shows no gain.** The weighed rule removed its cost, but no map rewards it yet.
 - **No air wins a few percent at the outpost.** These are real wins, so M5's exit stays unmet.
@@ -546,7 +551,15 @@ An aircraft drops ammunition to a ground unit. The drop can scatter or land near
 4. **Debrief:** killed, died of wounds, evacuated, and average time from wound to hospital.
 5. **Scenarios and bots:** medevac requests in Outpost Under Pressure, a bot that answers them, one that doesn't, and one that waits for escorts, measured over at least 300 seeds.
 
-**Questions to settle in the spec first:** whether a squad below a share of fit men stops to wait for medevac or keeps fighting (the same rules for both sides, so the enemy's wounded matter too), whether the enemy targets a landing helicopter on purpose or only by chance, and how the pickup point is chosen (the platoon's own covered spot, from its own picture).
+**Questions settled (2026-11-05):** wounded tie down carers, and a platoon on the move below a share of men free to fight holds for them; the enemy hits a landed helicopter only by chance; the platoon picks a pickup point out of the enemy's sight from its own picture. Spec §4.1.1 and §8.9.
+
+**Result (2026-11-05): met.** Built as specified, with a UH-1H Dustoff (6 seats) in Outpost Under Pressure and three bots: medevac at once (`informedMedevac`), medevac waiting for an escort on a hot pickup (`informedMedevacEscort`), and `reactiveMedevac`. Every other bot leaves requests unanswered.
+
+- **Identical when switched off:** with carers, slowing, holding and the morale rule at zero, every bot on all six scenarios gave identical results to the previous commit over 4 seeds.
+- **Each effect alone,** 100 seeds: carers and holding change nothing outside noise; slowing costs the outpost about 8 points. The morale rule as first written (waiting wounded also blocked recovery, after 15 minutes) was ruinous: outpost informed 74% to 27%, Overwatch 26% to 2%. Without the block and at 30 minutes, everything stayed within noise, so that is the rule.
+- **A trace** of one outpost battle found the helicopter landing out of reach of the wounded (a hidden pickup point 220 m from them, loading reach 150 m), and almost nobody dying of wounds in 75 minutes. The pickup search went to 100 m, loading reach to 250 m, the death rate to 0.15 an hour doubling every 30 minutes, and a request from the first wounded man.
+- **Exit,** outpost, 300 paired seeds, informed with medevac against without: died of wounds 0.63 to 0.34 a run (−0.29, 95% interval −0.37 to −0.22); wounded left waiting 6.6 to 3.7; 2.7 evacuated a run, 18.7 minutes from wound to hospital; the Dustoff hit and sent home 0.34 times a run; wins 78.3% to 82.3% (+4.0, interval −0.1 to +8.1). Waiting for an escort trades lives for the aircraft: 0.08 fewer hits a run (−0.15 to −0.02) for 0.07 more deaths (+0.01 to +0.13).
+- **Not done:** load limits at altitude (no map has the height), wounded aboard dying, and enemy medevac.
 
 #### S8: Downed crew
 

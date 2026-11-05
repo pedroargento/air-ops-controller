@@ -27,6 +27,7 @@ import { enqueue, linkedNodes, type PendingTransmission, type RadioState } from 
 import type { SimState } from './state';
 
 const REQUEST_PRIORITY = -1;
+const MEDEVAC_RADIUS_METERS = 100;
 
 function nextId(radio: RadioState): MessageId {
   radio.nextMessageNumber += 1;
@@ -217,6 +218,34 @@ function answerDangerClose(state: SimState, scenario: Scenario, unitId: string, 
   if (approved) state.player.dangerCloseClearedUntil[unitId] = state.tick + scenario.file.air.dangerCloseClearanceSeconds;
 }
 
+/**
+ * A helicopter with seats sent to the platoon's pickup point, or a plain no (§8.9). Either way the
+ * platoon hears the answer, so it doesn't keep asking.
+ */
+function answerMedevac(state: SimState, scenario: Scenario, unitId: string, aircraftId: AircraftId | null): void {
+  const request = state.player.medevacRequests[unitId];
+  if (request === undefined || !canReach(scenario, unitId)) return;
+  if (aircraftId !== null) {
+    const aircraft = aircraftById(state.truth.aircraft, aircraftId);
+    const order = { kind: 'Pickup', center: request.pickup, radius: MEDEVAC_RADIUS_METERS } as const;
+    if (aircraft === undefined || !applyOrder(aircraft, order, scenario.file.air)) return;
+  }
+  state.player.medevacRequests[unitId] = {
+    ...request,
+    answer: aircraftId === null ? { kind: 'none', answeredAt: state.tick } : { kind: 'sent', aircraftId, answeredAt: state.tick },
+  };
+  const message: RadioMessage = {
+    id: nextId(state.radio),
+    kind: 'MEDEVAC_ANSWER',
+    senderId: AIR_OPS,
+    observedAt: state.tick,
+    sentAt: state.tick,
+    receivedAt: state.tick + scenario.file.radio.transmitSeconds,
+    aircraftId,
+  };
+  transmit(state, scenario, { kind: 'message', recipient: unitId, message });
+}
+
 function aircraftById(aircraft: readonly Aircraft[], id: AircraftId): Aircraft | undefined {
   return aircraft.find((entry) => entry.id === id);
 }
@@ -284,6 +313,9 @@ export function applyCommand(state: SimState, command: PlayerCommand, scenario: 
       if (canReach(scenario, command.unitId)) {
         transmit(state, scenario, { kind: 'request', unitId: command.unitId, report: command.report });
       }
+      return;
+    case 'answerMedevac':
+      answerMedevac(state, scenario, command.unitId, command.helicopterId);
       return;
     case 'acknowledge':
       acknowledge(state, scenario, aircraftTelemetry(state.truth, scenario.file.air, state.tick), command.unitId, command.casAircraftId);

@@ -4,6 +4,12 @@ Notable changes to Air Operations. Section numbers such as §8.8 refer to `air-o
 
 ## Unreleased
 
+### Wounded and medevac (§4.1.1, §8.9)
+- Casualties are now killed or wounded. Wounded stay with their squad, tie down men to carry them, slow it, and die as they wait; a platoon on the move with too few men free to fight holds for them. The same rules hold for the enemy, which has no medevac.
+- Platoons with wounded send a MEDEVAC request with the number of wounded, a pickup point out of the enemy's sight, and whether it is hot. Answer it from its card with any helicopter with seats, or say no air is available.
+- A UH-1H Dustoff joins Outpost Under Pressure. Landed, it loads wounded a few a minute, slower under fire, up to six, then flies them to the hospital at base. The pickup panel shows them coming aboard.
+- The debrief gives each side's killed, wounded and died of wounds, and your evacuated and time to hospital. Over 300 outpost battles, medevac roughly halves deaths from wounds and gets the Dustoff hit about one run in three. The road maps are a few points harder, because columns carry their wounded.
+
 ### Fire on the ground (§7.3)
 - The map shows who is firing at whom, as far as crews saw it or units reported it: solid arrows for fire a crew saw, dashed arrows for fire a unit reported, a pale wedge for fire from a shooter the unit can't see, and a short stub for fire whose target no crew could see. Red is enemy fire, blue is friendly.
 - UNDER FIRE and HEAVY FIRE beside friendly units that say so, or that a crew sees being fired on.

@@ -24,6 +24,7 @@ import type { AircraftModelConfig, AirConfig, CombatConfig, DisplayConfig, Perce
 import { applyEffects, type CombatEffect } from './combat';
 import { smokeNear } from './marks';
 import { enqueue, type RadioState } from './radio';
+import { woundedCount } from './wounded';
 
 export function createAircraft(scenario: Scenario): Aircraft[] {
   const { air } = scenario.file;
@@ -54,6 +55,8 @@ export function createAircraft(scenario: Scenario): Aircraft[] {
         landed: false,
         boardingSeconds: 0,
         passengers: [],
+        casualtiesAboard: [],
+        loadProgress: 0,
         gunBursts: type.gunBursts,
         nextPassTick: 0,
         risk: 'normal',
@@ -380,6 +383,13 @@ export function crewCalls(truth: WorldTruth, player: PlayerKnowledge, radio: Rad
       });
     }
   }
+}
+
+/** Wounded the crew of a landed helicopter can see waiting to be loaded (§8.9). */
+function woundedInReach(truth: WorldTruth, aircraft: Aircraft, air: AirConfig): number {
+  return truth.units
+    .filter((unit) => unit.side === 'friendly' && unit.personnel > 0 && distance(unit.position, aircraft.position) <= air.loadReachMeters)
+    .reduce((sum, unit) => sum + woundedCount(unit.wounded), 0);
 }
 
 export function modelOf(aircraft: Aircraft, air: AirConfig): AircraftModelConfig {
@@ -989,6 +999,8 @@ export function aircraftTelemetry(truth: WorldTruth, air: AirConfig, tick = 0): 
       boardNeedSeconds: air.boardSeconds,
       passengers: aircraft.passengers.length,
       survivorMeters: survivorGap(truth, aircraft, air),
+      woundedAboard: woundedCount(aircraft.casualtiesAboard),
+      woundedInReach: aircraft.landed ? woundedInReach(truth, aircraft, air) : null,
     };
   });
 }

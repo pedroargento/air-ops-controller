@@ -8,6 +8,7 @@ import type { GroundUnit, Platoon, WorldTruth } from '../domain/truth/world';
 import { nextBinomial, type RngState } from '../rng/streams';
 import type { CombatConfig } from '../scenario/schema';
 import { livingSquads, platoonOf, platoonPersonnel, sortedPlatoons } from './platoon';
+import { fightingMen, longestWait, takeCasualties } from './wounded';
 
 export type CombatEffect = Readonly<{
   targetId: string;
@@ -55,7 +56,8 @@ function fireSolutions(truth: WorldTruth, terrain: TerrainGrid, config: CombatCo
     if (range > firer.doctrine.engageRangeMeters) continue;
     // Only a squad with a view of the place can shoot at it.
     if (!hasGroundLos(terrain, firer.position, aim)) continue;
-    const fire = usableWeapons(firer.equipment, firer.personnel, config.weapons).filter(({ weapon }) => {
+    // Men carrying wounded don't fire (§4.1.1).
+    const fire = usableWeapons(firer.equipment, fightingMen(firer, config), config.weapons).filter(({ weapon }) => {
       const definition = config.weapons[weapon];
       return definition.targetDomains.includes('GROUND') && range <= definition.rangeMeters;
     });
@@ -138,6 +140,7 @@ export function applyEffects(
     if (casualties > 0) destroySystems(target, casualties, config, rng);
     if (casualties > 0) target.lastLossAtTick = tick;
     target.personnel -= casualties;
+    if (casualties > 0) takeCasualties(truth, target, casualties, config, rng, tick);
     target.suppression = Math.min(1, target.suppression + effect.suppression);
     const platoon = platoonOf(truth, target);
     platoon.morale = Math.max(
@@ -166,16 +169,24 @@ function isolated(platoon: Platoon, truth: WorldTruth, config: CombatConfig): bo
  * Pressure counts once per update however many units are firing (§4.1). Fire alone
  * stops at the doctrine's floor; going lower takes a deteriorating situation.
  */
-function applyPressure(platoon: Platoon, truth: WorldTruth, config: CombatConfig): void {
+function applyPressure(platoon: Platoon, truth: WorldTruth, config: CombatConfig, tick: number): void {
   const floor = platoon.doctrine.pressureMoraleFloor;
   if (platoon.morale > floor) {
     platoon.morale = Math.max(floor, platoon.morale - config.moraleLossUnderFirePerUpdate);
   }
   const ammunition = livingSquads(platoon).reduce((sum, unit) => sum + totalAmmunition(unit.equipment), 0);
   const lowAmmunition = ammunition <= platoon.initialAmmunition * config.lowAmmunitionFraction;
-  if (lowAmmunition || isolated(platoon, truth, config)) {
+  if (lowAmmunition || isolated(platoon, truth, config) || woundedWaiting(platoon, config, tick)) {
     platoon.morale = Math.max(0, platoon.morale - config.moraleLossDeterioratingPerUpdate);
   }
+}
+
+/** Wounded who have waited too long wear a platoon down, like isolation (§4.1.1). */
+function woundedWaiting(platoon: Platoon, config: CombatConfig, tick: number): boolean {
+  const limit = config.woundedMoraleSeconds;
+  if (limit === null) return false;
+  const waited = longestWait(livingSquads(platoon).flatMap((unit) => unit.wounded), tick);
+  return waited !== null && waited > limit;
 }
 
 function moraleCap(platoon: Platoon, personnel: number, config: CombatConfig): number {
@@ -219,6 +230,6 @@ export function resolveCombat(
   applyEffects(truth, effects, config, rng, tick);
   const hit = new Set(effects.map((effect) => effect.targetId));
   for (const platoon of platoons) {
-    if (platoon.squads.some((unit) => hit.has(unit.id))) applyPressure(platoon, truth, config);
+    if (platoon.squads.some((unit) => hit.has(unit.id))) applyPressure(platoon, truth, config, tick);
   }
 }

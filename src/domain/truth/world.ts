@@ -96,6 +96,21 @@ export type GroundUnit = {
   shotBy: Record<string, number>;
   /** When it last lost men. */
   lastLossAtTick: number | null;
+  /** Wounded carried with the squad, grouped by when they were hit (§4.1.1). */
+  wounded: WoundedGroup[];
+};
+
+/** Men wounded at the same moment: they have waited equally long. */
+export type WoundedGroup = { count: number; since: number };
+
+/** What really happened to one side's men, for the debrief (§8.9). */
+export type CasualtyLedger = {
+  killed: number;
+  wounded: number;
+  diedOfWounds: number;
+  evacuated: number;
+  /** Seconds from wound to hospital, summed over everyone evacuated. */
+  hospitalSeconds: number;
 };
 
 /**
@@ -142,6 +157,10 @@ export type Aircraft = {
   boardingSeconds: number;
   /** Platoons aboard. */
   passengers: string[];
+  /** Wounded aboard, with when each group was hit (§8.9). */
+  casualtiesAboard: WoundedGroup[];
+  /** Wounded loaded so far, counted per second, so partial loads carry over. */
+  loadProgress: number;
   gunBursts: number;
   nextPassTick: number;
   risk: RiskLimit;
@@ -183,6 +202,7 @@ export type WorldTruth = {
   locatedShare: number | null;
   /** Men lost to their own side's strikes. */
   friendlyFireCasualties: number;
+  casualties: Record<'friendly' | 'enemy', CasualtyLedger>;
   /** Smoke thrown on targets for aircraft: a physical thing anyone nearby can see. */
   marks: SmokeMark[];
   /** Flares burning or burnt out: light anyone under them is seen by. */

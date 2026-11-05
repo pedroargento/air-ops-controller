@@ -11,6 +11,7 @@ import { nextBool, nextGaussian, type RngState } from '../rng/streams';
 import type { AirConfig, CombatConfig } from '../scenario/schema';
 import { isAirborne, modelOf } from './air';
 import type { RadioState } from './radio';
+import { fightingMen } from './wounded';
 
 const AIRCRAFT_SIDE: Side = 'friendly';
 const FIRE_MEMORY_ENTRIES = 8;
@@ -97,7 +98,7 @@ function bestWeapon(unit: GroundUnit, aircraft: Aircraft, config: CombatConfig, 
   const slant = slantTo(unit, aircraft, terrain);
   let best: AirWeapon | null = null;
   let bestChance = 0;
-  for (const weapon of airWeapons(unit.equipment, unit.personnel, config.weapons)) {
+  for (const weapon of airWeapons(unit.equipment, fightingMen(unit, config), config.weapons)) {
     const chance = airHitChance(weapon, slant, heightAbove(unit, aircraft, terrain));
     if (chance > bestChance) {
       best = weapon;

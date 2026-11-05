@@ -27,6 +27,9 @@ export function receiveByUnit(knowledge: UnitKnowledge, message: RadioMessage): 
     case 'PICKUP_POINT':
       knowledge.pickup = message.point;
       return;
+    case 'MEDEVAC_ANSWER':
+      knowledge.medevacAnsweredAt = message.receivedAt;
+      return;
     case 'SUPPRESSION': {
       const { aircraftId } = message.suppression;
       if (message.cancelled) delete knowledge.suppressions[aircraftId];
@@ -42,6 +45,7 @@ export function receiveByUnit(knowledge: UnitKnowledge, message: RadioMessage): 
     case 'POSITION_REPORT':
     case 'SITREP':
     case 'SUPPORT_REQUEST':
+    case 'MEDEVAC_REQUEST':
     case 'CHECK_FIRE':
     case 'DANGER_CLOSE_HOLD':
     case 'DRILL':

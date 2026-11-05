@@ -89,6 +89,8 @@ export type Doctrine = Readonly<{
   /** Under fire, aims its reaction at the shooter, or fires back toward unseen fire (§4.0.3). */
   reactToFire: boolean;
   blindFireRangeMeters: number;
+  /** Holds for its wounded below this share of men free to fight; null never (§4.1.1). */
+  woundedHoldShare: number | null;
   airRefusedMemorySeconds: number;
   standoffMeters: number;
   observeBias: number;
@@ -132,6 +134,14 @@ export type UnitSelf = Readonly<{
   slot: Vec2;
   /** Everyone in the platoon, the strength a unit weighs against an enemy. */
   platoonPersonnel: number;
+  /** Wounded the squad carries, and across its platoon: fit men tied down carrying them (§4.1.1). */
+  wounded: number;
+  platoonWounded: number;
+  /** The platoon's fit men not carrying wounded, and its strength at the start. */
+  platoonFree: number;
+  platoonInitialPersonnel: number;
+  /** How long the platoon's longest-waiting wounded have waited, or null with none. */
+  woundedWaitSeconds: number | null;
   squads: number;
   drill: Drill | null;
   role: SquadRole | null;
@@ -185,6 +195,8 @@ export type UnitKnowledge = {
   suppressions: Record<string, Suppression>;
   expectedSupport: ExpectedSupport | null;
   supportRefusedAt: number | null;
+  /** When air operations last answered its medevac request, yes or no (§8.9). */
+  medevacAnsweredAt: number | null;
   hostileAircraftSeenAt: number | null;
   noticedAircraft: NoticedAircraft | null;
   /** Its own fight: fire on it, where from, and what it is firing at (§7.3). */
@@ -192,7 +204,7 @@ export type UnitKnowledge = {
 };
 
 export function emptyKnowledge(): UnitKnowledge {
-  return { contacts: {}, reports: {}, pois: {}, suppressions: {}, expectedSupport: null, supportRefusedAt: null, hostileAircraftSeenAt: null, noticedAircraft: null, fire: emptyFire() };
+  return { contacts: {}, reports: {}, pois: {}, suppressions: {}, expectedSupport: null, supportRefusedAt: null, medevacAnsweredAt: null, hostileAircraftSeenAt: null, noticedAircraft: null, fire: emptyFire() };
 }
 
 export type GroundIntent =
