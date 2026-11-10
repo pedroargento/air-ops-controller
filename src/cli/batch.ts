@@ -14,11 +14,12 @@ import type { WithdrawalTrigger } from './tempo';
 
 /** The same scenario with some drills forgotten, to measure what each is worth. */
 function withoutDrills(scenario: Scenario, drills: readonly string[]): Scenario {
-  const forget = <T extends Readonly<{ drills: readonly DrillKind[] }>>(doctrines: Readonly<Record<string, T>>): Record<string, T> =>
+  const forget = <T extends Readonly<{ drills: readonly DrillKind[]; experimentalDrills?: readonly DrillKind[] }>>(doctrines: Readonly<Record<string, T>>): Record<string, T> =>
     Object.fromEntries(
       Object.entries(doctrines).map(([name, doctrine]) => [
         name,
-        { ...doctrine, drills: doctrine.drills.filter((drill) => !drills.includes(drill)) },
+        { ...doctrine, drills: doctrine.drills.filter((drill) => !drills.includes(drill)),
+          ...(doctrine.experimentalDrills === undefined ? {} : { experimentalDrills: doctrine.experimentalDrills.filter((drill) => !drills.includes(drill)) }) },
       ]),
     );
   return { ...scenario, doctrines: forget(scenario.doctrines), file: { ...scenario.file, doctrines: forget(scenario.file.doctrines) } };
@@ -30,6 +31,7 @@ function option(name: string, fallback: string): string {
 }
 
 export type Summary = Readonly<{
+  aircraft: readonly AircraftSummary[];
   policy: string;
   seeds: number;
   winRate: number;
@@ -51,6 +53,32 @@ export type Summary = Readonly<{
   meanHelicopterHits: number;
   tempo: TempoSummary;
 }>;
+
+export type AircraftSummary = Readonly<{
+  aircraftId: string; model: string; meanSorties: number; meanAirborneMinutes: number;
+  meanStationMinutes: number; meanDamageIncidents: number; meanRepairMinutes: number;
+  meanBombs: number; meanGunBursts: number; meanEnemyCasualties: number; meanFriendlyCasualties: number;
+  meanEnemySquadsSeen: number; meanFirstAirSightings: number; meanWoundedDelivered: number;
+  meanSurvivorsDelivered: number; meanFlares: number; meanIlluminationMinutes: number;
+}>;
+
+function aircraftSummaries(results: readonly BattleResult[]): readonly AircraftSummary[] {
+  return (results[0]?.aircraft ?? []).map((first) => {
+    const rows = results.flatMap((r) => r.aircraft.filter((a) => a.aircraftId === first.aircraftId));
+    const avg = (read: (a: typeof first) => number): number => rounded(mean(rows.map(read)));
+    return {
+      aircraftId: first.aircraftId, model: first.model,
+      meanSorties: avg((a) => a.sorties.length), meanAirborneMinutes: avg((a) => a.airborneSeconds / 60),
+      meanStationMinutes: avg((a) => a.stationSeconds / 60), meanDamageIncidents: avg((a) => a.damageIncidents),
+      meanRepairMinutes: avg((a) => a.repairSeconds / 60), meanBombs: avg((a) => a.bombs),
+      meanGunBursts: avg((a) => a.gunBursts), meanEnemyCasualties: avg((a) => a.enemyCasualties),
+      meanFriendlyCasualties: avg((a) => a.friendlyCasualties), meanEnemySquadsSeen: avg((a) => a.enemySquadsSeen),
+      meanFirstAirSightings: avg((a) => a.firstAirSightings), meanWoundedDelivered: avg((a) => a.woundedDelivered),
+      meanSurvivorsDelivered: avg((a) => a.survivorsDelivered), meanFlares: avg((a) => a.flares),
+      meanIlluminationMinutes: avg((a) => a.illuminationSeconds / 60),
+    };
+  });
+}
 
 export type CasualtySummary = Readonly<{ killed: number; wounded: number; diedOfWounds: number; evacuated: number; aboard: number; waiting: number }>;
 
@@ -143,6 +171,7 @@ export function summarize(policy: string, results: readonly BattleResult[]): Sum
       : [],
   );
   return {
+    aircraft: aircraftSummaries(results),
     policy,
     seeds: results.length,
     winRate: rate('success'),
@@ -151,7 +180,7 @@ export function summarize(policy: string, results: readonly BattleResult[]): Sum
     meanEndMinutes: rounded(mean(results.map((r) => r.endedAtTick / 60))),
     meanFriendlyLeft: rounded(mean(results.map((r) => r.friendlyPersonnel))),
     meanEnemyLeft: rounded(mean(results.map((r) => r.enemyPersonnel))),
-    meanSorties: rounded(mean(results.map((r) => r.sorties))),
+    meanSorties: rounded(mean(results.map((r) => r.aircraft.reduce((sum, a) => sum + a.sorties.length, 0)))),
     meanStrikePasses: rounded(mean(results.map((r) => r.strikePasses))),
     meanUnusedOrdnance: rounded(mean(results.map((r) => r.unusedOrdnance))),
     meanResponseMinutes: responses.length > 0 ? rounded(mean(responses)) : null,

@@ -1,3 +1,4 @@
+import { aircraftBeforeTick, recordAircraftTick } from './mission-report';
 import { decideGround, decidePlatoon } from '../ai/decide-ground';
 import { assignRoles } from '../ai/drills';
 import type { PlayerCommand } from '../domain/public/commands';
@@ -77,6 +78,9 @@ function selfView(unit: GroundUnit, platoon: Platoon, personnel: number, scenari
     patrolIndex: unit.patrolIndex,
     squads: platoon.squads.length,
     drill: platoon.drill,
+    drillPhase: platoon.drillPhase,
+    ownSquads: [],
+    groundVolley: unit.groundVolley,
     role: unit.role,
     viaDone: unit.viaDone,
     ambushSprung: platoon.ambushSprung,
@@ -114,7 +118,7 @@ function squadViews(state: SimState, scenario: Scenario): ReadonlyMap<string, Un
 
 type Selves = Readonly<{ squads: ReadonlyMap<string, UnitSelf>; platoons: ReadonlyMap<string, UnitSelf> }>;
 
-function selfViews(state: SimState, scenario: Scenario, wanted?: (platoonId: string) => boolean): Selves {
+export function selfViews(state: SimState, scenario: Scenario, wanted?: (platoonId: string) => boolean): Selves {
   const { truth, tick } = state;
   const squads = new Map<string, UnitSelf>();
   const platoons = new Map<string, UnitSelf>();
@@ -138,6 +142,8 @@ function lazySelves(state: SimState, scenario: Scenario): Pick<ReadonlyMap<strin
 function changeObjective(platoon: Platoon, objective: GroundObjective): void {
   platoon.objective = objective;
   platoon.drill = null;
+  platoon.drillPhase = null;
+  platoon.drillWaitReason = null;
   for (const unit of platoon.squads) {
     unit.route = [];
     unit.routeDestination = null;
@@ -193,9 +199,9 @@ function drillMap(terrain: TerrainGrid): DrillMap {
 
 function startDrill(state: SimState, platoon: Platoon, drill: Drill): void {
   const squads = livingSquads(platoon);
-  const roles = assignRoles(drill, platoon.doctrine, squads.map((unit) => distance(unit.position, drill.target)));
+  const roles = platoon.doctrine.experimentalTactics ? [] : assignRoles(drill, platoon.doctrine, squads.map((unit) => distance(unit.position, drill.target)));
   for (const [index, unit] of squads.entries()) {
-    unit.role = roles[index] ?? null;
+    if (!platoon.doctrine.experimentalTactics) unit.role = roles[index] ?? null;
     unit.viaDone = false;
     unit.routeDestination = null;
   }
@@ -206,6 +212,7 @@ function startDrill(state: SimState, platoon: Platoon, drill: Drill): void {
 function endDrill(platoon: Platoon): void {
   for (const unit of platoon.squads) {
     unit.role = null;
+    unit.route = [];
     unit.routeDestination = null;
   }
 }
@@ -218,7 +225,7 @@ function applyPlatoonDecisions(state: SimState, selves: ReadonlyMap<string, Unit
       followOrders(state, platoon, false);
       continue;
     }
-    const decision = decidePlatoon(self, state.unitKnowledge[platoon.id] ?? emptyKnowledge(), state.tick, map);
+    const decision = decidePlatoon(self, state.unitKnowledge[platoon.id] ?? emptyKnowledge(), state.tick, map, scenario.groundExperiment);
     platoon.mode = decision.mode;
     platoon.returnsUsed = decision.returnsUsed;
     platoon.handled = decision.handled;
@@ -227,8 +234,22 @@ function applyPlatoonDecisions(state: SimState, selves: ReadonlyMap<string, Unit
     platoon.ambushSprung = decision.ambushSprung;
     const previous = platoon.drill;
     platoon.drill = decision.drill;
-    if (decision.drill !== null && decision.drill !== previous) startDrill(state, platoon, decision.drill);
+    platoon.drillPhase = decision.coordination?.phase ?? null;
+    platoon.drillWaitReason = decision.coordination?.waitReason ?? null;
+    const newDrill = decision.drill !== null && (previous === null || decision.drill.kind !== previous.kind ||
+      decision.drill.startedAt !== previous.startedAt);
+    if (decision.drill !== null && newDrill) startDrill(state, platoon, decision.drill);
     else if (decision.drill === null && previous !== null) endDrill(platoon);
+    if (decision.coordination !== null) {
+      for (const unit of platoon.squads) {
+        const role = decision.coordination.roles[unit.id] ?? null;
+        if (unit.role !== role) {
+          unit.viaDone = false;
+          unit.routeDestination = null;
+        }
+        unit.role = role;
+      }
+    }
     followOrders(state, platoon, decision.objectiveDone);
   }
 }
@@ -240,7 +261,7 @@ function applyDecisions(state: SimState, selves: ReadonlyMap<string, UnitSelf>, 
     const platoon = platoonOf(state.truth, unit);
     if (self === undefined || unit.personnel <= 0 || state.tick < platoon.activeFromTick) continue;
     const knowledge = state.unitKnowledge[unit.platoonId] ?? emptyKnowledge();
-    const decision = decideGround(self, knowledge, state.tick, scenario.file.combat.behaviorFireRate, map);
+    const decision = decideGround(self, knowledge, state.tick, scenario.file.combat.behaviorFireRate, map, scenario.groundExperiment);
     unit.intent = decision.intent;
     unit.behavior = decision.behavior;
     unit.behaviorSinceTick = decision.behaviorSinceTick;
@@ -374,6 +395,7 @@ export function step(state: SimState, commands: readonly PlayerCommand[], scenar
   const { terrain, file } = scenario;
   const tactical = state.tick % TACTICAL_INTERVAL_TICKS === 0;
 
+  const aircraftBefore = aircraftBeforeTick(truth);
   for (const command of commands) applyCommand(state, command, scenario);
 
   if (state.tick % file.weather.forecastIntervalSeconds === 0) publishForecast(state, scenario);
@@ -422,6 +444,7 @@ export function step(state: SimState, commands: readonly PlayerCommand[], scenar
   correlateReports(state.player, file.display, state.tick);
   if (tactical) reviewPromises(state, scenario);
 
+  recordAircraftTick(truth, aircraftBefore, scenario, state.tick);
   state.tick += 1;
   updateOutcome(truth, file.mission, file.durationSeconds, state.tick, state.player);
   return state;

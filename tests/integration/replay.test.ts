@@ -27,7 +27,8 @@ describe('replay', () => {
   // Changes whenever rules or tuning change; update it deliberately with that change.
   it('matches the golden hash', () => {
     const hashes = runReplay(scenario, { seed: 1, commands: [], ticks: 3000 });
-    expect(hashes.at(-1)).toBe('4970a0f8');
+    // Selective rollback: standard tactics are the default; independent bug fixes remain.
+    expect(hashes.at(-1)).toBe('a66514cf');
   }, 30000);
 
   it('diverges when a command differs', () => {

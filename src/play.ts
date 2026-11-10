@@ -1,3 +1,4 @@
+import { GAME_SPEEDS, parseSeed, parseSpeed } from './game/url-options';
 import { isAntiAir, threatRadiusMeters } from './domain/public/equipment';
 import { AIR_OPS, CECON, reportLevel } from './domain/public/radio';
 import { nextFirstLight } from './domain/public/light';
@@ -6,7 +7,7 @@ import { DEFAULT_SCENARIO_NAME, loadBundledScenario } from './scenario/catalog';
 import { App } from './ui/app';
 import { setMissionStart } from './ui/format';
 
-const SPEEDS = [1, 2, 4, 8] as const;
+const SPEEDS = GAME_SPEEDS;
 const MAX_TICKS_PER_FRAME = 20;
 
 const search = new URLSearchParams(location.search);
@@ -15,11 +16,11 @@ document.body.classList.add('playing');
 const { mission } = scenario.file;
 document.title = scenario.file.name;
 setMissionStart(scenario.file.startTime);
-const seed = Number(search.get('seed') ?? Math.floor(Math.random() * 1_000_000));
+const seed = parseSeed(search.get('seed'), () => Math.floor(Math.random() * 1_000_000));
 const session = new GameSession(scenario, seed);
 
 let paused = false;
-let speed: number = Number(search.get('speed') ?? 1);
+let speed: number = parseSpeed(search.get('speed'));
 let accumulator = 0;
 let lastFrame = performance.now();
 
@@ -67,15 +68,9 @@ const app = new App({
   // The player's own order of battle and the HQ estimate: nothing here reveals enemy truth.
   triage: scenario.file.display,
   fireFreshSeconds: scenario.file.display.fireLineFreshSeconds,
-  summary: {
+  mapContext: {
     objective: mission.area.center,
-    objectiveRadiusMeters: mission.area.radius,
-    areaLabel: mission.areaLabel,
-    hqEnemyEstimate: scenario.file.display.hqEnemyEstimate,
-    ratioRadiusMeters: scenario.file.display.summaryRatioRadiusMeters,
-    staleSeconds: scenario.file.display.summaryStaleSeconds,
     friendlyStrength: Object.fromEntries(friendlies.map((unit) => [unit.id, unit.personnel])),
-    plausibleSpeedMps: scenario.file.display.plausibleSpeedMps,
   },
   speeds: SPEEDS,
   onAction: (action) => session.issue(action),

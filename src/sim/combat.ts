@@ -222,6 +222,9 @@ export function resolveCombat(
   );
   for (const solution of solutions) {
     solution.firer.lastFiredAtTick = tick;
+    if (solution.firer.intent.kind === 'engage') {
+      solution.firer.groundVolley = { aim: solution.firer.intent.aim, at: tick };
+    }
     for (const { target } of solution.hits) target.shotBy[solution.firer.id] = tick;
     spendAmmunition(solution, config);
   }

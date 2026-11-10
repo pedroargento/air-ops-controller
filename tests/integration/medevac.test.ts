@@ -152,6 +152,8 @@ describe('medevac (§8.9)', () => {
     run(state, 1200);
     const ledger = state.truth.casualties.friendly;
     expect(ledger.evacuated).toBe(4);
+    expect(helicopter.record.woundedDelivered).toBe(4);
+    expect(helicopter.record.hospitalSeconds).toBe(ledger.hospitalSeconds);
     expect(ledger.hospitalSeconds / 4).toBeGreaterThan(perWounded * 4);
     expect(helicopter.casualtiesAboard).toEqual([]);
   });

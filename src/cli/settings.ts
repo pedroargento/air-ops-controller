@@ -1,5 +1,5 @@
 // Applies `--set path=value` overrides to a loaded scenario, for trying values without editing files.
-import type { Scenario } from '../scenario/load';
+import { resolveDoctrines, type Scenario } from '../scenario/load';
 import { scenarioFileSchema } from '../scenario/schema';
 
 type Json = Record<string, unknown>;
@@ -34,7 +34,7 @@ export function applySettings(scenario: Scenario, settings: readonly string[]): 
     setPath(file, setting.slice(0, split).split('.'), parse(setting.slice(split + 1)), setting);
   }
   const checked = scenarioFileSchema.parse(file);
-  return { ...scenario, file: checked, doctrines: checked.doctrines as Scenario['doctrines'] };
+  return { ...scenario, file: checked, doctrines: resolveDoctrines(checked) };
 }
 
 /** Every `--set` given on the command line. */

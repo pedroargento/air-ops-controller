@@ -69,7 +69,7 @@ describe('reporting a point of interest', () => {
     const column = valley.doctrines['column'];
     if (column === undefined) throw new Error('No column doctrine');
     const self = {
-      id: 'P', side: 'friendly', position: { x: 0, y: 0 }, slot: { x: 0, y: 0 }, platoonPersonnel: 24, wounded: 0, platoonWounded: 0, platoonFree: 24, platoonInitialPersonnel: 24, woundedWaitSeconds: null, squads: 2, drill: null, role: null,
+      id: 'P', side: 'friendly', position: { x: 0, y: 0 }, slot: { x: 0, y: 0 }, platoonPersonnel: 24, wounded: 0, platoonWounded: 0, platoonFree: 24, platoonInitialPersonnel: 24, woundedWaitSeconds: null, squads: 2, drill: null, drillPhase: null, ownSquads: [], groundVolley: null, role: null,
       viaDone: false, ambushSprung: false, handled: [], routeAhead: [100, 200, 300, 400, 500, 600, 700].map((x) => ({ x, y: 0 })), secondsLeft: 7200, canCallAir: false,
       ownPosition: { center: { x: 0, y: 0 }, sigmaMeters: 40, headingRad: null, speedMps: null, observedAt: 0 }, personnel: 24, initialPersonnel: 24,
       ammunition: 1000, initialAmmunition: 1000, equipment: [], supportWeapons: 1, airWeapons: [], morale: 0.8, suppression: 0, underFire: false,
@@ -86,7 +86,7 @@ describe('reporting a point of interest', () => {
     const column = valley.doctrines['column'];
     if (column === undefined) throw new Error('No column doctrine');
     const self = {
-      id: 'P', side: 'friendly', position: { x: 0, y: 0 }, slot: { x: 0, y: 0 }, platoonPersonnel: 24, wounded: 0, platoonWounded: 0, platoonFree: 24, platoonInitialPersonnel: 24, woundedWaitSeconds: null, squads: 2, drill: null, role: null,
+      id: 'P', side: 'friendly', position: { x: 0, y: 0 }, slot: { x: 0, y: 0 }, platoonPersonnel: 24, wounded: 0, platoonWounded: 0, platoonFree: 24, platoonInitialPersonnel: 24, woundedWaitSeconds: null, squads: 2, drill: null, drillPhase: null, ownSquads: [], groundVolley: null, role: null,
       viaDone: false, ambushSprung: false, handled: [], routeAhead: [100, 200, 300, 400, 500, 600, 700].map((x) => ({ x, y: 0 })), secondsLeft: 7200, canCallAir: false,
       ownPosition: { center: { x: 0, y: 0 }, sigmaMeters: 40, headingRad: null, speedMps: null, observedAt: 0 }, personnel: 24, initialPersonnel: 24,
       ammunition: 1000, initialAmmunition: 1000, equipment: [], supportWeapons: 1, airWeapons: [], morale: 0.8, suppression: 0, underFire: false,

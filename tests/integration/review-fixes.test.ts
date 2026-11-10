@@ -26,7 +26,7 @@ const open: DrillMap = { routeMeters: (from, to) => distance(from, to), sees: ()
 const position = { center: { x: 0, y: 0 }, sigmaMeters: 40, headingRad: null, speedMps: null, observedAt: 0 };
 
 const self = (overrides: Partial<UnitSelf> = {}): UnitSelf => ({
-  id: 'P' as UnitId, side: 'friendly', position: { x: 0, y: 0 }, slot: { x: 0, y: 0 }, platoonPersonnel: 24, wounded: 0, platoonWounded: 0, platoonFree: 24, platoonInitialPersonnel: 24, woundedWaitSeconds: null, squads: 2, drill: null, role: null,
+  id: 'P' as UnitId, side: 'friendly', position: { x: 0, y: 0 }, slot: { x: 0, y: 0 }, platoonPersonnel: 24, wounded: 0, platoonWounded: 0, platoonFree: 24, platoonInitialPersonnel: 24, woundedWaitSeconds: null, squads: 2, drill: null, drillPhase: null, ownSquads: [], groundVolley: null, role: null,
   viaDone: false, ambushSprung: false, handled: [], routeAhead: [500, 600].map((x) => ({ x, y: 0 })), secondsLeft: 7200, canCallAir: false, ownPosition: position,
   personnel: 24, initialPersonnel: 24, ammunition: 1000, initialAmmunition: 1000, equipment: [], supportWeapons: 1, airWeapons: [], morale: 0.8,
   suppression: 0, underFire: false, mode: 'steady', behavior: null, behaviorSinceTick: 0, groundCover: 0, returnsUsed: 0, patrolIndex: 0,

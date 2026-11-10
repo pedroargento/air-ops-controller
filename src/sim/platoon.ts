@@ -127,6 +127,7 @@ export function createSquads(file: PlatoonFile, scenario: Scenario): readonly Gr
       route: [],
       routeDestination: null,
       lastFiredAtTick: null,
+      groundVolley: null,
       lastHitAtTick: null,
       shotBy: {},
       lastLossAtTick: null,
@@ -158,6 +159,8 @@ export function createPlatoon(file: PlatoonFile, squads: readonly GroundUnit[], 
     objectiveSchedule: file.objectiveSchedule.map(scheduledObjective),
     ordersUsed: [],
     drill: null,
+    drillPhase: null,
+    drillWaitReason: null,
     ambushSprung: false,
     ambushSprungAt: null,
     handled: [],
@@ -206,6 +209,14 @@ export function platoonSelf(
     platoonPersonnel: personnel,
     wounded: leadSelf.platoonWounded,
     squads: squads.length,
+    ownSquads: squads.flatMap((squad) => {
+      const own = selves.get(squad.id);
+      return own === undefined ? [] : [{
+        id: own.id, position: own.position, personnel: own.personnel, ammunition: own.ammunition,
+        supportWeapons: own.supportWeapons, suppression: own.suppression, underFire: own.underFire,
+        role: own.role, viaDone: own.viaDone, groundVolley: own.groundVolley,
+      }];
+    }),
     ownPosition: {
       ...leadSelf.ownPosition,
       center: { x: position.x + mean((unit) => unit.navOffset.x), y: position.y + mean((unit) => unit.navOffset.y) },

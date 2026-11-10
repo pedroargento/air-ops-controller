@@ -34,6 +34,24 @@ export type DrillKind = 'nearAmbush' | 'farAmbush' | 'attack' | 'bypass' | 'hast
 /** What one squad does in a drill. */
 export type SquadRole = 'assault' | 'support' | 'maneuver' | 'cover' | 'bypass' | 'ambush' | 'hold';
 
+export type DrillPhase = 'approach' | 'establish' | 'maneuver' | 'assault';
+export type DrillWaitReason = 'support' | 'assembly' | 'doctrine' | 'capacity';
+/** CLI-only gate ablations within experimental tactics; these do not enable the master switch. */
+export type GroundExperiment = Readonly<{ supportGate: boolean; assemblyGate: boolean; attackReassessment: boolean }>;
+/** Own firing activity, with no information about its effects. */
+export type GroundVolley = Readonly<{ aim: Vec2; at: number }>;
+/** Status shared inside this platoon, never a view of other formations. */
+export type SquadStatus = Readonly<{
+  id: UnitId; position: Vec2; personnel: number; ammunition: number;
+  supportWeapons: number; suppression: number; underFire: boolean;
+  role: SquadRole | null; viaDone: boolean; groundVolley: GroundVolley | null;
+}>;
+export type DrillCoordination = Readonly<{
+  phase: DrillPhase;
+  roles: Readonly<Record<string, SquadRole>>;
+  waitReason: DrillWaitReason | null;
+}>;
+
 export type Drill = Readonly<{
   kind: DrillKind;
   startedAt: number;
@@ -45,6 +63,10 @@ export type Drill = Readonly<{
   avoid: Area | null;
   /** Started on a warning, so the platoon isn't caught by surprise. */
   warned: boolean;
+  /** Own movement progress, used to distinguish a slow maneuver from a stalled one. */
+  progress?: Readonly<{ at: number; remainingMeters: number }>;
+  /** Cumulative own waiting, never inferred from enemy state. */
+  supportWait?: Readonly<{ seconds: number; checkedAt: number; waiting: boolean }>;
 }>;
 
 /** What a platoon can ask of the map. Answers come from terrain, never from truth. */
@@ -62,6 +84,8 @@ export type GroundMode = 'steady' | 'withdrawing' | 'recovering' | 'broken';
 export type GroundBehavior = 'observe' | 'probe' | 'harass' | 'assault' | 'disengage';
 
 export type Doctrine = Readonly<{
+  /** Resolved from the scenario's ground.experimentalTactics switch. */
+  experimentalTactics: boolean;
   speedMps: number;
   detectRangeMeters: number;
   observerQuality: number;
@@ -107,6 +131,8 @@ export type Doctrine = Readonly<{
   attackStrengthRatio: number;
   maxDetourFactor: number;
   supportShare: number;
+  supportFireMemorySeconds: number;
+  supportWaitSeconds: number | null;
   flankMeters: number;
   warningMeters: number;
   corridorMeters: number;
@@ -125,7 +151,7 @@ export type Doctrine = Readonly<{
   headingTowardsCos: number;
 }>;
 
-/** What a formation knows about itself. Contains nothing about other units. */
+/** What a formation knows about itself and its own squads, never other formations. */
 export type UnitSelf = Readonly<{
   id: UnitId;
   side: Side;
@@ -144,6 +170,9 @@ export type UnitSelf = Readonly<{
   woundedWaitSeconds: number | null;
   squads: number;
   drill: Drill | null;
+  drillPhase: DrillPhase | null;
+  ownSquads: readonly SquadStatus[];
+  groundVolley: GroundVolley | null;
   role: SquadRole | null;
   /** A flanker that has reached its flank point and can now close. */
   viaDone: boolean;
@@ -176,9 +205,8 @@ export type UnitSelf = Readonly<{
   doctrine: Doctrine;
 }>;
 
-/** A position the platoon has dealt with. */
-/** A position the platoon has dealt with, or asked air about without an answer. */
-export type HandledPosition = Readonly<{ center: Vec2; tick: number; askedAir?: boolean }>;
+/** A completed position, failed attempt, or unanswered request; each has its own expiry rule. */
+export type HandledPosition = Readonly<{ center: Vec2; tick: number; askedAir?: boolean; failed?: boolean; reason?: 'support-timeout' }>;
 
 export type NoticedAircraft = Readonly<{ position: Vec2; altitudeMeters: number; seenAt: number }>;
 
@@ -227,6 +255,7 @@ export type PlatoonDecision = Readonly<{
   mode: GroundMode;
   returnsUsed: number;
   drill: Drill | null;
+  coordination: DrillCoordination | null;
   ambushSprung: boolean;
   objectiveDone: boolean;
   fallback: Area;

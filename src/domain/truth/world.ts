@@ -11,6 +11,9 @@ import type {
   ContactId,
   Doctrine,
   Drill,
+  DrillPhase,
+  DrillWaitReason,
+  GroundVolley,
   GroundBehavior,
   GroundIntent,
   GroundMode,
@@ -53,6 +56,9 @@ export type Platoon = {
   doctrine: Doctrine;
   activeFromTick: number;
   drill: Drill | null;
+  drillPhase: DrillPhase | null;
+  /** Diagnostic output only; omitted from UnitSelf. */
+  drillWaitReason: DrillWaitReason | null;
   ambushSprung: boolean;
   ambushSprungAt: number | null;
   handled: readonly HandledPosition[];
@@ -60,6 +66,7 @@ export type Platoon = {
 
 /** The smallest simulated combat unit. Orders and morale belong to its platoon. */
 export type GroundUnit = {
+  groundVolley: GroundVolley | null;
   id: UnitId;
   platoonId: UnitId;
   slot: Vec2;
@@ -132,7 +139,20 @@ export type Track = {
   claimed?: number;
 };
 
+export type AircraftRecord = {
+  airborneSeconds: number; stationSeconds: number; landedSeconds: number;
+  damageIncidents: number; repairSeconds: number;
+  bombs: number; gunBursts: number; flares: number; illuminationSeconds: number;
+  enemyCasualties: number; friendlyCasualties: number;
+  observedSquads: string[]; firstAirSightings: number;
+  observationSamples: number; observationErrorMeters: number;
+  woundedDelivered: number; hospitalSeconds: number; survivorsDelivered: number;
+  sorties: { departedAt: number; returnedAt: number | null }[];
+};
+
 export type Aircraft = {
+  /** Truth-only accounting for the mission report. Never used for decisions. */
+  record: AircraftRecord;
   id: AircraftId;
   aircraftType: AircraftType;
   model: string;

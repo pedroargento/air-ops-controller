@@ -103,6 +103,9 @@ describe('downed pilot', () => {
     expect(state.truth.units.some((unit) => unit.platoonId === SURVIVOR)).toBe(false);
     run(state, 4000);
     expect(state.truth.outcome).toBe('success');
+    expect(jolly.record.survivorsDelivered).toBe(1);
+    expect(jolly.record.sorties).toHaveLength(1);
+    expect(jolly.record.sorties[0]?.returnedAt).not.toBeNull();
   });
 
   it('lifts off when told to, losing the boarding so far, and the survivor goes back to hiding', () => {
@@ -142,5 +145,43 @@ describe('downed pilot', () => {
     expect(outcomes('none').every((outcome) => outcome === 'failure')).toBe(true);
     expect(outcomes('rescueNow').filter((outcome) => outcome === 'success').length).toBeGreaterThanOrEqual(3);
     expect(distance(mission.sightedAt, mission.area.center)).toBeLessThan(mission.area.radius);
+  });
+});
+
+
+describe('landed helicopter transitions', () => {
+  function landed() {
+    const state = alone();
+    const jolly = readyJolly(state);
+    jolly.position = { x: 0, y: 0 };
+    jolly.status = 'onStation';
+    jolly.landed = true;
+    jolly.order = { kind: 'Pickup', center: jolly.position, radius: 50 };
+    return { state, jolly };
+  }
+
+  it('lifts and travels when retasked directly to another pickup', () => {
+    const { state, jolly } = landed();
+    jolly.boardingSeconds = 12;
+    jolly.loadProgress = 0.5;
+    const target = { x: 1000, y: 1000 };
+    run(state, 10, [order(state, JOLLY, { kind: 'Pickup', center: target, radius: 50 })]);
+    expect(jolly.landed).toBe(false);
+    expect(distance(jolly.position, { x: 0, y: 0 })).toBeGreaterThan(0);
+    expect(jolly.boardingSeconds).toBe(0);
+    expect(jolly.loadProgress).toBe(0);
+  });
+
+  it('leaves a pickup at BINGO with wounded already aboard', () => {
+    const { state, jolly } = landed();
+    const model = air.models[jolly.model]!;
+    jolly.fuelSeconds = distance(jolly.position, air.airbase) / model.speedMps + model.bingoMarginSeconds;
+    jolly.casualtiesAboard = [{ count: 1, since: 0 }];
+    run(state, 1);
+    expect(jolly.status).toBe('returning');
+    expect(jolly.landed).toBe(false);
+    expect(jolly.order).toBeNull();
+    expect(jolly.casualtiesAboard).toEqual([{ count: 1, since: 0 }]);
+    expect(jolly.fuelSeconds).toBeGreaterThan(0);
   });
 });

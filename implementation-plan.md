@@ -24,7 +24,99 @@ Version 0.2.0, released 2026-11-03. Six scenarios are playable from a menu, with
 
 **Order from here:** S5 with medevac in it, then S6 and the harder S8 rescue, then the outpost playtest that closes M9, then Phase 1 (M10–M12).
 
-### Current balance
+### Standard tactics restored; experimental opt-in — 2026-11-10
+
+At the user's request, `ground.experimentalTactics` is false in shared rules and defaults to false when absent from older files. Standard play restores static drill assignments, individual flank completion, earlier attack commitment and the earlier attack fallback when a reasonable bypass is unavailable. The new coordinated phases, dynamic support assignment, doctrine willingness/reassessment, revised contact response, progress extensions and support-wait budget are retained behind explicit opt-in. Assault doctrine's additional capabilities now live in `experimentalDrills`, merged only when enabled. Gate ablations cannot enable the master switch.
+
+Independent fixes remain active: failed attempts never clear threats, fresh reports reopen positions, air promises do not establish suppression, objectives under fire are not clear, withdrawing/searching units retain return fire, stale drill routes are discarded, support can seek a reported target, and hunter sweeps remain distinct. The mission report is retained. This supersedes the November 8 decision to leave experimental tactics enabled in normal play; it does not promise identical historical balance with historical bugs restored.
+
+To opt in, use `--set ground.experimentalTactics=true` in batch runs or the same setting in authored rules for browser play. The dedicated experiment runner/suites explicitly enable it. The runner also accepts an optional final `standard` argument for default-mode comparisons, stored separately from the historical factorial report. Both sides use the same switch and decision boundary. No new truth is exposed to AI.
+
+Validation: `npm run check` passes 42 files / 675 tests. Coverage includes all shipped defaults, missing-setting compatibility, reversible opt-in and doctrine resolution, both modes assigning roles, coordination only when opted in, inert gate overrides and support budgets in standard mode, and independent threat-memory fixes in both modes. The golden replay hash deliberately changes from `33086b44` to `a66514cf` for the selective rollback and resolved configuration.
+
+### Current balance — standard tactics, 2026-11-10
+
+Completed 3,600 default-mode battles (seeds 1–300, six scenarios, no air and one established informed policy each), paired against the saved experimental baseline. Another 240 opt-in battles (seeds 1–20 in the same twelve cases) exactly reproduce its outcomes, friendly/enemy personnel remaining and end ticks. These are the final-code results; earlier verification runs are excluded. Raw data and paired aggregates are in `reports/tactics-default/`.
+
+Successes out of 300; before means the formerly enabled experimental tactics, after means the new standard default.
+
+| Scenario | No air before → after | Informed policy | Informed before → after |
+|---|---:|---|---:|
+| outpost-under-pressure | 81 → 14 | `informed` | 256 → 236 |
+| valley-road | 18 → 54 | `routeRecon` | 99 → 187 |
+| overwatch | 2 → 19 | `routeReconCover` | 23 → 56 |
+| outpost-night | 98 → 3 | `informedLit` | 193 → 120 |
+| downed-pilot | 0 → 0 | `rescueNow` | 292 → 292 |
+| find-them | 0 → 0 | `sweep` | 239 → 239 |
+
+The road scenarios improve substantially, but remain below the older pre-review success rates (Valley recon 235/300, Overwatch cover 120/300). Independent fixes were deliberately retained, so this is not an exact historical rollback or a claim that balance is finished. Outposts return close to their historical results; rescue and recon-only success totals remain stable. Weapons, casualties and mission thresholds were not retuned.
+
+Production build and regenerated parameter documentation pass alongside the 675 tests. Reproduce one standard-mode case with:
+
+```sh
+node --import tsx src/cli/ground-experiments.ts valley-road routeRecon 111 1 300 null /tmp/valley-standard.json standard
+```
+
+Omit the final `standard` argument to run the experimental comparison. The normal batch runner stays in standard mode unless explicitly given `--set ground.experimentalTactics=true`.
+
+### Controlled ground experiments — 2026-11-08
+
+Completed **6,800 battles**: a full 2×2×2 screen of support, assembly and reassessment gates (100 paired seeds × four road scenario/policy cases × eight combinations), a predeclared 120-second support-wait candidate (400 battles), independent confirmation of reassessment-off and the timer against baseline (200 additional seeds × four cases × three variants), and timer controls on both outposts (100 seeds × four cases × two variants). The reusable runner, diagnostic observer and paired/factorial report generator are in `src/cli/ground-experiment*.ts`. Detailed tables, definitions, limitations and reproduction commands are in [docs/ground-experiments.md](docs/ground-experiments.md); local raw runs and the machine-readable report are in `reports/ground-experiments/`.
+
+The strongest screened effect was the **reassessment package**, not support or assembly gating. On held-out seeds 101–300, removing it changes Valley Road success from 13 to 32 / 200 without air, and 61 to 99 / 200 with recon. Overwatch changes from 1 to 1 / 200 without air and 16 to 6 / 200 with cover. Friendly personnel remaining rises by 8.1–11.1 per battle across all four cases. Better survival therefore does not guarantee route completion. This package combines ongoing willingness, bypass reassessment and generic assault commitment, on both sides; the experiment does not identify which component or faction drives the result.
+
+Implemented optional doctrine `supportWaitSeconds`: accumulated missing-support time survives brief volleys, role changes and target corrections. Expiry tries a feasible bypass or withdraws under existing recovery rules, without claiming the enemy cleared. The predeclared 120-second setting reduces stationary maneuver waiting under fire by 28–53% in held-out cases, but changes wins to 9, 62, 1 and 18 / 200 respectively. Outpost controls are mixed too. **Initial November 8 recommendation (superseded November 10): keep all gates enabled and the timer null by default**; neither candidate is a demonstrated general balance fix. Waiting for aircraft already has its separate `airWaitSeconds` limit. Next isolate the three reassessment components and measure arrival/progress alongside survivors; do not tune casualty rates or thresholds to hide the regression.
+
+All 1,600 baseline reruns exactly match the saved pre-experiment outcomes, remaining personnel and end ticks. New diagnostic fields and the null doctrine setting change the golden hash from `3e64fedd` to `33086b44`; stripping just those fields reproduces the old hash. Diagnostics are never AI inputs. Final validation: 42 test files / 666 tests, production build and regenerated parameter documentation.
+
+### Ground coordination and doctrine — 2026-11-08
+
+The ground review is implemented in §4.0.2.1. `SquadStatus` carries only a platoon's own local state and the aim/time of its own ground volleys. `coordinateDrill` is a pure AI function that assigns roles and chooses approach, establish-support, maneuver or assault. The simulator projects own status, applies the returned assignments and resolves combat. There is no general behavior-tree framework and no new runtime dependency. New tactics should extend these public inputs and pure decisions, with an encounter test and a knowledge-boundary test; they must not query an enemy unit from simulation code.
+
+Support must be armed, unpinned, in range, able to see the estimated position, and recently firing there before maneuver begins. Fire does not certify suppression or casualties. Roles are reassessed when support fails; flankers assemble at separate points. Units retain their plan while making movement progress, avoiding the old timeout/restart loop. Route missions reconsider unfavorable attacks and deadlines, continue past positions behind them, and use announced suppression even if already attacking. Fresh local sightings can correct a route drill's estimate without restarting it; authored assault objectives remain fixed.
+
+Fixed permanent assault commitment, failed drills recorded as completed, indefinite handled-position memory, support unable to seek a view of a reported target, search and withdrawal losing blind return fire, and identical hunter sweeps for equal-length IDs. Assault doctrine now knows drills, patrols can react to contact, close surprise is distinguished from prolonged or warned contact, and only exposed squads execute the immediate near-ambush response. ETA alone no longer counts as suppression. Wounded, casualty withdrawal thresholds and combat lethality have not been retuned.
+
+The coordinator is a platoon abstraction. Own status is shared at tactical updates, not modeled as a separate delayed internal radio network. It does not yet organize cooperation between platoons or a covered, alternating withdrawal. Supporting fire is evidence of own activity, not a measurement of enemy suppression. These are explicit limits, not claims of historical fidelity.
+
+Validation: `npm run check` passed 40 files / 657 tests; `npm run build` passed. Added 29 encounter and boundary regressions, including scrambling enemy and unrelated friendly positions, personnel, weapons, suppression, routes and orders while retaining identical decisions. Existing tests still check symmetry, false reports and deterministic replay. Golden replay hash deliberately changes from `92be02f5` to `3e64fedd` for the new state and behavior. The quick single-squad balance test now requires a low unaided win count and a substantial benefit from informed air, instead of requiring zero unaided wins for its particular seeds.
+
+Measured **3,600 paired runs**: seeds 1–300, no air and one representative informed policy on each of the six scenarios. This is a before/after comparison against the workspace immediately before the ground changes; it is not a sweep of every policy. No scenario mission requirement, deadline, ammunition inventory or casualty/lethality parameter was changed.
+
+| Scenario / policy | Wins before → after (of 300) | Change | Mean friendly personnel left | Mean duration (minutes) |
+|---|---:|---:|---:|---:|
+| outpost-under-pressure / `none` | 13 → 81 | +22.7 pp | 68.3 → 75.4 | 64.9 → 72.1 |
+| outpost-under-pressure / `informed` | 236 → 256 | +6.7 pp | 82.7 → 83.8 | 74.5 → 74.7 |
+| valley-road / `none` | 74 → 18 | -18.7 pp | 27.9 → 15.4 | 113.1 → 107.3 |
+| valley-road / `routeRecon` | 235 → 99 | -45.3 pp | 41.7 → 31.1 | 95.4 → 105.2 |
+| overwatch / `none` | 45 → 2 | -14.3 pp | 28.9 → 10.7 | 118.0 → 110.5 |
+| overwatch / `routeReconCover` | 120 → 23 | -32.3 pp | 35.6 → 22.3 | 113.8 → 115.3 |
+| outpost-night / `none` | 3 → 98 | +31.7 pp | 56.8 → 66.0 | 61.0 → 73.0 |
+| outpost-night / `informedLit` | 122 → 193 | +23.7 pp | 67.9 → 73.7 | 70.3 → 73.9 |
+| downed-pilot / `none` | 0 → 0 | +0.0 pp | 0.0 → 0.0 | 768.1 → 799.9 |
+| downed-pilot / `rescueNow` | 292 → 292 | +0.0 pp | 0.0 → 0.0 | 84.2 → 79.3 |
+| find-them / `none` | 0 → 0 | +0.0 pp | 12.0 → 12.0 | 60.0 → 60.0 |
+| find-them / `sweep` | 239 → 239 | +0.0 pp | 12.0 → 12.0 | 60.0 → 60.0 |
+
+**Balance limitation:** These rules are not balance-neutral. Outpost Under Pressure becomes easier without air (4.3% → 27.0% success), while informed air still helps substantially (85.3%). Night also becomes easier. Valley Road falls from 78.3% to 33.0% with its informed bot; Overwatch falls from 40.0% to 7.7%. Both road scenarios still reward air, but Overwatch especially needs scenario calibration and a playtest before this is treated as a balanced release. No-air victory remains above the original outpost M5 gate; this change does not close that gate. Rescue keeps 292/300 successes, with different individual seeds; Find Them remains identical across all recorded fields.
+
+The initial coordination version stalled route missions and failed to use refreshed local estimates. Traces led to mission-aware bypass/reassessment, discarding finished tactical routes and correcting estimated targets without restarting a maneuver. The figures above include those fixes. The remaining shift is recorded rather than compensated with hidden enemy information or unmeasured combat tuning.
+
+Detailed aggregate measurements, including paired outcome flips, remaining enemy personnel, casualty rates and fire-time share, are in `reports/ground-coordination-comparison.json` (generated local report). Scenario calibration is the next balance task; formation coordination and truth isolation are implemented and tested.
+
+### Mission report and review fixes — 2026-11-08
+
+Playtest feedback: the Summary was difficult to interpret and unused. Its original loss-comparison purpose had been superseded by condition bars and casualty reports. The user rejected a live situation board because interpreting the radio and operational map is the operator's job. The live Summary and its status board are removed; a mission report opens after play, can be reopened, and exports JSON. It explains the mission result and separates people, aircraft contributions, and intelligence accuracy without an overall score.
+
+Aircraft counters are truth-only and shared by browser and batch runs. They account for sorties, airborne/station/landed time, damage and repair burden, weapons and illumination, actual strike casualties by side, unique enemy squads observed and first air sightings, position error, hospital deliveries and survivors. Source accuracy remains available in the report. Rescued squads remain in personnel totals after leaving the operational map. The completed report is cached. Batch sortie averages now count actual departures, matching aircraft rows; preparations cancelled before departure do not count. Legacy summary tuning remains accepted in scenario files for compatibility but has no live display.
+
+Fixed landed pickup retasking, landed BINGO enforcement, and invalid URL speed/seed parsing. Focused regressions reproduce retasking and low-fuel pickups. Before/after paired runs, seeds 1–300 for outpost `informedMedevac` and Downed Pilot `rescueNow`, and 1–20 for the four other scenarios, found **no differences in any existing BattleResult field across 680 pairs**. Wins: outpost 248/300, rescue 292/300, night `informedLit` 8/20, Valley Road `routeRecon` 17/20, Overwatch `routeReconCover` 11/20, Find Them `sweep` 13/20. These are regression samples, not replacement balance estimates. The bots did not trigger the fixed helicopter edge cases.
+
+Replay state now includes accounting: golden hash `4970a0f8` becomes `92be02f5`; stripping the report counters from the new state gives the old hash exactly. No decision reads the new counters and no new RNG draws are made.
+
+Validation: `npm run check` passed (39 files, 628 tests), `npm run build` passed, and Chromium `npm run e2e` passed 71 checks, including absence of live report truth, automatic report opening, aircraft detail expansion, JSON download, close/reopen/Escape, timeline review, browser/headless replay equality, night illumination and rescue controls. Obsolete summary/status-board tests were removed with those features. The browser fire-label assertion now compares with the current player report, since an unanswered support request can outlast its fire report.
+
+### Historical balance — 2026-11-05
 
 Measured on 2026-11-05 over 300 seeds per bot, after wounded and medevac (S7), with the bots denying danger close (the `…Approve` variants clear it every time and do worse almost everywhere). Wins are percent; the 95% interval at 300 seeds is about ±5 points near 50%. Every bot is listed in `src/cli/policy-registry.ts`.
 

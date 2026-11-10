@@ -13,6 +13,7 @@ import {
 } from '../../src/domain/public/ground';
 
 const doctrine: Doctrine = {
+  experimentalTactics: false,
   speedMps: 1,
   detectRangeMeters: 500,
   observerQuality: 1,
@@ -49,6 +50,8 @@ const doctrine: Doctrine = {
   attackStrengthRatio: 1.5,
   maxDetourFactor: 2,
   supportShare: 0.34,
+  supportFireMemorySeconds: 15,
+  supportWaitSeconds: null,
   flankMeters: 200,
   warningMeters: 700,
   corridorMeters: 180,
@@ -81,7 +84,7 @@ const self = (overrides: Partial<UnitSelf> = {}): UnitSelf => ({
   position: { x: 0, y: 0 },
   slot: { x: 0, y: 0 },
   squads: 1,
-  drill: null,
+  drill: null, drillPhase: null, ownSquads: [], groundVolley: null,
   role: null,
   viaDone: false,
   ambushSprung: false,

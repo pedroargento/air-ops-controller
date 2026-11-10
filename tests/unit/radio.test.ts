@@ -38,7 +38,7 @@ function setup() {
     position: squad.position,
     slot: { x: 0, y: 0 },
     squads: 1,
-    drill: null,
+    drill: null, drillPhase: null, ownSquads: [], groundVolley: null,
     role: null,
     viaDone: false,
     ambushSprung: false,

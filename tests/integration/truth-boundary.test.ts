@@ -113,6 +113,7 @@ describe('friendly fire and danger close', () => {
     }
     expect(friendly.personnel).toBeLessThan(men);
     expect(state.truth.friendlyFireCasualties).toBe(men - friendly.personnel);
+    expect(state.truth.aircraft.reduce((sum, a) => sum + a.record.friendlyCasualties, 0)).toBe(state.truth.friendlyFireCasualties);
   });
 
   it('holds off a friendly marker, and says so', () => {

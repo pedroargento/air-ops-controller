@@ -10,6 +10,7 @@ import type {
   DrillKind,
   DrillMap,
   GroundObjective,
+  GroundExperiment,
   HandledPosition,
   SquadRole,
   UnitKnowledge,
@@ -93,9 +94,10 @@ function strengthAround(self: UnitSelf, known: readonly ContactEstimate[], point
   return Math.max(add(near.filter(fromPlatoon)), add(told.filter((contact) => contact.grouped !== true)), ...grouped);
 }
 
-function isHandled(self: UnitSelf, point: Vec2): boolean {
+function isHandled(self: UnitSelf, point: Vec2, observedAt: number): boolean {
   const radius = self.doctrine.groupRadiusMeters;
-  return self.handled.some(({ center, askedAir }) => askedAir !== true && distance(center, point) <= radius);
+  return self.handled.some(({ center, tick, askedAir, failed }) => askedAir !== true && distance(center, point) <= radius &&
+    (failed === true || observedAt <= tick));
 }
 
 function askedAirAbout(self: UnitSelf, point: Vec2): boolean {
@@ -118,6 +120,24 @@ function destinationOf(objective: GroundObjective): Vec2 | null {
   }
 }
 
+/** A route mission need not turn back to defeat a position it has already passed. */
+function behindMission(self: UnitSelf, point: Vec2): boolean {
+  const destination = destinationOf(self.objective);
+  return self.doctrine.experimentalTactics && self.objective.kind === 'MoveTo' && destination !== null &&
+    distance(point, destination) > distance(self.position, destination) + self.doctrine.arrivedMeters;
+}
+
+export function bypassForMission(self: UnitSelf, knowledge: UnitKnowledge, target: Vec2, tick: number, map: DrillMap, supportFailed = false): Drill | null {
+  if (self.objective.kind !== 'MoveTo' || !knows(self, 'bypass')) return null;
+  const destination = self.objective.area.center;
+  const direct = map.routeMeters(self.position, destination, null);
+  const pressed = self.secondsLeft < direct / self.doctrine.speedMps + self.doctrine.drillSeconds;
+  if (!supportFailed && !pressed && !behindMission(self, target) && willingToAttack(self, knowledge, target, tick)) return null;
+  const avoid = { center: target, radius: self.doctrine.flankMeters * 0.75 };
+  return map.routeMeters(self.position, destination, avoid) <= direct * self.doctrine.maxDetourFactor
+    ? drill(self, 'bypass', target, tick, map, true) : null;
+}
+
 /** The nearest position on the way, from where the platoon's own route goes next. */
 function threatOnRoute(self: UnitSelf, known: readonly ContactEstimate[]): ContactEstimate | null {
   const { warningMeters, corridorMeters } = self.doctrine;
@@ -125,7 +145,8 @@ function threatOnRoute(self: UnitSelf, known: readonly ContactEstimate[]): Conta
   let best: ContactEstimate | null = null;
   let bestRange = Number.POSITIVE_INFINITY;
   for (const contact of known) {
-    if (isHandled(self, contact.position.center)) continue;
+    if (behindMission(self, contact.position.center)) continue;
+    if (isHandled(self, contact.position.center, contact.position.observedAt)) continue;
     const range = distance(self.position, contact.position.center);
     if (range > warningMeters || range >= bestRange) continue;
     const onRoute = route.some(
@@ -163,6 +184,26 @@ function flankPoint(self: UnitSelf, target: Vec2, map: DrillMap): Vec2 {
 
 const HOLDING_DRILLS: ReadonlySet<DrillKind> = new Set(['farAmbush', 'hastyAmbush']);
 
+/** Capability and preference both matter, using only the reported enemy strength. */
+export function willingToAttack(self: UnitSelf, knowledge: UnitKnowledge, point: Vec2, tick: number): boolean {
+  const d = self.doctrine;
+  const ratio = strengthAround(self, knownHostiles(self, knowledge, tick), point) / Math.max(1, self.platoonFree);
+  return self.ammunition > 0 && self.ammunition >= self.initialAmmunition * d.assaultAmmunitionFraction &&
+    self.morale > d.withdrawMorale && ratio <= d.attackStrengthRatio &&
+    d.assaultBias > Math.max(d.observeBias, d.harassBias, d.probeBias);
+}
+
+/** Recent close fire without a prior warning, not every nearby firefight. */
+function closeSurprise(self: UnitSelf, knowledge: UnitKnowledge, contact: ContactEstimate, tick: number): boolean {
+  const since = knowledge.fire.since;
+  if (!self.underFire || since === null || tick - since > self.doctrine.clearSeconds) return false;
+  if (distance(self.position, contact.position.center) > self.doctrine.nearAmbushMeters) return false;
+  const warned = knownHostiles(self, knowledge, tick).some((entry) =>
+    entry.position.observedAt < since && distance(entry.position.center, contact.position.center) <= self.doctrine.groupRadiusMeters,
+  );
+  return !warned && self.drill?.warned !== true;
+}
+
 function drill(self: UnitSelf, kind: DrillKind, target: Vec2, tick: number, map: DrillMap, warned = false, radius = self.doctrine.attackRadiusMeters): Drill {
   const definition = DRILLS[kind];
   const flanks = definition.rest === 'maneuver' && self.squads >= definition.flankFrom;
@@ -175,6 +216,7 @@ function drill(self: UnitSelf, kind: DrillKind, target: Vec2, tick: number, map:
     via: flanks ? flankPoint(self, target, map) : null,
     avoid: flanks || kind === 'bypass' ? avoid : null,
     warned,
+    progress: { at: tick, remainingMeters: self.ownSquads.reduce((sum, squad) => sum + distance(squad.position, target) + (flanks ? 2 * self.doctrine.flankMeters : 0), 0) },
   };
 }
 
@@ -236,12 +278,13 @@ function answerPosition(
   if (comingTowards(self, threat) && knows(self, 'hastyAmbush')) return drill(self, 'hastyAmbush', target, tick, map, true);
 
   const pressed = self.secondsLeft < direct / doctrine.speedMps + doctrine.drillSeconds;
-  if ((ratio > doctrine.attackStrengthRatio || pressed) && destination !== null && knows(self, 'bypass')) {
+  const willing = doctrine.experimentalTactics ? willingToAttack(self, knowledge, target, tick) : ratio <= doctrine.attackStrengthRatio;
+  if ((!willing || pressed) && destination !== null && knows(self, 'bypass')) {
     const avoid = { center: target, radius: doctrine.flankMeters * 0.75 };
     const around = map.routeMeters(self.position, destination, avoid);
     if (around <= direct * doctrine.maxDetourFactor) return drill(self, 'bypass', target, tick, map, true);
   }
-  return knows(self, 'attack') ? drill(self, 'attack', target, tick, map, true) : null;
+  return (!doctrine.experimentalTactics || willing) && knows(self, 'attack') ? drill(self, 'attack', target, tick, map, true) : null;
 }
 
 function nearestHostile(self: UnitSelf, knowledge: UnitKnowledge, tick: number): ContactEstimate | null {
@@ -263,27 +306,29 @@ function nearestHostile(self: UnitSelf, knowledge: UnitKnowledge, tick: number):
 function startDrill(self: UnitSelf, knowledge: UnitKnowledge, tick: number, map: DrillMap): Drill | null {
   const { objective, doctrine } = self;
   if (doctrine.drills.length === 0) return null;
-  // Drills belong to a platoon going somewhere: holding and patrolling have their own rules.
-  if (objective.kind !== 'MoveTo' && objective.kind !== 'AssaultArea') return null;
+  if (self.handled.some((entry) => entry.failed === true)) return null;
+  if (objective.kind !== 'MoveTo' && objective.kind !== 'AssaultArea' && (!doctrine.experimentalTactics || objective.kind !== 'PatrolArea')) return null;
   // Fired on, a platoon answers the shooter it can see, not the nearest enemy it knows of (§4.0.3).
   const shooter = self.underFire ? shooterContact(self, knowledge, Number.POSITIVE_INFINITY) : null;
   const nearest = shooter !== null && tick - shooter.position.observedAt <= doctrine.clearSeconds ? shooter : nearestHostile(self, knowledge, tick);
   if (self.underFire && nearest !== null) {
     const center = nearest.position.center;
-    const range = distance(self.position, center);
     // Told the ambush is being suppressed, the way out of the kill zone is to keep going.
     const pushed = pushThroughIfSuppressed(self, knowledge, center, tick, map);
     if (pushed !== null) return pushed;
-    if (range <= doctrine.nearAmbushMeters) return knows(self, 'nearAmbush') ? drill(self, 'nearAmbush', center, tick, map) : null;
+    const close = doctrine.experimentalTactics ? closeSurprise(self, knowledge, nearest, tick) : distance(self.position, center) <= doctrine.nearAmbushMeters;
+    if (close && (!doctrine.experimentalTactics || knows(self, 'nearAmbush'))) return knows(self, 'nearAmbush') ? drill(self, 'nearAmbush', center, tick, map) : null;
+    const bypass = doctrine.experimentalTactics ? bypassForMission(self, knowledge, center, tick, map) : null;
+    if (bypass !== null) return bypass;
     const known = knownHostiles(self, knowledge, tick);
     const strong = strengthAround(self, known, center) / Math.max(1, self.platoonPersonnel) > doctrine.attackStrengthRatio;
-    if (strong && knows(self, 'bypass') && !isHandled(self, center)) return drill(self, 'bypass', center, tick, map);
+    if (objective.kind !== 'PatrolArea' && strong && knows(self, 'bypass') && !isHandled(self, center, nearest.position.observedAt)) return drill(self, 'bypass', center, tick, map);
     return knows(self, 'farAmbush') ? drill(self, 'farAmbush', center, tick, map) : null;
   }
   if (objective.kind === 'AssaultArea' && knows(self, 'attack')) {
     // Only an attack on the objective itself finishes it, not a fight that happened nearby.
     const { center, radius } = objective.area;
-    const finished = self.handled.some((entry) => distance(entry.center, center) < 1);
+    const finished = self.handled.some((entry) => entry.askedAir !== true && distance(entry.center, center) < 1);
     return finished ? null : drill(self, 'attack', center, tick, map, false, radius);
   }
   const known = knownHostiles(self, knowledge, tick);
@@ -308,7 +353,7 @@ function goalMet(self: UnitSelf, knowledge: UnitKnowledge, active: Drill, tick: 
         !enemyStillThere(self, knowledge, active, doctrine.detectRangeMeters, tick);
     case 'areaClear': {
       const arrived = distance(self.position, active.target) <= active.radius + self.doctrine.objectiveMarginMeters;
-      return arrived && !enemyStillThere(self, knowledge, active, active.radius + self.doctrine.objectiveMarginMeters, tick);
+      return arrived && !self.underFire && !enemyStillThere(self, knowledge, active, active.radius + self.doctrine.objectiveMarginMeters, tick);
     }
     case 'passed': {
       const clear = active.avoid === null || distance(self.position, active.target) > active.avoid.radius;
@@ -316,10 +361,8 @@ function goalMet(self: UnitSelf, knowledge: UnitKnowledge, active: Drill, tick: 
       return clear && (destination === null || distance(self.position, destination) < distance(active.target, destination));
     }
     case 'supportArrived': {
-      // Only a promise still standing counts: an old one that lapsed means nothing now.
-      const promise = knowledge.expectedSupport;
-      const promised = promise !== null && tick >= promise.etaAt && tick <= promise.lapsesAt;
-      return promised || suppressedNow(self, knowledge, active.target, tick);
+      // An ETA is an expectation, not a report that support has begun.
+      return suppressedNow(self, knowledge, active.target, tick);
     }
   }
 }
@@ -332,18 +375,62 @@ export type DrillStep = Readonly<{
 }>;
 
 /** Keeps, ends or starts the platoon's drill, from its own picture. */
-export function nextDrill(self: UnitSelf, knowledge: UnitKnowledge, tick: number, map: DrillMap): DrillStep {
-  const kept = self.handled;
-  const active = self.drill;
+export function nextDrill(self: UnitSelf, knowledge: UnitKnowledge, tick: number, map: DrillMap, experiment?: GroundExperiment): DrillStep {
+  const known = knownHostiles(self, knowledge, tick);
+  const kept = self.handled.filter((entry) => {
+    if (entry.failed === true) return tick - entry.tick < self.doctrine.pauseSeconds;
+    if (entry.askedAir === true) return tick - entry.tick < self.doctrine.airRefusedMemorySeconds;
+    return tick - entry.tick < self.doctrine.reportMemorySeconds && !known.some((contact) =>
+      contact.position.observedAt > entry.tick && distance(contact.position.center, entry.center) <= self.doctrine.groupRadiusMeters,
+    );
+  });
+  let active = self.drill;
   if (self.mode !== 'steady') return { drill: null, finished: null, handled: kept };
   const trimmed = { ...self, handled: kept };
 
   if (active !== null) {
+    if (self.doctrine.experimentalTactics && active.kind === 'attack' && self.objective.kind === 'MoveTo') {
+      const covered = pushThroughIfSuppressed(trimmed, knowledge, active.target, tick, map);
+      if (covered !== null) return { drill: covered, finished: null, handled: kept };
+    }
+    if (self.doctrine.experimentalTactics && (active.kind === 'farAmbush' || (active.kind === 'attack' && self.objective.kind !== 'AssaultArea'))) {
+      // A fresh local sighting can correct an imprecise forwarded position. Spatial
+      // association is deliberately fallible; no true identity or location is consulted.
+      const priorTarget = active.target;
+      const local = Object.values(knowledge.contacts).filter((contact) => contact.identification === 'hostile' &&
+        tick - contact.position.observedAt <= self.doctrine.clearSeconds &&
+        distance(contact.position.center, priorTarget) <= self.doctrine.groupRadiusMeters,
+      ).sort((a, b) => distance(a.position.center, priorTarget) - distance(b.position.center, priorTarget) ||
+        (a.contactId < b.contactId ? -1 : a.contactId > b.contactId ? 1 : 0))[0];
+      if (local !== undefined && distance(local.position.center, active.target) > active.radius) {
+        const dx = local.position.center.x - active.target.x;
+        const dy = local.position.center.y - active.target.y;
+        active = { ...active, target: local.position.center,
+          via: active.via === null ? null : { x: active.via.x + dx, y: active.via.y + dy },
+          avoid: active.avoid === null ? null : { ...active.avoid, center: local.position.center },
+        };
+      }
+    }
+    if (self.doctrine.experimentalTactics && (active.kind === 'attack' || active.kind === 'farAmbush') && experiment?.attackReassessment !== false) {
+      const bypass = bypassForMission(trimmed, knowledge, active.target, tick, map);
+      if (bypass !== null) return { drill: bypass, finished: null, handled: kept };
+    }
+    if (self.doctrine.experimentalTactics && active.progress !== undefined && (active.kind === 'attack' || active.kind === 'farAmbush')) {
+      const { target, via } = active;
+      const remainingMeters = self.ownSquads.reduce((sum, squad) => {
+        if (squad.role === 'support' || squad.role === 'cover') return sum;
+        return sum + (squad.role === 'maneuver' && !squad.viaDone && via !== null
+          ? distance(squad.position, via) + distance(via, target) : distance(squad.position, target));
+      }, 0);
+      if (remainingMeters + self.doctrine.arrivedMeters < active.progress.remainingMeters) {
+        active = { ...active, progress: { at: tick, remainingMeters } };
+      }
+    }
     const met = goalMet(trimmed, knowledge, active, tick);
     // Nobody answering is an answer too: after a while the platoon decides without air.
     const limit = active.kind === 'waitForAir' ? self.doctrine.airWaitSeconds : self.doctrine.drillSeconds;
     const refused = active.kind === 'waitForAir' && knowledge.supportRefusedAt !== null && knowledge.supportRefusedAt >= active.startedAt;
-    const expired = refused || tick - active.startedAt >= limit;
+    const expired = refused || tick - (self.doctrine.experimentalTactics ? active.progress?.at ?? active.startedAt : active.startedAt) >= limit;
     if (!met && !expired) {
       const nearest = nearestHostile(trimmed, knowledge, tick);
       // Holding drills give way once air operations says the position is being suppressed.
@@ -357,7 +444,7 @@ export function nextDrill(self: UnitSelf, knowledge: UnitKnowledge, tick: number
         active.kind !== 'nearAmbush' &&
         active.kind !== 'attack' &&
         !(active.kind === 'pushThrough' && suppressedNow(trimmed, knowledge, active.target, tick)) &&
-        distance(self.position, nearest.position.center) <= self.doctrine.nearAmbushMeters &&
+        (self.doctrine.experimentalTactics ? closeSurprise(trimmed, knowledge, nearest, tick) : distance(self.position, nearest.position.center) <= self.doctrine.nearAmbushMeters) &&
         knows(self, 'nearAmbush');
       return {
         drill: caught ? drill(trimmed, 'nearAmbush', nearest.position.center, tick, map) : active,
@@ -371,9 +458,7 @@ export function nextDrill(self: UnitSelf, knowledge: UnitKnowledge, tick: number
       const next = met && knows(self, 'pushThrough') ? drill(trimmed, 'pushThrough', active.target, tick, map, true) : null;
       return { drill: next, finished: met ? active : null, handled: asked };
     }
-    // An assault that ran out of time starts again: its objective still stands.
-    const again = !met && self.objective.kind === 'AssaultArea';
-    return { drill: null, finished: met ? active : null, handled: again ? kept : [...kept, { center: active.target, tick }] };
+    return { drill: null, finished: met ? active : null, handled: [...kept, { center: active.target, tick, ...(met ? {} : { failed: true }) }] };
   }
   return { drill: startDrill(trimmed, knowledge, tick, map), finished: null, handled: kept };
 }

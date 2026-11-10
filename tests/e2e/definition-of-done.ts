@@ -1,6 +1,6 @@
 // Plays the real page in a browser, following the Definition of Done (§14).
 // Usage: npm run e2e [-- --screenshots dir]
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { chromium, firefox, type Page } from 'playwright';
 import { createServer } from 'vite';
 import { loadScenarioFile } from '../../src/cli/load-scenario';
@@ -80,12 +80,17 @@ async function main(): Promise<void> {
     await page.locator('[data-action="scenarios"]').click({ trial: true });
 
     console.log('Load the scenario');
-    await page.goto(`http://localhost:${PORT}/?seed=1&speed=40`);
+    await page.goto(`http://localhost:${PORT}/?seed=1&speed=abc`);
+    await page.waitForFunction(() => 'airops' in window);
+    await page.evaluate(() => (window as unknown as { airops: { setSpeed: (s: number) => void } }).airops.setSpeed(40));
     await page.waitForSelector('#clock');
     check((await page.locator('.aircraft-row').count()) === 5, 'five aircraft are listed, the Dustoff among them');
     await page.waitForSelector('.log-row.command_update');
     check(true, 'CECON message is in the log');
     await shot(page, '1-start');
+
+    await page.waitForFunction(() => (window as unknown as { airops: { view: () => PlayerView } }).airops.view().tick > 0);
+    check(true, 'invalid URL speed does not poison the frame accumulator');
 
     console.log('Task recon before contact');
     await page.locator('[data-action="select-aircraft"][data-id="RECON-1"]').click();
@@ -178,8 +183,13 @@ async function main(): Promise<void> {
     await page.locator('[data-action="request"][data-kind="sitrep"]').click();
     const status = await page.locator('#selection .request-status').innerText();
     check(status.includes('Waiting for your answer'), 'the unit panel shows its open request and the answers to it');
-    const fireText = await page.locator('#selection .fire-line, #requests .fire-line').allInnerTexts();
-    check(fireText.some((text) => /under (heavy )?fire|heavy fire/i.test(text)), `a unit asking for air says it is under fire: "${fireText[0] ?? ''}"`);
+    const unitId = await page.locator('[data-action="request"][data-kind="sitrep"]').getAttribute('data-id');
+    const reportedUnderFire = await page.evaluate((id) => {
+      const { airops } = window as unknown as { airops: { view: () => PlayerView } };
+      return airops.view().friendlies.some((f) => f.unitId === id && f.underFire !== null);
+    }, unitId);
+    const fireText = await page.locator('#selection .fire-line').allInnerTexts();
+    check(fireText.some((text) => /under (heavy )?fire/i.test(text)) === reportedUnderFire, 'the unit panel reflects current fire reports, not a possibly older support request');
     await page.locator('#selection [data-action="no-air"]').click();
     await setPaused(page, false);
     await page.waitForFunction(() => document.querySelector('#requests')?.textContent?.includes('no air is available'));
@@ -323,12 +333,9 @@ async function main(): Promise<void> {
     check(true, 'selecting an aircraft shows the terrain along its path');
     await shot(page, '3c-profile');
 
-    console.log('Read the battle summary');
-    await page.locator('[data-action="tab"][data-id="summary"]').click();
-    await page.waitForFunction(() => document.querySelector('#summary')?.textContent?.includes('Known forces'));
-    check(true, 'the summary tab shows the reported enemy picture');
-    await shot(page, '3d-summary');
-    await page.locator('[data-action="tab"][data-id="radio"]').click();
+    check(await page.locator('[data-action="tab"][data-id="summary"]').count() === 0, 'no live Summary tab');
+    check(await page.locator('[data-action="mission-report"]').count() === 0, 'no mission report available during play');
+    check(await page.locator('#mission-report').innerHTML() === '', 'report truth is absent from the live DOM');
 
     console.log('Read the weather forecast');
     await page.locator('[data-action="layer"][data-id="weather"]').click();
@@ -351,10 +358,24 @@ async function main(): Promise<void> {
     check(true, `the run ended: ${result}`);
     await shot(page, '4-end');
 
-    await page.locator('[data-action="tab"][data-id="summary"]').click();
-    await page.waitForFunction(() => document.querySelector('#summary')?.textContent?.includes('what really happened'));
-    check(true, 'the end of the run shows a debrief against the estimates');
-    await shot(page, '4b-debrief');
+    await page.waitForSelector('#mission-report[open]');
+    check((await page.locator('#mission-report').textContent())?.includes('Aircraft performance') === true, 'mission report opens automatically with aircraft contributions');
+    await page.locator('#mission-report .aircraft-report summary').first().click();
+    check(await page.locator('#mission-report .aircraft-report[open]').count() === 1, 'aircraft performance expands');
+    const downloadEvent = page.waitForEvent('download');
+    await page.locator('[data-action="export-report"]').click();
+    const downloaded = await downloadEvent;
+    check(downloaded.suggestedFilename() === 'mission-report.json', 'mission report can be downloaded');
+    const downloadedPath = await downloaded.path();
+    if (downloadedPath === null) throw new Error('No downloaded report');
+    const savedReport = JSON.parse(readFileSync(downloadedPath, 'utf8')) as { aircraft: unknown[]; mission: { result: string } };
+    check(savedReport.aircraft.length === 5 && savedReport.mission.result === result, 'download contains the completed mission and every aircraft');
+    await shot(page, '4b-mission-report');
+    await page.locator('[data-action="close-report"]').first().click();
+    await page.locator('[data-action="mission-report"]').click();
+    await page.waitForSelector('#mission-report[open]');
+    await page.keyboard.press('Escape');
+    check(await page.locator('#mission-report[open]').count() === 0, 'report can be reopened and closed with Escape');
 
     await page.locator('[data-action="timeline"]').first().click();
     await page.waitForSelector('#timeline', { state: 'visible' });
@@ -376,6 +397,8 @@ async function main(): Promise<void> {
     for (const seed of [15, 17, 18, 22, 23, 25]) {
       if (damaged) break;
       await page.goto(`http://localhost:${PORT}/?seed=${seed}&speed=40`);
+      await page.waitForFunction(() => 'airops' in window);
+      await page.evaluate(() => (window as unknown as { airops: { setSpeed: (s: number) => void } }).airops.setSpeed(40));
       await page.waitForSelector('#clock');
       for (const id of ['CAS-1', 'CAS-2']) {
         await page.locator(`[data-action="select-aircraft"][data-id="${id}"]`).click();
@@ -407,6 +430,8 @@ async function main(): Promise<void> {
 
     console.log('Play a second scenario');
     await page.goto(`http://localhost:${PORT}/?scenario=valley-road&seed=3&speed=40`);
+    await page.waitForFunction(() => 'airops' in window);
+    await page.evaluate(() => (window as unknown as { airops: { setSpeed: (s: number) => void } }).airops.setSpeed(40));
     await page.waitForSelector('#clock');
     check((await page.title()) === 'Valley Road', 'the scenario comes from the URL');
     check((await page.locator('#objective').innerText()).includes('north end of the valley'), 'the briefing comes from the scenario');
@@ -419,6 +444,8 @@ async function main(): Promise<void> {
 
     console.log('Fight at night');
     await page.goto(`http://localhost:${PORT}/?scenario=outpost-night&seed=3&speed=40`);
+    await page.waitForFunction(() => 'airops' in window);
+    await page.evaluate(() => (window as unknown as { airops: { setSpeed: (s: number) => void } }).airops.setSpeed(40));
     await page.waitForSelector('#light');
     const lightText = await page.locator('#light').innerText();
     check(/^Night · moon \d+%/.test(lightText) && lightText.includes('first light'), `the header gives the light: "${lightText}"`);
@@ -448,6 +475,8 @@ async function main(): Promise<void> {
 
     console.log('Rescue a downed pilot');
     await page.goto(`http://localhost:${PORT}/?scenario=downed-pilot&seed=1&speed=60`);
+    await page.waitForFunction(() => 'airops' in window);
+    await page.evaluate(() => (window as unknown as { airops: { setSpeed: (s: number) => void } }).airops.setSpeed(60));
     await page.waitForSelector('#light');
     const viewOf = () => (window as unknown as { airops: { view: () => PlayerView } }).airops.view();
     check((await page.locator('.unit-chip[data-id="SURV-1"] .age.unknown').count()) === 1, 'the unseen survivor is listed among the units on the net');

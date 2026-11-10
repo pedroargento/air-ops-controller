@@ -1,3 +1,4 @@
+import { aircraftPerformance, missionEvidence } from '../sim/mission-report';
 import type { PlayerAction, PlayerCommand } from '../domain/public/commands';
 import type { CasualtyOutcome, Debrief, TruthFrame } from '../domain/public/debrief';
 
@@ -46,6 +47,7 @@ export class GameSession {
   private pending: PlayerAction[] = [];
   private stepsTaken = 0;
   private readonly frames: TruthFrame[] = [];
+  private completedReport: Debrief | null = null;
 
   constructor(
     private readonly scenario: Scenario,
@@ -98,14 +100,22 @@ export class GameSession {
   /** The truth, only once the run is over and there is nothing left to learn from it. */
   debrief(): Debrief | null {
     if (this.outcome === 'running') return null;
+    if (this.completedReport !== null) return this.completedReport;
     const { truth } = this.state;
-    const units = truth.units;
     const platoons = sortedPlatoons(truth);
+    // Rescued squads leave the operational map but still belong in personnel totals.
+    const units = platoons.flatMap((platoon) => platoon.squads);
     const lost = (platoon: Platoon): boolean => platoonPersonnel(platoon) <= 0;
     const sources = sourceScorecard(truth, this.state.player);
     const count = (side: 'friendly' | 'enemy', read: (u: (typeof units)[number]) => number): number =>
       units.filter((u) => u.side === side).reduce((sum, u) => sum + read(u), 0);
-    return {
+    this.completedReport = {
+      mission: {
+        name: this.scenario.file.name, objective: this.scenario.file.mission.briefing,
+        result: this.scenario.file.mission.results[this.outcome as 'success' | 'partial' | 'failure'],
+        elapsedSeconds: this.tick, evidence: missionEvidence(truth, this.scenario),
+      },
+      aircraft: aircraftPerformance(truth, this.scenario),
       enemyStart: count('enemy', (u) => u.initialPersonnel),
       enemyLeft: count('enemy', (u) => u.personnel),
       enemyFormations: platoons.filter((p) => p.side === 'enemy').length,
@@ -121,6 +131,7 @@ export class GameSession {
       groundClaims: sources.filter((source) => !this.isAircraft(source.sourceId)).reduce((sum, source) => sum + source.claimed, 0),
       sources,
     };
+    return this.completedReport;
   }
 
   private isAircraft(id: string): boolean {

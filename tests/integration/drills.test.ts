@@ -35,7 +35,7 @@ const self = (overrides: Partial<UnitSelf> = {}): UnitSelf => ({
   slot: { x: 0, y: 0 },
   platoonPersonnel: 24, wounded: 0, platoonWounded: 0, platoonFree: 24, platoonInitialPersonnel: 24, woundedWaitSeconds: null,
   squads: 2,
-  drill: null,
+  drill: null, drillPhase: null, ownSquads: [], groundVolley: null,
   role: null,
   viaDone: false,
   ambushSprung: false,
@@ -92,7 +92,9 @@ const started = (unit: UnitSelf, knowledge: UnitKnowledge, tick = 100): DrillKin
 
 describe('choosing a drill', () => {
   it('assaults through fire from close by', () => {
-    expect(started(self({ underFire: true }), sees(seen(100)))).toBe('nearAmbush');
+    const knowledge = sees(seen(100));
+    knowledge.fire.since = 95;
+    expect(started(self({ underFire: true }), knowledge)).toBe('nearAmbush');
   });
 
   it('returns fire and flanks when fired on from further off', () => {
@@ -111,9 +113,11 @@ describe('choosing a drill', () => {
     expect(started(self({ secondsLeft: 3100 }), told(seen(500)))).toBe('bypass');
   });
 
-  it('attacks after all when the way round is too long', () => {
+  it('makes refusal of an unfavorable attack an experimental behavior', () => {
     const long: DrillMap = { ...map, routeMeters: (from, to, avoid) => distance(from, to) * (avoid === null ? 1 : 3) };
-    expect(decidePlatoon(self(), told(seen(500, 0, 'C-1', 150, 51)), 100, long).drill?.kind).toBe('attack');
+    const knowledge = told(seen(500, 0, 'C-1', 150, 51));
+    expect(decidePlatoon(self(), knowledge, 100, long).drill?.kind).toBe('attack');
+    expect(decidePlatoon(self({ doctrine: { ...column, experimentalTactics: true } }), knowledge, 100, long).drill).toBeNull();
   });
 
   it('holds short for air against a strong position it can call air on, once', () => {
@@ -139,7 +143,9 @@ describe('choosing a drill', () => {
     const patient = { ...column, drills: [...column.drills, 'waitForAir', 'pushThrough'] } as const;
     const waiting = decidePlatoon(self({ doctrine: patient, canCallAir: true }), told(seen(500, 0, 'C-1', 150, 51)), 100, map).drill;
     const arrived = { ...told(seen(500)), expectedSupport: { aircraftId: 'CAS-1', etaAt: 150, lapsesAt: 400 } };
-    expect(decidePlatoon(self({ doctrine: patient, drill: waiting }), arrived, 160, map).drill?.kind).toBe('pushThrough');
+    expect(decidePlatoon(self({ doctrine: patient, drill: waiting }), arrived, 160, map).drill?.kind).toBe('waitForAir');
+    const announced = { ...arrived, suppressions: { 'CAS-1': { aircraftId: 'CAS-1', center: { x: 500, y: 0 }, radius: 100, fromTick: 150, untilTick: 200 } } };
+    expect(decidePlatoon(self({ doctrine: patient, drill: waiting }), announced, 160, map).drill?.kind).toBe('pushThrough');
     const lapsed = { ...told(seen(500)), expectedSupport: { aircraftId: 'CAS-1', etaAt: 10, lapsesAt: 50 } };
     expect(decidePlatoon(self({ doctrine: patient, drill: waiting }), lapsed, 160, map).drill?.kind).toBe('waitForAir');
     const refused = { ...told(seen(500)), supportRefusedAt: 120 };
@@ -157,7 +163,7 @@ describe('choosing a drill', () => {
   });
 
   it('does not stop twice for a position it has dealt with', () => {
-    expect(started(self({ handled: [{ center: { x: 500, y: 0 }, tick: 50 }] }), told(seen(500)))).toBeNull();
+    expect(started(self({ handled: [{ center: { x: 500, y: 0 }, tick: 100 }] }), told(seen(500)))).toBeNull();
   });
 
   it('runs only the drills its doctrine knows', () => {
@@ -165,11 +171,12 @@ describe('choosing a drill', () => {
     expect(started(self({ doctrine: none, underFire: true }), sees(seen(100)))).toBeNull();
   });
 
-  it('leaves a platoon holding ground or on patrol to its own rules', () => {
+  it('leaves holding units in place and enables patrol drills only experimentally', () => {
     const area = { center: { x: 0, y: 0 }, radius: 100 };
     expect(started(self({ objective: { kind: 'HoldArea', area }, underFire: true }), sees(seen(100)))).toBeNull();
     const patrol: GroundObjective = { kind: 'PatrolArea', waypoints: [{ x: 500, y: 0 }] };
     expect(started(self({ objective: patrol, underFire: true }), sees(seen(100)))).toBeNull();
+    expect(started(self({ objective: patrol, underFire: true, doctrine: { ...column, experimentalTactics: true } }), sees(seen(100)))).toBe('farAmbush');
   });
 });
 

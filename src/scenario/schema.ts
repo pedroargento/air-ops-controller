@@ -35,6 +35,7 @@ const scheduledObjective = z.union([
 ]);
 
 const doctrine = z.object({
+  experimentalDrills: z.array(z.enum(['nearAmbush', 'farAmbush', 'attack', 'bypass', 'hastyAmbush', 'waitForAir', 'pushThrough'])).default([]).describe('Additional drills enabled only with ground.experimentalTactics; normal play ignores these.'),
   drills: z.array(z.enum(['nearAmbush', 'farAmbush', 'attack', 'bypass', 'hastyAmbush', 'waitForAir', 'pushThrough'])).describe('Battle drills this doctrine knows (§4.0.2).'),
   airWaitSeconds: z.number().positive().describe('How long a platoon holds for air before deciding without it.'),
   waitForAirStrengthRatio: z.number().nonnegative().default(0.5).describe('Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself.'),
@@ -43,11 +44,13 @@ const doctrine = z.object({
   woundedHoldShare: unit.nullable().default(null).describe('A platoon on the move with fewer men free to fight than this share of its starting strength holds where it is until its wounded are out; null never holds for them (§4.1.1).'),
   blindFireRangeMeters: z.number().positive().default(250).describe('How far off it guesses an unseen shooter is, when firing back toward where the fire comes from.'),
   airRefusedMemorySeconds: z.number().nonnegative().default(900).describe('After air operations says no air is available, it doesn\'t wait for air again for this long.'),
-  nearAmbushMeters: z.number().positive().describe('Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance.'),
-  drillSeconds: z.number().positive().describe('Every drill ends after this long, so none can hold a platoon forever.'),
-  attackStrengthRatio: z.number().positive().describe('Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can.'),
+  nearAmbushMeters: z.number().positive().describe('Near-ambush response distance and hasty ambush open-fire distance; experimental tactics additionally require recent unwarned fire.'),
+  drillSeconds: z.number().positive().describe('Time allowed before abandoning a drill; experimental tactics renew it on movement progress. Waiting for air uses airWaitSeconds.'),
+  attackStrengthRatio: z.number().positive().describe('Maximum estimated enemy-to-own strength ratio for a voluntary attack; otherwise bypasses or holds.'),
   maxDetourFactor: z.number().min(1).describe('Bypasses only if the way round is at most this many times the direct route.'),
   supportShare: unit.describe('Share of squads that give support by fire while the rest move.'),
+  supportFireMemorySeconds: z.number().positive().default(15).describe('Experimental tactics only: own supporting fire must be this recent to release maneuver; it is not evidence of enemy suppression.'),
+  supportWaitSeconds: z.number().positive().nullable().default(null).describe('Experimental tactics only: maximum accumulated seconds waiting for supporting fire before bypassing or withdrawing; null disables this budget.'),
   flankMeters: z.number().positive().describe('How far to one side of the enemy flankers go before closing.'),
   warningMeters: z.number().positive().describe('How far ahead on its route a platoon looks for known positions.'),
   corridorMeters: z.number().positive().describe('A position this close to the route counts as on it.'),
@@ -69,7 +72,7 @@ const doctrine = z.object({
   probeBias: z.number().nonnegative().describe('Weight towards probing.'),
   harassBias: z.number().nonnegative().describe('Weight towards harassing fire.'),
   assaultBias: z.number().nonnegative().describe('Weight towards assaulting.'),
-  burstSeconds: z.number().int().positive().describe('How long a probe or harassing burst lasts.'),
+  burstSeconds: z.number().int().positive().describe('How long a probe or harassing burst lasts; experimental tactics also use it to bound assault commitment before reassessment.'),
   pauseSeconds: z.number().int().min(0).describe('Pause between bursts.'),
   pressureMoraleFloor: unit.describe('Fire alone can\'t push morale below this; only losses, isolation or low ammunition can.'),
   airFireThreshold: unit.describe('Fires at an aircraft only if its chance of a hit is at least this.'),
@@ -461,6 +464,9 @@ const groundUnit = z.object({
 });
 
 export const scenarioFileSchema = z.object({
+  ground: z.object({
+    experimentalTactics: z.boolean().default(false).describe('Opt in to experimental ground coordination, reassessment and additional doctrine drills on both sides; false keeps standard tactics.'),
+  }).default({ experimentalTactics: false }),
   id: z.string(),
   name: z.string(),
   durationSeconds: z.number().int().positive(),

@@ -4,6 +4,35 @@ Notable changes to Air Operations. Section numbers such as §8.8 refer to `air-o
 
 ## Unreleased
 
+### Experimental tactics disabled by default (2026-11-10)
+
+- Added `ground.experimentalTactics`, false in shared rules and when absent from older scenario files. Standard play restores static drill roles, individual flank completion and earlier attack commitment. Coordinated phases, dynamic support assignments, tactical reassessment, revised contact response and support-wait budgets require opt-in.
+- Assault doctrine's added drills are now `experimentalDrills`, enabled only by that switch. The same setting applies to both sides; gate-ablation overrides cannot enable it. Existing experiment runners opt in explicitly, and batch runs support `--set ground.experimentalTactics=true`.
+- Kept independent fixes to failed-threat handling, fresh reports, return fire, stale drill routes, search sweeps and air promises. The mission report remains unchanged.
+- Validation: 675 tests and the production build pass. In 300 paired seeds per case, Valley recon rises from 99/300 to 187/300 and Overwatch cover from 23/300 to 56/300. All six scenarios were remeasured (3,600 default runs); 240 opt-in preservation runs match the saved experimental outcomes, personnel and end ticks.
+
+### Controlled ground experiments (§4.0.2.2)
+- Added reproducible gate ablations, paired seed comparisons, factorial effects and diagnostics for support waiting, exposure, losses and volleys. Completed 6,800 battles, including independent confirmation seeds and outpost controls.
+- Added an optional accumulated support-wait budget: a stalled platoon attempts a feasible bypass or withdraws to regroup. Brief supporting volleys do not reset the budget; decisions still use only own status, reports and terrain.
+- Reassessment has the largest measured effect: disabling it improves survival and Valley Road success, but supported Overwatch completes less often. The 120-second timer reduces exposed waiting without a consistent mission benefit. The initial decision to retain those gates as defaults was superseded on November 10. See `docs/ground-experiments.md` for measurements and reproduction commands.
+- All 1,600 baseline reruns preserve outcomes, personnel and end ticks. The replay hash changes only for diagnostic/configuration state. Validation: 666 tests and production build pass.
+
+### Ground coordination and doctrine (§4.0.2.1)
+- Platoons approach together, establish supporting fire, assemble flankers, and then assault. Loss of support pauses maneuver and reassigns roles; distant or slow maneuvers retain their plan while making progress.
+- Doctrine preferences and estimated strength constrain attacks. Assault doctrine now knows contact and attack drills, patrols react to contact, and only exposed squads execute the immediate near-ambush response.
+- Failed drills reorganize rather than clearing a threat. New evidence reopens completed positions. Assault commitment is bounded, air ETAs do not prove suppression, and an objective under incoming fire cannot be declared clear.
+- Searching and withdrawing units retain return fire toward unseen shooters; equal-length hunter IDs no longer produce identical sweeps.
+- Coordination uses only own squad status, observed contacts, received reports and terrain. Regression tests scramble hidden enemy truth without changing decisions. No new runtime dependency or general AI framework was added.
+- Validation: 657 tests and the production build pass. Across 3,600 paired runs, informed-air success changes from 78.3% to 33.0% on Valley Road and 40.0% to 7.7% on Overwatch. Road scenarios need calibration for the new behavior; full results and remaining limitations are recorded in the implementation plan.
+
+### Mission report and review fixes
+- Removed the live Summary tab and its air status board. The operator's working picture remains the radio, map, condition bars and casualty reports.
+- A mission report now opens at the end, with exact scoring evidence, casualty and evacuation outcomes, claims against reality, and source accuracy. Close it to review the timeline, reopen it from the header, or download JSON.
+- Each aircraft has contribution metrics and departure/return history: airborne and station time, damage and repair burden, weapons, actual strike casualties, distinct enemy squads seen, first air sightings, observation error, wounded and survivors delivered, and illumination. No grades or inferred lives saved. Batch JSON includes per-aircraft averages; its total sortie average now counts actual departures rather than launch preparations.
+- Fixed a landed helicopter becoming stuck when given another pickup, and landed helicopters ignoring the BINGO return reserve. Invalid URL speed and seed values now use safe defaults.
+- Rescued personnel remain in end-of-mission totals after leaving the map. Reports are computed once when finished.
+- Paired checks: all pre-existing battle-result fields matched in 680 runs (300 outpost medevac, 300 rescue, 20 each on the other four scenarios). Focused regressions exercise the helicopter edge cases those bots did not trigger. The replay golden hash changes only for the new report counters; removing those counters reproduces the previous hash.
+
 ### Wounded and medevac (§4.1.1, §8.9)
 - Casualties are now killed or wounded. Wounded stay with their squad, tie down men to carry them, slow it, and die as they wait; a platoon on the move with too few men free to fight holds for them. The same rules hold for the enemy, which has no medevac.
 - Platoons with wounded send a MEDEVAC request with the number of wounded, a pickup point out of the enemy's sight, and whether it is hot. Answer it from its card with any helicopter with seats, or say no air is available.

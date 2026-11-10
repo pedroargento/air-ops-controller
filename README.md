@@ -54,7 +54,7 @@ For a static build, `npm run build` writes the game to `dist/`.
   - **Units on the net:** every unit you can reach by radio, including units you have never seen.
   - **Support requests:** units asking for air.
   - **Selected:** details and actions for whatever you have clicked.
-  - **Radio / Tracks / Summary:** the radio log, the list of tracked enemy groups, and a summary of the battle.
+  - **Radio / Tracks:** the radio log and the list of tracked enemy groups.
 
 ### Giving orders
 
@@ -73,6 +73,10 @@ Select an aircraft to set its **weapons control** (bombs, guns or both, or weapo
 **Support requests** arrive as cards. Answer one by sending an aircraft, or say that no air is available. A unit that gets no answer fights on without air. When friends are too close to a target, the crew asks for **danger close**, and only you can clear it.
 
 **Forwarding** is how you help the ground. Select an enemy contact or track and forward it to the units that should know about it. Units act on what they know, so a platoon warned about an ambush can avoid it.
+
+### Mission report
+
+When the mission ends, its report opens with the outcome and scoring evidence, both sides' casualties, and claims compared with actual losses. Expand an aircraft's row for its sorties, time on station, damage, reconnaissance, strikes, rescue and illumination contributions. Close it to inspect the map or timeline, reopen it from **Mission report** in the header, or download it as JSON. There is no live summary: interpreting the radio and map remains your job.
 
 ### Keyboard
 
@@ -117,6 +121,8 @@ npx tsx src/cli/batch.ts --scenario outpost-under-pressure --policy informed --s
 ```
 
 `--set` overrides any rule from `scenarios/rules/standard.json` for that run. The bots for each scenario are listed in `src/cli/policy-registry.ts`.
+
+New ground coordination and reassessment are experimental and disabled by default (`ground.experimentalTactics=false` in shared rules). For developer testing, use `npm run sim -- --scenario valley-road --policy routeRecon --seeds 300 --set ground.experimentalTactics=true`, or enable the same setting in the scenario rules for browser play. The dedicated ground experiment suites opt in explicitly. Independent bug fixes remain enabled in both modes.
 
 ### Layout
 

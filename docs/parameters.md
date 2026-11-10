@@ -5,6 +5,12 @@ and `npx tsx src/cli/batch.ts --set path=value` tries one without editing anythi
 `--set combat.suppressionDecayPerUpdate=0.04`. This page is generated: run `npm run params` after changing the
 rules or the schema.
 
+## ground
+
+| Parameter | Standard | What it does |
+|---|---|---|
+| `ground.experimentalTactics` | `false` | Opt in to experimental ground coordination, reassessment and additional doctrine drills on both sides; false keeps standard tactics. |
+
 ## combat
 
 | Parameter | Standard | What it does |
@@ -598,11 +604,13 @@ rules or the schema.
 | `doctrines.garrison.radioSilent` | `false` | Reports only when asked, as a downed aircrew saving its battery does. |
 | `doctrines.garrison.woundedHoldShare` | `0.5` | A platoon on the move with fewer men free to fight than this share of its starting strength holds where it is until its wounded are out; null never holds for them (§4.1.1). |
 | `doctrines.garrison.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
-| `doctrines.garrison.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
-| `doctrines.garrison.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
-| `doctrines.garrison.attackStrengthRatio` | `1.5` | Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can. |
+| `doctrines.garrison.nearAmbushMeters` | `120` | Near-ambush response distance and hasty ambush open-fire distance; experimental tactics additionally require recent unwarned fire. |
+| `doctrines.garrison.drillSeconds` | `600` | Time allowed before abandoning a drill; experimental tactics renew it on movement progress. Waiting for air uses airWaitSeconds. |
+| `doctrines.garrison.attackStrengthRatio` | `1.5` | Maximum estimated enemy-to-own strength ratio for a voluntary attack; otherwise bypasses or holds. |
 | `doctrines.garrison.maxDetourFactor` | `2` | Bypasses only if the way round is at most this many times the direct route. |
 | `doctrines.garrison.supportShare` | `0.34` | Share of squads that give support by fire while the rest move. |
+| `doctrines.garrison.supportFireMemorySeconds` | `15` | Experimental tactics only: own supporting fire must be this recent to release maneuver; it is not evidence of enemy suppression. |
+| `doctrines.garrison.supportWaitSeconds` | `null` | Experimental tactics only: maximum accumulated seconds waiting for supporting fire before bypassing or withdrawing; null disables this budget. |
 | `doctrines.garrison.flankMeters` | `200` | How far to one side of the enemy flankers go before closing. |
 | `doctrines.garrison.warningMeters` | `700` | How far ahead on its route a platoon looks for known positions. |
 | `doctrines.garrison.corridorMeters` | `180` | A position this close to the route counts as on it. |
@@ -624,7 +632,7 @@ rules or the schema.
 | `doctrines.garrison.probeBias` | `0` | Weight towards probing. |
 | `doctrines.garrison.harassBias` | `0.5` | Weight towards harassing fire. |
 | `doctrines.garrison.assaultBias` | `0.3` | Weight towards assaulting. |
-| `doctrines.garrison.burstSeconds` | `120` | How long a probe or harassing burst lasts. |
+| `doctrines.garrison.burstSeconds` | `120` | How long a probe or harassing burst lasts; experimental tactics also use it to bound assault commitment before reassessment. |
 | `doctrines.garrison.pauseSeconds` | `180` | Pause between bursts. |
 | `doctrines.garrison.pressureMoraleFloor` | `0.2` | Fire alone can't push morale below this; only losses, isolation or low ammunition can. |
 | `doctrines.garrison.airFireThreshold` | `0.5` | Fires at an aircraft only if its chance of a hit is at least this. |
@@ -654,11 +662,13 @@ rules or the schema.
 | `doctrines.patrol.radioSilent` | `false` | Reports only when asked, as a downed aircrew saving its battery does. |
 | `doctrines.patrol.woundedHoldShare` | `0.5` | A platoon on the move with fewer men free to fight than this share of its starting strength holds where it is until its wounded are out; null never holds for them (§4.1.1). |
 | `doctrines.patrol.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
-| `doctrines.patrol.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
-| `doctrines.patrol.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
-| `doctrines.patrol.attackStrengthRatio` | `1.5` | Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can. |
+| `doctrines.patrol.nearAmbushMeters` | `120` | Near-ambush response distance and hasty ambush open-fire distance; experimental tactics additionally require recent unwarned fire. |
+| `doctrines.patrol.drillSeconds` | `600` | Time allowed before abandoning a drill; experimental tactics renew it on movement progress. Waiting for air uses airWaitSeconds. |
+| `doctrines.patrol.attackStrengthRatio` | `1.5` | Maximum estimated enemy-to-own strength ratio for a voluntary attack; otherwise bypasses or holds. |
 | `doctrines.patrol.maxDetourFactor` | `2` | Bypasses only if the way round is at most this many times the direct route. |
 | `doctrines.patrol.supportShare` | `0.34` | Share of squads that give support by fire while the rest move. |
+| `doctrines.patrol.supportFireMemorySeconds` | `15` | Experimental tactics only: own supporting fire must be this recent to release maneuver; it is not evidence of enemy suppression. |
+| `doctrines.patrol.supportWaitSeconds` | `null` | Experimental tactics only: maximum accumulated seconds waiting for supporting fire before bypassing or withdrawing; null disables this budget. |
 | `doctrines.patrol.flankMeters` | `200` | How far to one side of the enemy flankers go before closing. |
 | `doctrines.patrol.warningMeters` | `700` | How far ahead on its route a platoon looks for known positions. |
 | `doctrines.patrol.corridorMeters` | `180` | A position this close to the route counts as on it. |
@@ -680,7 +690,7 @@ rules or the schema.
 | `doctrines.patrol.probeBias` | `0.3` | Weight towards probing. |
 | `doctrines.patrol.harassBias` | `0.1` | Weight towards harassing fire. |
 | `doctrines.patrol.assaultBias` | `0.1` | Weight towards assaulting. |
-| `doctrines.patrol.burstSeconds` | `120` | How long a probe or harassing burst lasts. |
+| `doctrines.patrol.burstSeconds` | `120` | How long a probe or harassing burst lasts; experimental tactics also use it to bound assault commitment before reassessment. |
 | `doctrines.patrol.pauseSeconds` | `180` | Pause between bursts. |
 | `doctrines.patrol.pressureMoraleFloor` | `0.45` | Fire alone can't push morale below this; only losses, isolation or low ammunition can. |
 | `doctrines.patrol.airFireThreshold` | `0.5` | Fires at an aircraft only if its chance of a hit is at least this. |
@@ -704,17 +714,20 @@ rules or the schema.
 | `doctrines.patrol.objectiveMarginMeters` | `60` | An attack counts as on its objective within the objective radius plus this. |
 | `doctrines.patrol.attackRadiusMeters` | `100` | Size of the area an attack on a known position has to clear. |
 | `doctrines.patrol.headingTowardsCos` | `0.5` | A moving enemy counts as coming towards the platoon within this cosine of its heading. |
+| `doctrines.assault.experimentalDrills` | `["nearAmbush","farAmbush","attack","bypass"]` | Additional drills enabled only with ground.experimentalTactics; normal play ignores these. |
 | `doctrines.assault.drills` | `[]` | Battle drills this doctrine knows (§4.0.2). |
 | `doctrines.assault.airWaitSeconds` | `120` | How long a platoon holds for air before deciding without it. |
 | `doctrines.assault.waitForAirStrengthRatio` | `0.5` | Holds for air only for a position at least this strong against its own strength; weaker ones it deals with itself. |
 | `doctrines.assault.radioSilent` | `false` | Reports only when asked, as a downed aircrew saving its battery does. |
 | `doctrines.assault.woundedHoldShare` | `0.5` | A platoon on the move with fewer men free to fight than this share of its starting strength holds where it is until its wounded are out; null never holds for them (§4.1.1). |
 | `doctrines.assault.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
-| `doctrines.assault.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
-| `doctrines.assault.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
-| `doctrines.assault.attackStrengthRatio` | `1.5` | Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can. |
+| `doctrines.assault.nearAmbushMeters` | `120` | Near-ambush response distance and hasty ambush open-fire distance; experimental tactics additionally require recent unwarned fire. |
+| `doctrines.assault.drillSeconds` | `600` | Time allowed before abandoning a drill; experimental tactics renew it on movement progress. Waiting for air uses airWaitSeconds. |
+| `doctrines.assault.attackStrengthRatio` | `1.5` | Maximum estimated enemy-to-own strength ratio for a voluntary attack; otherwise bypasses or holds. |
 | `doctrines.assault.maxDetourFactor` | `2` | Bypasses only if the way round is at most this many times the direct route. |
 | `doctrines.assault.supportShare` | `0.34` | Share of squads that give support by fire while the rest move. |
+| `doctrines.assault.supportFireMemorySeconds` | `15` | Experimental tactics only: own supporting fire must be this recent to release maneuver; it is not evidence of enemy suppression. |
+| `doctrines.assault.supportWaitSeconds` | `null` | Experimental tactics only: maximum accumulated seconds waiting for supporting fire before bypassing or withdrawing; null disables this budget. |
 | `doctrines.assault.flankMeters` | `200` | How far to one side of the enemy flankers go before closing. |
 | `doctrines.assault.warningMeters` | `700` | How far ahead on its route a platoon looks for known positions. |
 | `doctrines.assault.corridorMeters` | `180` | A position this close to the route counts as on it. |
@@ -736,7 +749,7 @@ rules or the schema.
 | `doctrines.assault.probeBias` | `0.1` | Weight towards probing. |
 | `doctrines.assault.harassBias` | `0.2` | Weight towards harassing fire. |
 | `doctrines.assault.assaultBias` | `1.5` | Weight towards assaulting. |
-| `doctrines.assault.burstSeconds` | `120` | How long a probe or harassing burst lasts. |
+| `doctrines.assault.burstSeconds` | `120` | How long a probe or harassing burst lasts; experimental tactics also use it to bound assault commitment before reassessment. |
 | `doctrines.assault.pauseSeconds` | `180` | Pause between bursts. |
 | `doctrines.assault.pressureMoraleFloor` | `0.3` | Fire alone can't push morale below this; only losses, isolation or low ammunition can. |
 | `doctrines.assault.airFireThreshold` | `0.02` | Fires at an aircraft only if its chance of a hit is at least this. |
@@ -766,11 +779,13 @@ rules or the schema.
 | `doctrines.harass.radioSilent` | `false` | Reports only when asked, as a downed aircrew saving its battery does. |
 | `doctrines.harass.woundedHoldShare` | `0.5` | A platoon on the move with fewer men free to fight than this share of its starting strength holds where it is until its wounded are out; null never holds for them (§4.1.1). |
 | `doctrines.harass.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
-| `doctrines.harass.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
-| `doctrines.harass.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
-| `doctrines.harass.attackStrengthRatio` | `1.5` | Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can. |
+| `doctrines.harass.nearAmbushMeters` | `120` | Near-ambush response distance and hasty ambush open-fire distance; experimental tactics additionally require recent unwarned fire. |
+| `doctrines.harass.drillSeconds` | `600` | Time allowed before abandoning a drill; experimental tactics renew it on movement progress. Waiting for air uses airWaitSeconds. |
+| `doctrines.harass.attackStrengthRatio` | `1.5` | Maximum estimated enemy-to-own strength ratio for a voluntary attack; otherwise bypasses or holds. |
 | `doctrines.harass.maxDetourFactor` | `2` | Bypasses only if the way round is at most this many times the direct route. |
 | `doctrines.harass.supportShare` | `0.34` | Share of squads that give support by fire while the rest move. |
+| `doctrines.harass.supportFireMemorySeconds` | `15` | Experimental tactics only: own supporting fire must be this recent to release maneuver; it is not evidence of enemy suppression. |
+| `doctrines.harass.supportWaitSeconds` | `null` | Experimental tactics only: maximum accumulated seconds waiting for supporting fire before bypassing or withdrawing; null disables this budget. |
 | `doctrines.harass.flankMeters` | `200` | How far to one side of the enemy flankers go before closing. |
 | `doctrines.harass.warningMeters` | `700` | How far ahead on its route a platoon looks for known positions. |
 | `doctrines.harass.corridorMeters` | `180` | A position this close to the route counts as on it. |
@@ -792,7 +807,7 @@ rules or the schema.
 | `doctrines.harass.probeBias` | `0.2` | Weight towards probing. |
 | `doctrines.harass.harassBias` | `1` | Weight towards harassing fire. |
 | `doctrines.harass.assaultBias` | `0.2` | Weight towards assaulting. |
-| `doctrines.harass.burstSeconds` | `120` | How long a probe or harassing burst lasts. |
+| `doctrines.harass.burstSeconds` | `120` | How long a probe or harassing burst lasts; experimental tactics also use it to bound assault commitment before reassessment. |
 | `doctrines.harass.pauseSeconds` | `180` | Pause between bursts. |
 | `doctrines.harass.pressureMoraleFloor` | `0.45` | Fire alone can't push morale below this; only losses, isolation or low ammunition can. |
 | `doctrines.harass.airFireThreshold` | `0.02` | Fires at an aircraft only if its chance of a hit is at least this. |
@@ -822,11 +837,13 @@ rules or the schema.
 | `doctrines.recon.radioSilent` | `false` | Reports only when asked, as a downed aircrew saving its battery does. |
 | `doctrines.recon.woundedHoldShare` | `0.5` | A platoon on the move with fewer men free to fight than this share of its starting strength holds where it is until its wounded are out; null never holds for them (§4.1.1). |
 | `doctrines.recon.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
-| `doctrines.recon.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
-| `doctrines.recon.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
-| `doctrines.recon.attackStrengthRatio` | `1.5` | Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can. |
+| `doctrines.recon.nearAmbushMeters` | `120` | Near-ambush response distance and hasty ambush open-fire distance; experimental tactics additionally require recent unwarned fire. |
+| `doctrines.recon.drillSeconds` | `600` | Time allowed before abandoning a drill; experimental tactics renew it on movement progress. Waiting for air uses airWaitSeconds. |
+| `doctrines.recon.attackStrengthRatio` | `1.5` | Maximum estimated enemy-to-own strength ratio for a voluntary attack; otherwise bypasses or holds. |
 | `doctrines.recon.maxDetourFactor` | `2` | Bypasses only if the way round is at most this many times the direct route. |
 | `doctrines.recon.supportShare` | `0.34` | Share of squads that give support by fire while the rest move. |
+| `doctrines.recon.supportFireMemorySeconds` | `15` | Experimental tactics only: own supporting fire must be this recent to release maneuver; it is not evidence of enemy suppression. |
+| `doctrines.recon.supportWaitSeconds` | `null` | Experimental tactics only: maximum accumulated seconds waiting for supporting fire before bypassing or withdrawing; null disables this budget. |
 | `doctrines.recon.flankMeters` | `200` | How far to one side of the enemy flankers go before closing. |
 | `doctrines.recon.warningMeters` | `700` | How far ahead on its route a platoon looks for known positions. |
 | `doctrines.recon.corridorMeters` | `180` | A position this close to the route counts as on it. |
@@ -848,7 +865,7 @@ rules or the schema.
 | `doctrines.recon.probeBias` | `1.5` | Weight towards probing. |
 | `doctrines.recon.harassBias` | `0.1` | Weight towards harassing fire. |
 | `doctrines.recon.assaultBias` | `0.1` | Weight towards assaulting. |
-| `doctrines.recon.burstSeconds` | `120` | How long a probe or harassing burst lasts. |
+| `doctrines.recon.burstSeconds` | `120` | How long a probe or harassing burst lasts; experimental tactics also use it to bound assault commitment before reassessment. |
 | `doctrines.recon.pauseSeconds` | `180` | Pause between bursts. |
 | `doctrines.recon.pressureMoraleFloor` | `0.45` | Fire alone can't push morale below this; only losses, isolation or low ammunition can. |
 | `doctrines.recon.airFireThreshold` | `0.5` | Fires at an aircraft only if its chance of a hit is at least this. |
@@ -878,11 +895,13 @@ rules or the schema.
 | `doctrines.antiair.radioSilent` | `false` | Reports only when asked, as a downed aircrew saving its battery does. |
 | `doctrines.antiair.woundedHoldShare` | `0.5` | A platoon on the move with fewer men free to fight than this share of its starting strength holds where it is until its wounded are out; null never holds for them (§4.1.1). |
 | `doctrines.antiair.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
-| `doctrines.antiair.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
-| `doctrines.antiair.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
-| `doctrines.antiair.attackStrengthRatio` | `1.5` | Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can. |
+| `doctrines.antiair.nearAmbushMeters` | `120` | Near-ambush response distance and hasty ambush open-fire distance; experimental tactics additionally require recent unwarned fire. |
+| `doctrines.antiair.drillSeconds` | `600` | Time allowed before abandoning a drill; experimental tactics renew it on movement progress. Waiting for air uses airWaitSeconds. |
+| `doctrines.antiair.attackStrengthRatio` | `1.5` | Maximum estimated enemy-to-own strength ratio for a voluntary attack; otherwise bypasses or holds. |
 | `doctrines.antiair.maxDetourFactor` | `2` | Bypasses only if the way round is at most this many times the direct route. |
 | `doctrines.antiair.supportShare` | `0.34` | Share of squads that give support by fire while the rest move. |
+| `doctrines.antiair.supportFireMemorySeconds` | `15` | Experimental tactics only: own supporting fire must be this recent to release maneuver; it is not evidence of enemy suppression. |
+| `doctrines.antiair.supportWaitSeconds` | `null` | Experimental tactics only: maximum accumulated seconds waiting for supporting fire before bypassing or withdrawing; null disables this budget. |
 | `doctrines.antiair.flankMeters` | `200` | How far to one side of the enemy flankers go before closing. |
 | `doctrines.antiair.warningMeters` | `700` | How far ahead on its route a platoon looks for known positions. |
 | `doctrines.antiair.corridorMeters` | `180` | A position this close to the route counts as on it. |
@@ -904,7 +923,7 @@ rules or the schema.
 | `doctrines.antiair.probeBias` | `0` | Weight towards probing. |
 | `doctrines.antiair.harassBias` | `0` | Weight towards harassing fire. |
 | `doctrines.antiair.assaultBias` | `0` | Weight towards assaulting. |
-| `doctrines.antiair.burstSeconds` | `120` | How long a probe or harassing burst lasts. |
+| `doctrines.antiair.burstSeconds` | `120` | How long a probe or harassing burst lasts; experimental tactics also use it to bound assault commitment before reassessment. |
 | `doctrines.antiair.pauseSeconds` | `180` | Pause between bursts. |
 | `doctrines.antiair.pressureMoraleFloor` | `0.45` | Fire alone can't push morale below this; only losses, isolation or low ammunition can. |
 | `doctrines.antiair.airFireThreshold` | `0.02` | Fires at an aircraft only if its chance of a hit is at least this. |
@@ -934,11 +953,13 @@ rules or the schema.
 | `doctrines.column.radioSilent` | `false` | Reports only when asked, as a downed aircrew saving its battery does. |
 | `doctrines.column.woundedHoldShare` | `0.5` | A platoon on the move with fewer men free to fight than this share of its starting strength holds where it is until its wounded are out; null never holds for them (§4.1.1). |
 | `doctrines.column.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
-| `doctrines.column.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
-| `doctrines.column.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
-| `doctrines.column.attackStrengthRatio` | `1.5` | Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can. |
+| `doctrines.column.nearAmbushMeters` | `120` | Near-ambush response distance and hasty ambush open-fire distance; experimental tactics additionally require recent unwarned fire. |
+| `doctrines.column.drillSeconds` | `600` | Time allowed before abandoning a drill; experimental tactics renew it on movement progress. Waiting for air uses airWaitSeconds. |
+| `doctrines.column.attackStrengthRatio` | `1.5` | Maximum estimated enemy-to-own strength ratio for a voluntary attack; otherwise bypasses or holds. |
 | `doctrines.column.maxDetourFactor` | `2` | Bypasses only if the way round is at most this many times the direct route. |
 | `doctrines.column.supportShare` | `0.34` | Share of squads that give support by fire while the rest move. |
+| `doctrines.column.supportFireMemorySeconds` | `15` | Experimental tactics only: own supporting fire must be this recent to release maneuver; it is not evidence of enemy suppression. |
+| `doctrines.column.supportWaitSeconds` | `null` | Experimental tactics only: maximum accumulated seconds waiting for supporting fire before bypassing or withdrawing; null disables this budget. |
 | `doctrines.column.flankMeters` | `200` | How far to one side of the enemy flankers go before closing. |
 | `doctrines.column.warningMeters` | `700` | How far ahead on its route a platoon looks for known positions. |
 | `doctrines.column.corridorMeters` | `180` | A position this close to the route counts as on it. |
@@ -960,7 +981,7 @@ rules or the schema.
 | `doctrines.column.probeBias` | `0.3` | Weight towards probing. |
 | `doctrines.column.harassBias` | `0.4` | Weight towards harassing fire. |
 | `doctrines.column.assaultBias` | `0.8` | Weight towards assaulting. |
-| `doctrines.column.burstSeconds` | `120` | How long a probe or harassing burst lasts. |
+| `doctrines.column.burstSeconds` | `120` | How long a probe or harassing burst lasts; experimental tactics also use it to bound assault commitment before reassessment. |
 | `doctrines.column.pauseSeconds` | `180` | Pause between bursts. |
 | `doctrines.column.pressureMoraleFloor` | `0.3` | Fire alone can't push morale below this; only losses, isolation or low ammunition can. |
 | `doctrines.column.airFireThreshold` | `0.5` | Fires at an aircraft only if its chance of a hit is at least this. |
@@ -990,11 +1011,13 @@ rules or the schema.
 | `doctrines.raider.radioSilent` | `false` | Reports only when asked, as a downed aircrew saving its battery does. |
 | `doctrines.raider.woundedHoldShare` | `0.5` | A platoon on the move with fewer men free to fight than this share of its starting strength holds where it is until its wounded are out; null never holds for them (§4.1.1). |
 | `doctrines.raider.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
-| `doctrines.raider.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
-| `doctrines.raider.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
-| `doctrines.raider.attackStrengthRatio` | `1.5` | Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can. |
+| `doctrines.raider.nearAmbushMeters` | `120` | Near-ambush response distance and hasty ambush open-fire distance; experimental tactics additionally require recent unwarned fire. |
+| `doctrines.raider.drillSeconds` | `600` | Time allowed before abandoning a drill; experimental tactics renew it on movement progress. Waiting for air uses airWaitSeconds. |
+| `doctrines.raider.attackStrengthRatio` | `1.5` | Maximum estimated enemy-to-own strength ratio for a voluntary attack; otherwise bypasses or holds. |
 | `doctrines.raider.maxDetourFactor` | `2` | Bypasses only if the way round is at most this many times the direct route. |
 | `doctrines.raider.supportShare` | `0.34` | Share of squads that give support by fire while the rest move. |
+| `doctrines.raider.supportFireMemorySeconds` | `15` | Experimental tactics only: own supporting fire must be this recent to release maneuver; it is not evidence of enemy suppression. |
+| `doctrines.raider.supportWaitSeconds` | `null` | Experimental tactics only: maximum accumulated seconds waiting for supporting fire before bypassing or withdrawing; null disables this budget. |
 | `doctrines.raider.flankMeters` | `200` | How far to one side of the enemy flankers go before closing. |
 | `doctrines.raider.warningMeters` | `700` | How far ahead on its route a platoon looks for known positions. |
 | `doctrines.raider.corridorMeters` | `180` | A position this close to the route counts as on it. |
@@ -1016,7 +1039,7 @@ rules or the schema.
 | `doctrines.raider.probeBias` | `0.1` | Weight towards probing. |
 | `doctrines.raider.harassBias` | `0.2` | Weight towards harassing fire. |
 | `doctrines.raider.assaultBias` | `1.5` | Weight towards assaulting. |
-| `doctrines.raider.burstSeconds` | `120` | How long a probe or harassing burst lasts. |
+| `doctrines.raider.burstSeconds` | `120` | How long a probe or harassing burst lasts; experimental tactics also use it to bound assault commitment before reassessment. |
 | `doctrines.raider.pauseSeconds` | `180` | Pause between bursts. |
 | `doctrines.raider.pressureMoraleFloor` | `0.3` | Fire alone can't push morale below this; only losses, isolation or low ammunition can. |
 | `doctrines.raider.airFireThreshold` | `0.02` | Fires at an aircraft only if its chance of a hit is at least this. |
@@ -1046,11 +1069,13 @@ rules or the schema.
 | `doctrines.evader.radioSilent` | `true` | Reports only when asked, as a downed aircrew saving its battery does. |
 | `doctrines.evader.woundedHoldShare` | `0.5` | A platoon on the move with fewer men free to fight than this share of its starting strength holds where it is until its wounded are out; null never holds for them (§4.1.1). |
 | `doctrines.evader.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
-| `doctrines.evader.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
-| `doctrines.evader.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
-| `doctrines.evader.attackStrengthRatio` | `1.5` | Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can. |
+| `doctrines.evader.nearAmbushMeters` | `120` | Near-ambush response distance and hasty ambush open-fire distance; experimental tactics additionally require recent unwarned fire. |
+| `doctrines.evader.drillSeconds` | `600` | Time allowed before abandoning a drill; experimental tactics renew it on movement progress. Waiting for air uses airWaitSeconds. |
+| `doctrines.evader.attackStrengthRatio` | `1.5` | Maximum estimated enemy-to-own strength ratio for a voluntary attack; otherwise bypasses or holds. |
 | `doctrines.evader.maxDetourFactor` | `2` | Bypasses only if the way round is at most this many times the direct route. |
 | `doctrines.evader.supportShare` | `0.34` | Share of squads that give support by fire while the rest move. |
+| `doctrines.evader.supportFireMemorySeconds` | `15` | Experimental tactics only: own supporting fire must be this recent to release maneuver; it is not evidence of enemy suppression. |
+| `doctrines.evader.supportWaitSeconds` | `null` | Experimental tactics only: maximum accumulated seconds waiting for supporting fire before bypassing or withdrawing; null disables this budget. |
 | `doctrines.evader.flankMeters` | `450` | How far to one side of the enemy flankers go before closing. |
 | `doctrines.evader.warningMeters` | `700` | How far ahead on its route a platoon looks for known positions. |
 | `doctrines.evader.corridorMeters` | `180` | A position this close to the route counts as on it. |
@@ -1072,7 +1097,7 @@ rules or the schema.
 | `doctrines.evader.probeBias` | `1.5` | Weight towards probing. |
 | `doctrines.evader.harassBias` | `0.1` | Weight towards harassing fire. |
 | `doctrines.evader.assaultBias` | `0.1` | Weight towards assaulting. |
-| `doctrines.evader.burstSeconds` | `120` | How long a probe or harassing burst lasts. |
+| `doctrines.evader.burstSeconds` | `120` | How long a probe or harassing burst lasts; experimental tactics also use it to bound assault commitment before reassessment. |
 | `doctrines.evader.pauseSeconds` | `180` | Pause between bursts. |
 | `doctrines.evader.pressureMoraleFloor` | `0.45` | Fire alone can't push morale below this; only losses, isolation or low ammunition can. |
 | `doctrines.evader.airFireThreshold` | `0.5` | Fires at an aircraft only if its chance of a hit is at least this. |
@@ -1102,11 +1127,13 @@ rules or the schema.
 | `doctrines.hunter.radioSilent` | `false` | Reports only when asked, as a downed aircrew saving its battery does. |
 | `doctrines.hunter.woundedHoldShare` | `0.5` | A platoon on the move with fewer men free to fight than this share of its starting strength holds where it is until its wounded are out; null never holds for them (§4.1.1). |
 | `doctrines.hunter.airRefusedMemorySeconds` | `900` | After air operations says no air is available, it doesn't wait for air again for this long. |
-| `doctrines.hunter.nearAmbushMeters` | `120` | Fire from inside this distance is a near ambush, so squads assault through; also the hasty ambush open-fire distance. |
-| `doctrines.hunter.drillSeconds` | `600` | Every drill ends after this long, so none can hold a platoon forever. |
-| `doctrines.hunter.attackStrengthRatio` | `1.5` | Attacks a known position up to this enemy-to-own strength ratio; above it, bypasses if it can. |
+| `doctrines.hunter.nearAmbushMeters` | `120` | Near-ambush response distance and hasty ambush open-fire distance; experimental tactics additionally require recent unwarned fire. |
+| `doctrines.hunter.drillSeconds` | `600` | Time allowed before abandoning a drill; experimental tactics renew it on movement progress. Waiting for air uses airWaitSeconds. |
+| `doctrines.hunter.attackStrengthRatio` | `1.5` | Maximum estimated enemy-to-own strength ratio for a voluntary attack; otherwise bypasses or holds. |
 | `doctrines.hunter.maxDetourFactor` | `2` | Bypasses only if the way round is at most this many times the direct route. |
 | `doctrines.hunter.supportShare` | `0.34` | Share of squads that give support by fire while the rest move. |
+| `doctrines.hunter.supportFireMemorySeconds` | `15` | Experimental tactics only: own supporting fire must be this recent to release maneuver; it is not evidence of enemy suppression. |
+| `doctrines.hunter.supportWaitSeconds` | `null` | Experimental tactics only: maximum accumulated seconds waiting for supporting fire before bypassing or withdrawing; null disables this budget. |
 | `doctrines.hunter.flankMeters` | `200` | How far to one side of the enemy flankers go before closing. |
 | `doctrines.hunter.warningMeters` | `700` | How far ahead on its route a platoon looks for known positions. |
 | `doctrines.hunter.corridorMeters` | `180` | A position this close to the route counts as on it. |
@@ -1128,7 +1155,7 @@ rules or the schema.
 | `doctrines.hunter.probeBias` | `0.3` | Weight towards probing. |
 | `doctrines.hunter.harassBias` | `0.1` | Weight towards harassing fire. |
 | `doctrines.hunter.assaultBias` | `0.1` | Weight towards assaulting. |
-| `doctrines.hunter.burstSeconds` | `120` | How long a probe or harassing burst lasts. |
+| `doctrines.hunter.burstSeconds` | `120` | How long a probe or harassing burst lasts; experimental tactics also use it to bound assault commitment before reassessment. |
 | `doctrines.hunter.pauseSeconds` | `180` | Pause between bursts. |
 | `doctrines.hunter.pressureMoraleFloor` | `0.45` | Fire alone can't push morale below this; only losses, isolation or low ammunition can. |
 | `doctrines.hunter.airFireThreshold` | `0.5` | Fires at an aircraft only if its chance of a hit is at least this. |

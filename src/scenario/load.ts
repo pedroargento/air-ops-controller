@@ -1,13 +1,23 @@
-import type { Doctrine } from '../domain/public/ground';
+import type { Doctrine, GroundExperiment } from '../domain/public/ground';
 import { AIR_OPS } from '../domain/public/radio';
 import type { TerrainCell, TerrainGrid } from '../domain/public/terrain';
 import { scenarioFileSchema, type ScenarioFile } from './schema';
 
 export type Scenario = Readonly<{
+  groundExperiment?: GroundExperiment;
   file: ScenarioFile;
   terrain: TerrainGrid;
   doctrines: Readonly<Record<string, Doctrine>>;
 }>;
+
+/** Resolve opt-in capabilities once, before either side starts making decisions. */
+export function resolveDoctrines(file: ScenarioFile): Scenario['doctrines'] {
+  const experimentalTactics = file.ground.experimentalTactics;
+  return Object.fromEntries(Object.entries(file.doctrines).map(([id, doctrine]) => [id, {
+    ...doctrine, experimentalTactics,
+    drills: experimentalTactics ? [...new Set([...doctrine.drills, ...doctrine.experimentalDrills])] : doctrine.drills,
+  }]));
+}
 
 function layerRows(text: string, label: string): readonly string[] {
   const rows = text.split('\n').filter((row) => row.length > 0);
@@ -92,6 +102,6 @@ export function loadScenario(raw: unknown, classText: string, elevationText: str
   return {
     file,
     terrain: parseTerrain(file.terrain, classText, elevationText),
-    doctrines: file.doctrines,
+    doctrines: resolveDoctrines(file),
   };
 }

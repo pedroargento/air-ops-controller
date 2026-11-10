@@ -42,3 +42,19 @@ describe('GameSession', () => {
     expect(view).not.toContain('E-N1');
   });
 });
+
+
+it('keeps mission metrics private until completion and caches the completed report', () => {
+  const short = { ...scenario, file: { ...scenario.file, durationSeconds: 2 } };
+  const session = new GameSession(short, 1);
+  expect(session.debrief()).toBeNull();
+  session.advance();
+  expect(session.debrief()).toBeNull();
+  expect(JSON.stringify(session.view())).not.toContain('firstAirSightings');
+  session.advance();
+  const report = session.debrief();
+  expect(report?.mission.elapsedSeconds).toBe(2);
+  expect(report?.mission.evidence.join(' ')).toContain('effective defenders');
+  expect(report?.aircraft).toHaveLength(5);
+  expect(session.debrief()).toBe(report);
+});

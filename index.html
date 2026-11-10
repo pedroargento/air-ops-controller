@@ -56,18 +56,22 @@
       .legend-sample { flex: none; border-radius: 2px; }
       .legend-term { flex: none; width: 128px; font-family: monospace; color: #ffd24a; }
       #legend[hidden] { display: none; }
-      .scorecard { border-collapse: collapse; font-size: 11px; }
-      .board-row { display: grid; grid-template-columns: 76px 1fr; align-items: center; gap: 6px; margin: 2px 0; font-size: 11px; }
-      .board-track { position: relative; height: 10px; background: #1a2024; border: 1px solid #333c41; }
-      .board-track span { position: absolute; top: 0; bottom: 0; }
-      .board-scale { display: flex; justify-content: space-between; font-size: 10px; color: #9fb0a8; }
-      .board-transit { background: #4a8fd8; }
-      .board-station { background: #3fae5a; }
-      .board-return { background: #8a9499; }
-      .board-turnaround { background: #d8a03a; }
-      .board-ready { background: transparent; }
-      .scorecard td, .scorecard th { padding: 1px 6px; text-align: left; border-bottom: 1px solid #333c41; }
-      #summary { overflow-y: auto; flex: 1; font-size: 12px; min-height: 0; }
+      #mission-report { width: min(980px, 90vw); max-height: 86vh; overflow: auto; background: #1b2124; color: #e4e9e6; border: 1px solid #71877a; padding: 24px; line-height: 1.5; }
+      #mission-report::backdrop { background: rgba(0, 0, 0, .72); }
+      .report-head { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+      .report-head h1 { margin: 0; }
+      #mission-report h2 { font-size: 18px; color: #c3d6c8; }
+      #mission-report section { padding: 12px 0; border-bottom: 1px solid #46524a; }
+      #mission-report footer { padding-top: 16px; }
+      .report-table { overflow-x: auto; }
+      #mission-report table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      #mission-report td, #mission-report th { text-align: left; padding: 8px; border-bottom: 1px solid #46524a; }
+      #mission-report caption { text-align: left; color: #9fb0a8; }
+      .aircraft-report { border: 1px solid #46524a; margin: 10px 0; padding: 12px; }
+      #mission-report summary { cursor: pointer; }
+      .report-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+      .report-metrics dt { color: #9fb0a8; font-size: 12px; }
+      .report-metrics dd { margin: 0; font-size: 18px; }
       #tracks { overflow-y: auto; flex: 1; font-size: 11px; min-height: 0; }
       #tracks table { width: 100%; border-collapse: collapse; }
       #tracks td, #tracks th { padding: 2px 4px; text-align: left; border-bottom: 1px solid #2a3236; }
@@ -82,11 +86,6 @@
       #light.night { background: #1a2340; color: #c8d4ff; }
       #light.twilight { background: #3a3550; color: #e8dcff; }
       #light.day { color: #9fb0a8; }
-      #summary h3 { margin: 8px 0 2px; font-size: 12px; color: #9fb0a8; }
-      #summary p { margin: 2px 0; }
-      #summary ul { margin: 2px 0; padding-left: 16px; }
-      #summary table { border-collapse: collapse; width: 100%; margin: 4px 0; }
-      #summary td { padding: 1px 6px 1px 0; }
       .hint-quiet { color: #9fb0a8; }
       #side-tabs { margin: 0 0 6px; }
       #side-tabs .active { outline: 1px solid #9fb0a8; }
@@ -256,11 +255,11 @@
       <section id="selection"></section>
       <section id="radio">
         <div id="side-tabs" class="buttons"></div>
-        <div id="summary" hidden></div>
         <div id="tracks" hidden></div>
         <div id="radio-log"></div>
       </section>
     </aside>
+    <dialog id="mission-report" aria-labelledby="mission-report-title"></dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

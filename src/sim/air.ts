@@ -1,3 +1,4 @@
+import { emptyAircraftRecord } from './mission-report';
 import { chooseAttack, chooseStrike, chooseSuppression, decideCrew } from '../ai/decide-crew';
 import type {
   AircraftId,
@@ -33,6 +34,7 @@ export function createAircraft(scenario: Scenario): Aircraft[] {
       const type = air.models[entry.model];
       if (type === undefined) throw new Error(`Unknown aircraft model ${entry.model}`);
       return {
+        record: emptyAircraftRecord(),
         id: entry.id as AircraftId,
         aircraftType: type.role,
         model: entry.model,
@@ -163,7 +165,7 @@ export function advanceAircraft(aircraft: Aircraft, air: AirConfig, terrain: Ter
   if (aircraft.landed) {
     // On the ground at a pickup: it doesn't move, but it still burns fuel.
     aircraft.altitudeMeters = elevationAt(terrain, aircraft.position);
-    aircraft.fuelSeconds = Math.max(0, aircraft.fuelSeconds - 1);
+    burnFuel(aircraft, typeOf(aircraft, air), air);
     return;
   }
   flyAircraft(aircraft, air);
@@ -498,6 +500,15 @@ export function updateAircraftPerception(
       if (target.personnel <= 0) continue;
       const estimate = observeTarget(truth, observer, target, terrain, rng, perception, tick);
       if (estimate === null) continue;
+      if (target.side === 'enemy') {
+        const record = aircraft.record;
+        if (!record.observedSquads.includes(target.id)) {
+          if (!truth.aircraft.some((other) => other.record.observedSquads.includes(target.id))) record.firstAirSightings += 1;
+          record.observedSquads.push(target.id);
+        }
+        record.observationSamples += 1;
+        record.observationErrorMeters += distance(estimate.position.center, target.position);
+      }
       aircraft.contacts[estimate.contactId] = estimate;
       if (estimate.activity === 'engaging') firing.push([target, estimate]);
       if (estimate.identification === 'friendly') {
@@ -721,6 +732,10 @@ function strikePass(
       // The shock falls once per platoon, as hard as the pass came to it.
       morale: first ? model.moralePerPass * (strongest.get(unit.platoonId) ?? 0) : 0,
     };
+  });
+  effects.forEach((effect, index) => {
+    if (caught[index]?.side === 'friendly') aircraft.record.friendlyCasualties += effect.casualties;
+    else aircraft.record.enemyCasualties += effect.casualties;
   });
   const casualties = effects.reduce((sum, effect) => sum + effect.casualties, 0);
   applyEffects(truth, effects, combat, rng, tick);

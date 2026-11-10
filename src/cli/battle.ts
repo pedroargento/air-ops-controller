@@ -1,3 +1,5 @@
+import { aircraftPerformance } from '../sim/mission-report';
+import type { AircraftPerformance } from '../domain/public/debrief';
 import type { DrillKind } from '../domain/public/ground';
 import { totalAmmunition } from '../domain/public/equipment';
 import type { CasualtyLedger, Outcome, WorldTruth } from '../domain/truth/world';
@@ -15,6 +17,7 @@ import { TempoTracker, type Tempo } from './tempo';
 const POLICY_INTERVAL_TICKS = 5;
 
 export type BattleResult = Readonly<{
+  aircraft: readonly AircraftPerformance[];
   seed: number;
   outcome: Outcome;
   endedAtTick: number;
@@ -88,6 +91,7 @@ export function runBattle(
   const strikes = state.player.log.filter((m) => m.kind === 'STRIKE_RESULT');
   const fired = state.player.log.flatMap((m) => (m.kind === 'GROUND_FIRE' ? [m] : []));
   return {
+    aircraft: aircraftPerformance(truth, scenario),
     seed,
     outcome: truth.outcome,
     endedAtTick: truth.endedAtTick ?? state.tick,

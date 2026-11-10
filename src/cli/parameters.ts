@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { scenarioFileSchema } from '../scenario/schema';
 
 const OUTPUT = 'docs/parameters.md';
-const SECTIONS = ['combat', 'perception', 'radio', 'display', 'air', 'weather', 'doctrines', 'terrain'] as const;
+const SECTIONS = ['ground', 'combat', 'perception', 'radio', 'display', 'air', 'weather', 'doctrines', 'terrain'] as const;
 
 type Row = Readonly<{ path: string; description: string; value: unknown }>;
 

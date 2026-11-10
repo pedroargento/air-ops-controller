@@ -370,7 +370,10 @@ describe('battle', () => {
     const objective = capture.area.center;
     const wins = (make: () => Parameters<typeof runBattle>[2]) =>
       seeds.filter((seed) => runBattle(scenario, seed, make()).outcome === 'success').length;
-    expect(wins(() => noAir)).toBe(0);
-    expect(wins(() => reconInformed(objective, true))).toBeGreaterThanOrEqual(10);
+    // Reassessment allows occasional unaided holds; retain the air-value gate, not a fixed outcome for every seed.
+    const unaided = wins(() => noAir);
+    const supported = wins(() => reconInformed(objective, true));
+    expect(unaided).toBeLessThanOrEqual(10);
+    expect(supported - unaided).toBeGreaterThanOrEqual(10);
   }, 60000);
 });

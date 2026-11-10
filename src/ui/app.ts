@@ -1,3 +1,4 @@
+import { missionReportHtml } from './mission-report';
 import { qualifiesForSupport, type AircraftId, type AircraftOrder, type AircraftTelemetryEntry, type RiskLimit, type WeaponsControl } from '../domain/public/air';
 import type { PlayerAction, ReportRequest } from '../domain/public/commands';
 import type { Debrief, TruthFrame } from '../domain/public/debrief';
@@ -16,10 +17,8 @@ import {
   displayName,
   forwardPreview,
   gridRef,
-  forceRatioText,
   groundFireText,
   radioLine,
-  rangeText,
   statusText,
   strengthText,
   triage,
@@ -31,11 +30,9 @@ import {
 } from './format';
 import { AltitudeProfile } from './altitude-profile';
 import { PathProfile } from './path-profile';
-import { summarizeBattle, type BattleSummary, type SummaryConfig } from './battle-summary';
 import { MapView, type Selection, type WeatherLayer } from './map-view';
 import { ToastQueue } from './toasts';
 import { admiraltyRating, BREVITY, contactCondition } from './map-conventions';
-import { boardSegments, type BoardPhase } from './status-board';
 import { isMoonUp, lightState, nextFirstLight } from '../domain/public/light';
 import { sortedTracks, type TrackSort } from './track-list';
 import { contactFireLines, friendlyFireLines, friendsFiredOn } from './fire-text';
@@ -59,7 +56,7 @@ export type UiConfig = Readonly<{
   weaponCeiling: (weapon: WeaponType) => number;
   maxAltitudeMeters: number;
   defaultAltitudeMeters: number;
-  summary: SummaryConfig;
+  mapContext: Readonly<{ objective: Vec2; friendlyStrength: Readonly<Record<string, number>> }>;
   triage: TriageParameters;
   /** Fire lines this young show without selecting anything (§7.3). */
   fireFreshSeconds: number;
@@ -148,34 +145,6 @@ function aircraftDestination(aircraft: AircraftTelemetryEntry): Vec2 | null {
   return order === null || order.kind === 'ReturnToBase' ? null : order.center;
 }
 
-const BOARD_HORIZON_SECONDS = 3600;
-const BOARD_LABELS: Readonly<Record<BoardPhase, string>> = {
-  transit: 'en route',
-  station: 'on station',
-  return: 'returning',
-  turnaround: 'rearming',
-  ready: 'ready',
-};
-
-/** The next hour for each aircraft, as an operations room's status board shows it. */
-function statusBoardHtml(view: PlayerView): string {
-  const rows = view.aircraft.map((aircraft) => {
-    const bars = boardSegments(aircraft, BOARD_HORIZON_SECONDS)
-      .map((segment) => {
-        const left = (segment.fromSeconds / BOARD_HORIZON_SECONDS) * 100;
-        const width = ((segment.toSeconds - segment.fromSeconds) / BOARD_HORIZON_SECONDS) * 100;
-        const until = segment.toSeconds >= BOARD_HORIZON_SECONDS ? '' : ` until ${clock(view.tick + segment.toSeconds)}`;
-        return `<span class="board-${segment.phase}" style="left:${left.toFixed(1)}%;width:${width.toFixed(1)}%" title="${BOARD_LABELS[segment.phase]}${until}"></span>`;
-      })
-      .join('');
-    return `<div class="board-row"><b>${escapeHtml(aircraft.aircraftId)}</b><div class="board-track">${bars}</div></div>`;
-  });
-  return (
-    `<div class="board"><div class="board-row"><span></span><div class="board-scale"><span>now</span><span>+15</span><span>+30</span><span>+45</span><span>+60 min</span></div></div>${rows.join('')}` +
-    '<p class="hint-quiet">Blue en route · green on station · grey returning · amber rearming · clear ready. Hover a bar for times.</p></div>'
-  );
-}
-
 /** Claimed losses and what they suggest, as the condition bar shows them. */
 function conditionLine(marker: ContactMarker): string {
   const condition = contactCondition(marker.estimatedLosses, marker.contact.strength);
@@ -223,50 +192,6 @@ function findContact(view: PlayerView, key: string): ContactMarker | undefined {
   return view.contacts.flatMap((marker) => [marker, ...marker.members]).find((marker) => marker.key === key);
 }
 
-/** Killed, wounded and what became of the wounded (§8.9). */
-function casualtyLine(label: string, outcome: Debrief['casualties']['friendly'], evacuation: boolean): string {
-  if (outcome.killed + outcome.wounded === 0) return '';
-  const evacuated = evacuation
-    ? ` ${outcome.evacuated} evacuated${outcome.hospitalMinutes === null ? '' : `, ${outcome.hospitalMinutes} min from wound to hospital on average`}${outcome.aboard > 0 ? `, and ${outcome.aboard} on their way there` : ''}.`
-    : '';
-  return `<p>${label}: ${outcome.killed} killed and ${outcome.wounded} wounded. ${outcome.diedOfWounds} died of wounds, ${outcome.waiting} still waiting at the end.${evacuated}</p>`;
-}
-
-/** Each source's real record, so the player learns whose reports to trust next time. */
-function sourcesTable(debrief: Debrief): string {
-  if (debrief.sources.length === 0) return '';
-  const rows = [...debrief.sources]
-    .sort((a, b) => a.reliability.localeCompare(b.reliability) || b.reports - a.reports)
-    .map(
-      (source) =>
-        `<tr><td>${escapeHtml(source.sourceId)}</td><td>${source.reliability}</td><td>${source.reports}</td>` +
-        `<td>${source.meanErrorMeters} m</td><td>${source.misidentified}</td><td>${source.claimed}</td></tr>`,
-    )
-    .join('');
-  return (
-    `<h3>How good the reports were</h3><table class="scorecard"><tr><th>Source</th><th>Reliability</th><th>Reports</th>` +
-    `<th>Average error</th><th>Wrong side</th><th>Claimed</th></tr>${rows}</table>` +
-    '<p class="hint-quiet">Reliability A is completely reliable, E unreliable: any friendly reported as hostile gives an E.</p>'
-  );
-}
-
-/** The one place the truth appears, once the run is over: what really happened against the estimates. */
-function debriefHtml(debrief: Debrief, summary: BattleSummary): string {
-  const enemyLost = debrief.enemyStart - debrief.enemyLeft;
-  return (
-    `<h3>Debrief: what really happened</h3>` +
-    `<p>Enemy: ${debrief.enemyStart} at start, ${debrief.enemyLeft} left. ${enemyLost} lost, against your estimate of ${rangeText(summary.losses)}.</p>` +
-    `<p>Formations: ${debrief.enemyFormations}, of which ${debrief.enemyDestroyed} destroyed and ${debrief.enemyBroken} broken.</p>` +
-    (debrief.locatedShare === null ? '' : `<p>Your picture had ${Math.round(debrief.locatedShare * 100)}% of the enemy's squads about right.</p>`) +
-    (debrief.friendlyFireCasualties === 0 ? '' : `<p>${debrief.friendlyFireCasualties} of your men were hit by your own strikes.</p>`) +
-    `<p>Friendly: ${debrief.friendlyStart} at start, ${debrief.friendlyLeft} left, ${debrief.friendlyDestroyed} formations lost.</p>` +
-    casualtyLine('Your casualties', debrief.casualties.friendly, true) +
-    casualtyLine('Enemy casualties', debrief.casualties.enemy, false) +
-    `<p>Enemy casualties claimed: ${debrief.airClaims} by aircrews, ${debrief.groundClaims} by ground units. Really lost: ${enemyLost}. Claims from different sources can count the same men.</p>` +
-    sourcesTable(debrief)
-  );
-}
-
 export class App {
   private readonly map: MapView;
   private readonly tooltip = element('tooltip');
@@ -275,7 +200,7 @@ export class App {
   private selection: Selection = null;
   private lastAircraftId: string | null = null;
   private readonly split = new Set<string>();
-  private sideTab: 'radio' | 'summary' | 'tracks' = 'radio';
+  private sideTab: 'radio' | 'tracks' = 'radio';
   private trackSort: TrackSort = 'threat';
   private readonly snapshots = new Snapshots();
   /** Looking back through the timeline: the map shows the battle as known at reviewTick. */
@@ -304,7 +229,7 @@ export class App {
 
   constructor(private readonly config: UiConfig) {
     const canvas = element<HTMLCanvasElement>('map');
-    this.map = new MapView(canvas, config.terrain, config.sensorRadius, config.threatRadius, config.summary.friendlyStrength);
+    this.map = new MapView(canvas, config.terrain, config.sensorRadius, config.threatRadius, config.mapContext.friendlyStrength);
     this.pathProfile = new PathProfile(element<HTMLCanvasElement>('path-profile'), config.terrain);
     this.profile = new AltitudeProfile(element<HTMLCanvasElement>('altitude-profile'), {
       maxAltitudeMeters: config.maxAltitudeMeters,
@@ -320,6 +245,7 @@ export class App {
     element('forecast-lead').addEventListener('input', (event) => {
       this.forecastLeadSeconds = Number((event.target as HTMLInputElement).value);
     });
+    element('mission-report').addEventListener('click', (event) => this.onPanelClick(event));
     document.addEventListener('keydown', (event) => this.onKey(event));
     element('timeline-slider').addEventListener('input', (event) => {
       this.reviewTick = Number((event.target as HTMLInputElement).value);
@@ -335,6 +261,7 @@ export class App {
    * suppress, K strike, R return to base. T opens the timeline, ? the key. Ignored while typing.
    */
   private onKey(event: KeyboardEvent): void {
+    if (element<HTMLDialogElement>('mission-report').open) return;
     const target = event.target as HTMLElement | null;
     if (target !== null && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
     const view = this.view;
@@ -387,6 +314,7 @@ export class App {
 
   /** Whether the battle is over, so leaving it loses nothing. */
   private ended = false;
+  private reportPresented = false;
   private readonly landed = new Set<string>();
 
   /**
@@ -730,7 +658,7 @@ export class App {
   /** Cloud base where it matters: over the selected aircraft, or else the objective. */
   private forecastCeiling(view: PlayerView): number | null {
     if (!this.layers.has('weather') || view.forecast === null) return null;
-    const point = this.threatAircraft(view)?.position ?? this.config.summary.objective;
+    const point = this.threatAircraft(view)?.position ?? this.config.mapContext.objective;
     return weatherAt(view.forecast, point, view.tick + this.forecastLeadSeconds).ceilingMeters;
   }
 
@@ -807,8 +735,24 @@ export class App {
       case 'forecast-eta':
         this.setForecastLead(this.etaOfSelected());
         return;
+      case 'mission-report':
+        if (this.run?.debrief !== null && this.run?.debrief !== undefined) element<HTMLDialogElement>('mission-report').showModal();
+        return;
+      case 'close-report':
+        element<HTMLDialogElement>('mission-report').close();
+        return;
+      case 'export-report': {
+        if (this.run?.debrief === null || this.run?.debrief === undefined) return;
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(new Blob([JSON.stringify(this.run.debrief, null, 2)], { type: 'application/json' }));
+        link.href = url;
+        link.download = 'mission-report.json';
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+        return;
+      }
       case 'tab':
-        this.sideTab = id === 'summary' || id === 'tracks' ? id : 'radio';
+        this.sideTab = id === 'tracks' ? id : 'radio';
         return;
       case 'track-sort':
         if (id === 'threat' || id === 'age' || id === 'condition') this.trackSort = id;
@@ -1086,10 +1030,16 @@ export class App {
     this.renderSelection(view);
     this.renderLog(view);
     this.renderToasts(run);
-    this.renderSideTab(view, run);
+    this.renderSideTab(view);
     this.renderLayers(view);
     element('map-holder').classList.toggle('picking', this.pendingOrder !== null);
     this.renderBanner();
+    if (run.debrief !== null && !this.reportPresented) {
+      this.reportPresented = true;
+      const dialog = element<HTMLDialogElement>('mission-report');
+      dialog.innerHTML = missionReportHtml(run.debrief);
+      dialog.showModal();
+    }
   }
 
   /** While a task waits for a place, say so over the map: what, for whom, and how to cancel. */
@@ -1123,6 +1073,7 @@ export class App {
         `<span id="objective">${escapeHtml(this.config.objective)}</span>` +
         `<button data-action="timeline"${this.reviewing ? ' class="active"' : ''} title="Look back through the battle as you knew it (T).">Timeline</button>` +
         '<button data-action="scenarios" title="Back to the scenario menu.">Scenarios</button>' +
+        (run.debrief === null ? '' : '<button data-action="mission-report">Mission report</button>') +
         `<button data-action="export">Export log</button>`,
     );
   }
@@ -1482,22 +1433,19 @@ export class App {
     );
   }
 
-  private renderSideTab(view: PlayerView, run: RunState): void {
+  private renderSideTab(view: PlayerView): void {
     const showing = this.sideTab;
     element('radio-log').hidden = showing !== 'radio';
     element('radio-log').classList.toggle('main-only', this.radioFilter === 'main');
     const filter = (id: 'main' | 'all', label: string): string =>
       `<button data-action="radio-filter" data-id="${id}"${this.radioFilter === id ? ' class="active"' : ''}>${label}</button>`;
-    element('summary').hidden = showing !== 'summary';
     element('tracks').hidden = showing !== 'tracks';
     morphHtml(
       element('side-tabs'),
       `<button data-action="tab" data-id="radio"${showing === 'radio' ? ' class="active"' : ''}>Radio</button>` +
         `<button data-action="tab" data-id="tracks"${showing === 'tracks' ? ' class="active"' : ''}>Tracks</button>` +
-        `<button data-action="tab" data-id="summary"${showing === 'summary' ? ' class="active"' : ''}>Summary</button>` +
         (showing === 'radio' ? `<span class="radio-filter">${filter('main', 'Main')}${filter('all', 'All')}</span>` : ''),
     );
-    if (showing === 'summary') morphHtml(element('summary'), this.summaryHtml(view, run));
     if (showing === 'tracks') morphHtml(element('tracks'), this.tracksHtml(view));
   }
 
@@ -1540,46 +1488,6 @@ export class App {
       `<div class="buttons">Sort by ${sort('threat', 'Threat')}${sort('firing', 'Firing on friends')}${sort('age', 'Newest')}${sort('condition', 'Least damaged')}</div>` +
       `<p class="hint-quiet">${count} tracks. Air defense first under Threat. ⏲ not seen for two minutes or more. Click a row to select it and center the map.</p>` +
       `<table><tr><th>TN</th><th>What</th><th>Weapons</th><th>Condition</th><th>Seen</th><th>Rating</th><th>Grid</th></tr>${rows.join('')}</table>`
-    );
-  }
-
-  private summaryHtml(view: PlayerView, run: RunState): string {
-    const summary = summarizeBattle(view, this.config.summary);
-    const { names } = this.config;
-    const sectors = summary.sectors
-      .map(
-        (s) =>
-          `<tr><td>${s.name}</td><td>${rangeText(s.strength)}</td><td>${s.activity}</td>` +
-          `<td>${Math.round(s.ageSeconds / 60)}m${s.stale ? ' ⚠' : ''}</td></tr>`,
-      )
-      .join('');
-    const friendlies = summary.friendlies
-      .map((f) => {
-        const ammo = f.ammunitionPercent === null ? '' : ` · ammo ${f.ammunitionPercent}%`;
-        const state = f.silent ? ` · no contact ${Math.round(f.ageSeconds / 60)}m ⚠` : '';
-        const source = f.fromReport ? '' : ' (start)';
-        return `<li>${escapeHtml(displayName(f.unitId, names))}: ${f.personnel}${source}${ammo}${state}</li>`;
-      })
-      .join('');
-    const ratio = forceRatioText(summary.threatened, summary.defenders);
-    const threats = summary.airThreats.map((t) => `${t.weapons} (${t.sector})`).join(', ');
-    return (
-      `<h3>Enemy, as reported at ${clock(view.tick)}</h3>` +
-      `<p>Known forces: ${summary.groups} groups, est. ${rangeText(summary.known)}` +
-      `${summary.unconfirmed > 0 ? ` (${summary.unconfirmed} reports unconfirmed)` : ''}</p>` +
-      `<p>HQ estimate at start: about ${summary.hqEstimate}</p>` +
-      `<p>Reported losses: est. ${rangeText(summary.losses)} from aircrews · ${summary.confirmedDestroyed} confirmed destroyed</p>` +
-      `<p>Claimed by ground units: ${view.groundClaims} on the tracks shown. Units in a fight count high.</p>` +
-      `<p>Unlocated: est. ${rangeText(summary.unlocated)}</p>` +
-      (sectors === '' ? '' : `<table>${sectors}</table>`) +
-      `<p>Air threat: ${threats === '' ? 'none observed' : escapeHtml(threats)}</p>` +
-      `<h3>Friendly, last reported</h3><ul>${friendlies}</ul>` +
-      `<h3>${escapeHtml(this.config.summary.areaLabel)}</h3><p>Within ${this.config.summary.ratioRadiusMeters / 1000} km: enemy ${rangeText(summary.threatened)} ` +
-      `against ${summary.defenders} defenders${ratio === null ? '' : ` (${ratio})`}</p>` +
-      `<h3>Air</h3><p>${summary.strikes} strikes · ${summary.aircraftHits} hits taken · ${summary.damagedNow} damaged now</p>` +
-      statusBoardHtml(view) +
-      `<p class="hint-quiet">${summary.archived} old reports archived; they remain in the radio log.</p>` +
-      (run.debrief === null ? '' : debriefHtml(run.debrief, summary))
     );
   }
 

@@ -58,7 +58,9 @@ export function search(self: UnitSelf, knowledge: UnitKnowledge, tick: number): 
   const focus: Vec2 = lead ?? area.center;
   if (lead !== null && distance(self.position, lead) > SWEEP_METERS / 2) return { kind: 'move', destination: lead };
   // A sweep that walks out at varying ranges and bearings, so nothing near the lead is missed for long.
-  const leg = Math.floor(tick / SWEEP_LEG_SECONDS) + (self.id.length * 7);
+  let offset = 0;
+  for (const char of self.id) offset = (Math.imul(offset, 31) + char.charCodeAt(0)) >>> 0;
+  const leg = Math.floor(tick / SWEEP_LEG_SECONDS) + offset;
   const angle = (leg * GOLDEN_ANGLE) % (2 * PI);
   const spread = lead === null ? Math.min(area.radius, SWEEP_METERS * 2) : SWEEP_METERS;
   const reach = spread * (((leg * 0.618033988749895) % 1) * 0.9 + 0.1);

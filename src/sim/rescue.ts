@@ -183,6 +183,7 @@ export function resolvePickups(truth: WorldTruth, player: PlayerKnowledge, radio
       if (aircraft.landed) liftOff(truth, aircraft);
       continue;
     }
+    if (aircraft.landed && aircraft.status === 'enroute') liftOff(truth, aircraft);
     if (aircraft.status !== 'onStation') continue;
     if (!aircraft.landed) {
       const gap = distance(aircraft.position, order.center);
@@ -286,6 +287,8 @@ export function deliverWounded(truth: WorldTruth, tick: number): void {
     if (aircraft.casualtiesAboard.length === 0 || (aircraft.status !== 'turnaround' && aircraft.status !== 'ready')) continue;
     const ledger = truth.casualties.friendly;
     for (const group of aircraft.casualtiesAboard) {
+      aircraft.record.woundedDelivered += group.count;
+      aircraft.record.hospitalSeconds += group.count * (tick - group.since);
       ledger.evacuated += group.count;
       ledger.hospitalSeconds += group.count * (tick - group.since);
     }
@@ -304,6 +307,9 @@ export function updateRescue(truth: WorldTruth, knowledge: Record<string, UnitKn
   const survival = survivor.survival;
   if (survival?.state === 'aboard') {
     const carrier = truth.aircraft.find((aircraft) => aircraft.id === survival.aircraftId);
-    if (carrier !== undefined && (carrier.status === 'turnaround' || carrier.status === 'ready')) survival.state = 'delivered';
+    if (carrier !== undefined && (carrier.status === 'turnaround' || carrier.status === 'ready')) {
+      survival.state = 'delivered';
+      carrier.record.survivorsDelivered += survivor.squads.reduce((sum, unit) => sum + unit.personnel, 0);
+    }
   }
 }
