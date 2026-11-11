@@ -1,4 +1,5 @@
 import type { SupportWeapons } from '../domain/public/air';
+import { AIRCRAFT_STATUS_LABELS } from './labels';
 import { POI_KINDS } from '../domain/public/poi';
 import { BREVITY } from './map-conventions';
 import type { DrillKind } from '../domain/public/ground';
@@ -125,7 +126,7 @@ export function aircraftMission(aircraft: AircraftTelemetryEntry): string {
 }
 
 export function aircraftSummary(aircraft: AircraftTelemetryEntry): string {
-  const status = aircraft.damaged ? `DAMAGED ${aircraft.status}` : aircraft.status;
+  const status = `${aircraft.damaged ? 'DAMAGED, ' : ''}${AIRCRAFT_STATUS_LABELS[aircraft.status].toLowerCase()}`;
   return (
     `${aircraft.aircraftId} (${aircraft.model}): ${status}, ${aircraftMission(aircraft)}, ${aircraft.landed ? 'landed' : `${Math.round(aircraft.altitudeMeters)} m`}, ` +
     `fuel ${Math.round(aircraft.fuelFraction * 100)}%, ordnance ${aircraft.ammunition}, guns ${aircraft.gunBursts}`
@@ -198,8 +199,9 @@ export function spotReport(contact: ContactEstimate, location: string): string {
 function strikeOutcome(effect: 'effect-observed' | 'no-effect-observed', assessment: StrikeAssessment | null): string {
   if (effect === 'no-effect-observed') return 'no effect observed';
   if (assessment === null) return 'effect observed';
-  if (assessment.destroyed) return `target destroyed, about ${assessment.estimatedCasualties} casualties`;
-  return `effect observed, about ${assessment.estimatedCasualties} casualties`;
+  // A crew that saw the strike land but counted nobody down says so, rather than "about 0".
+  const counted = assessment.estimatedCasualties > 0 ? `about ${assessment.estimatedCasualties} casualties` : 'no casualties seen';
+  return `${assessment.destroyed ? 'target destroyed' : 'effect observed'}, ${counted}`;
 }
 
 const STATUS_TEXT: Readonly<Record<ContactStatus, string | null>> = {

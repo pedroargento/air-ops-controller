@@ -21,8 +21,12 @@ Version 0.2.0, released 2026-11-03. Six scenarios are playable from a menu, with
 | S8 | First version delivered as Downed Pilot (introduction). The harder rescue is still to do. |
 | M21 | Mostly delivered early as §8.7 (night, light and flares). What remains is in its section. |
 | M10–M20 | Not started. M12 is the go/no-go gate for everything after it. |
+| R0 | Done on 2026-11-10: parallel batch, paired comparisons, a replay hash without accounting, and a CI workflow (not yet run on GitHub). |
+| R1 | Interface fixes done on 2026-11-10 (items 2–8). **The three hand playtests are still owed,** and with them M9. |
+| R2 | Done on 2026-11-10: seed in the address, autosave and resume, Run on, more keys, the controller's own transmissions kept with the command log. |
+| R3–R6 | Not started. Review work added on 2026-11-10: dominated choices, four new rules and an early two-site test. See "Review work" in section 5. |
 
-**Order from here:** S5 with medevac in it, then S6 and the harder S8 rescue, then the outpost playtest that closes M9, then Phase 1 (M10–M12).
+**Order from here:** R1's three hand playtests, which close M9 (R0, R2 and the rest of R1 are done), then R3 and R6, then S5 with medevac in it, then R4 alongside S6 and the harder S8 rescue, then Phase 1 (M10–M12). R5 runs alongside. This replaces the earlier order, which was S5, S6 and S8, the outpost playtest, then Phase 1: the playtest and the measurement tooling moved first because every later step depends on them.
 
 ### Standard tactics restored; experimental opt-in — 2026-11-10
 
@@ -144,6 +148,8 @@ Findings, against the figures recorded before S7:
 
 Most important first. Win-rate tuning waits for M13, so these are recorded rather than fixed.
 
+The review work in section 5 now schedules some of these: guns, waiting for air, forwarding and the hidden win condition are in R3, and medevac's distance to base is touched by R4.
+
 - **Trace Cover on Overwatch** (40.0% against 17.7% for recon and CAS) before building on it.
 - **Medevac saves lives but not battles yet:** at the outpost it is worth 4 points (95% interval −0.1 to +8.1). The outpost's wounded mostly come in its last 25 minutes and the base is 25 km away, so S5 should put medevac where it can change the fight.
 - **Wound rates are provisional:** `woundDeathPerHour` and `woundWorsenSeconds` were raised once so that medevac had lives to save. They have no source yet.
@@ -154,7 +160,6 @@ Most important first. Win-rate tuning waits for M13, so these are recorded rathe
 - **Forwarding may be too strong:** at the outpost it is worth more than the 10-point design target.
 - **Fire is too continuous at the outpost,** and the first decisive assault comes a little early (M5's tempo targets).
 - **Scenario win conditions need a rethink.** "Below strength" is hidden from the player, and it counts a recovering unit as zero defenders. A report card on the outpost's status when a relief force arrives is the alternative. This becomes M13's shift report.
-- **No continuous integration.** The repository is on GitHub, but nothing runs `npm run check` on a push.
 
 ## 1. Approach
 
@@ -663,6 +668,111 @@ The crew starts on the ground, so no shoot-down rule is needed. They evade while
 
 Further scenario ideas: Hunt the flak, Last lift, and Last light once night exists.
 
+### Review work (R0–R6)
+
+Added on 2026-11-10 from a review of the whole game. The review's main finding is that many systems measure as non-decisions or have one right answer, and that only one scenario has been played by hand. So this work measures better, plays by hand, and makes existing choices real before adding rules.
+
+R0–R2 change no rules, so the golden hash moves only where a step says so. R3 and R4 are rule changes: each step gets its spec section first and 300 paired seeds before and after. R5 never shares a commit with a rule change.
+
+#### R0: Measurement tooling
+
+1. **Parallel batch.** Split `src/cli/batch.ts` into a coordinator and workers (`node:worker_threads`, one seed range each, `--jobs` defaulting to the core count). Workers return `BattleResult[]` and the summary code stays as it is. A battle takes about 0.8 s today on one core (20 outpost seeds in 16 s).
+2. **Diagnostics out of the hash.** Report counters and tempo diagnostics move out of `SimState` into their own object passed alongside it, so the hash covers only what affects play. One deliberate golden-hash update.
+3. **Paired continuous measures.** `Summary` gains a per-seed difference against the baseline policy (friendly men left, end minute) with a 95% interval. Wins over 300 seeds can't resolve effects under about 8 points, which is where guns, medevac and forecasts sit.
+4. **Continuous integration.** A workflow running `npm run check` on every push, and `npm run e2e` when interface paths change.
+
+**Exit:** `--jobs 1` and `--jobs 16` give identical JSON for the same seeds, and 300 seeds take under 30 seconds. A test shows that adding a diagnostic counter leaves the golden hash unchanged.
+
+**Done on 2026-11-10.** Measured on a 16-core, 32-thread machine, one timing each:
+
+- **Same results:** 12 outpost seeds over all 23 policies give byte-identical JSON from 1 thread and from 16. A test repeats this on Find Them (6 seeds, 1 thread against 3).
+- **Speed:** 300 outpost seeds of `informed` take 37 s on 8 threads, 28 s on 16 and 33 s on 32, so the default is half the logical processors. All 23 outpost policies over 300 seeds took 537 s on 32 threads (not re-timed on 16). Scaling stops well short of the core count, which points at memory and allocation; R5's per-tick work is the place to look.
+- **Paired comparisons:** every policy is compared with `none` (or `--baseline`) seed by seed, with 95% intervals for wins, friendly and enemy men left, and end minute. `--json` now writes `{ summaries, comparisons }` where it wrote the summaries alone.
+- **Hash:** the accounting stays where it is in the truth, and the replay hash leaves it out (`src/sim/state-hash.ts`: each aircraft's `record` and each platoon's `drillWaitReason`). This is less than the step above describes, which was to move those fields out of `SimState`: it gets the same exit for a fraction of the change. The casualty ledgers stay hashed. The golden hash went from `a66514cf` to `2ba33c45` with no rule changed, and a test shows a new counter in a record doesn't move it.
+- **CI:** `.github/workflows/check.yml` runs `npm run check` on every push and pull request, and `npm run e2e` when interface, scenario or e2e files change. It has not run on GitHub yet.
+- 680 tests pass.
+
+#### R1: Hand playtests and interface fixes
+
+1. **Play Outpost, Valley Road and Overwatch by hand.** Note every minute with nothing to decide and every decision with one obvious answer. The findings set R3's priorities. This is the playtest M9 still owes.
+2. **Names on the map.** `src/ui/map-view.ts` labels friendlies by id ("F-N") while the radio and panels use names ("Viper 2-1"). Use the name, falling back to the id.
+3. **Plain labels.** One table mapping statuses and message kinds (`onStation`, `COMMAND_UPDATE`, `STRIKE_RESULT`) to text, with a test that fails when a member has no label.
+4. **Zero-casualty wording.** "About 0 casualties" becomes "no effect seen".
+5. **Aircraft panel.** Ordnance is cut off ("ord 8…") and the fifth row is clipped at 1400×900. Fix the truncation and let the list scroll.
+6. **Menu.** Scenarios in order of difficulty with Downed Pilot first, its "16 h" duration corrected, and a one-line difficulty note on each.
+7. **Elevation figures.** Minimum-altitude figures go behind a layer toggle, off by default.
+8. **Return to base.** The `R` key acts at once. It gets a confirmation, or a 5-second undo that cancels before the transmission goes out.
+
+**Exit:** Three playtests written up here, M9 closed, and `npm run e2e` passing with new checks for items 2, 3 and 5.
+
+**Items 2–8 done on 2026-11-10; the playtests (item 1) are still owed.** 708 tests and 76 e2e checks pass. What differs from the list above:
+
+- **Labels:** the tables in `src/ui/labels.ts` are full records, so a missing label fails to compile; the test checks what the labels say. Message kinds in the radio log and aircraft status in the list and tooltips use them.
+- **Aircraft panel:** the list already scrolled; it was 112 px high, a few pixels short of five rows. It is now 142 px, and the ordnance column drops its "ord" prefix (the figures are bombs / gun bursts, said in a tooltip). e2e checks that five rows fit and nothing is cut off.
+- **Menu:** order and labels come from a table in `src/ui/scenario-menu.ts`, taken from the best bot's wins over 300 seeds (292, 239, 236, 187, 120, 56): Introduction, Easy, Standard, Standard, Hard, Very hard. The outpost is no longer first. Downed Pilot's 16 hours is its real time limit, so it now reads "up to 16 h".
+- **Elevation figures:** a "Heights" layer, off by default. A square the selected aircraft doesn't clear keeps its red outline and figure with the layer off, since that is a warning.
+- **Return to base:** the `R` key needs a second press within 3 seconds, with a toast saying so. The button is unchanged. No undo was built.
+- **Names on the map** has no e2e check, because the map is a canvas; it was checked by eye on a screenshot.
+
+#### R2: Sessions
+
+1. **Seed in the address.** `src/play.ts` writes a rolled seed back with `history.replaceState`, and a "Restart this battle" button reuses it.
+2. **Autosave and resume.** The command log goes to `localStorage` every 30 ticks and on each command. On load the game offers to resume, replays the log and compares the final hash. A rules hash is stored with it, and a log from older rules is discarded. This is an early part of M15; snapshots and long sessions stay there.
+3. **Run until needed.** The interrupts behind "Wait for first light" become a general control that stops on a new request, an aircraft arriving on station or out of ordnance, a danger-close question, or a first contact.
+4. **Keys.** `+` and `-` for speed, `N` for the next unanswered request, `F` to forward the selected report.
+5. **Own transmissions in the log.** The player's calls exist only in the page today (`src/ui/app.ts`), so the timeline and replay lack them. They move into the player's log. Golden-hash update.
+6. **Draw on change.** Skip the interface update when neither the tick nor the interface state changed, so a paused game does no work.
+
+**Exit:** An e2e test reloads mid-battle and resumes to the same hash as an uninterrupted run.
+
+**Done on 2026-11-10.** 714 tests and 86 e2e checks pass; e2e reloads a Find Them battle at about 200 seconds and gets the same hash. What differs from the list above:
+
+- **Resume:** a reload resumes, and so does the "Resume" card the menu now shows. A plain link with a seed still starts that battle fresh, as shared links expect. One battle is kept, and starting another replaces it. A resumed battle starts paused. A save that no longer replays (other rules, or a different hash) is dropped without a message and the battle starts fresh: telling the player is still to do.
+- **Cost:** each save hashes the whole state, every 30 ticks and after each command. Not timed; if it shows at 8×, save the log alone and hash on resume only.
+- **Run on** (button and `E`) pauses when it stops. It stops for a new unanswered request or medevac request, a danger-close question, an aircraft arriving on station, landing, damaged or out of ordnance, the first contact, and anything above routine on the radio. Wait for first light keeps its old, narrower conditions.
+- **Keys:** `F` with no unit ticked forwards to every unit. That makes R3's forwarding problem one key worse until forwarding has a cost.
+- **Own transmissions:** not in the player's log, so no rule and no hash changed. The words travel with the command as an optional `said` field that no rule reads, so the exported and saved logs carry them, and the radio log and timeline are rebuilt from them on resume. Restored lines lose the "reaches them about" note.
+- **Draw on change:** while paused the interface is drawn after any input, and every tenth frame besides. Running, it is still drawn every frame.
+
+#### R3: Make existing choices real
+
+One step at a time, each measured on its own. Figures quoted are from "Current balance" and "Open items" above.
+
+1. **Weapons clearance.** A Watch order defaults to guns only, and bombs need the player's clearance for a target or an area. Today one Watch order lets the crew spend all 8 bombs unasked (one hand run, A-1E at the outpost, out of bombs by minute 26). **Exit:** the informed bot issues more commands per battle, and the outpost's win rate moves by no more than 5 points, or is retuned.
+2. **Forwarding has a cost.** Outbound traffic becomes serial: one transmission at a time, queued in `advanceOutbound`, with a visible queue and a way to jump it. A new bot forwards only reports near the recipient. **Exit:** the selective bot beats forwarding everything. If it can't, forwarding is automated and the button removed.
+3. **Danger close.** Approving costs up to 12 points, so always denying is the best play. Find out why from the mission report (friendly casualties per approved pass against enemy casualties prevented), then tune delivery error or the benefit. **Exit:** approving when overrun beats always denying on Outpost and Outpost at Night.
+4. **Machine-gun range.** `MACHINE_GUN` and `SMALL_ARMS` both reach 350 m. Raise the machine gun to about 800 m, then re-measure "guns don't change outcomes" and Overwatch's gun positions. Every scenario shifts, so all six are measured again.
+5. **Show the win threshold.** The mission panel shows holding strength against what is needed, from reports, never from truth.
+6. **Neutral systems.** Re-measure waiting for air, forecasts and altitude with R0's paired measures. Any that still measure neutral are removed from the interface.
+
+**Exit:** No choice in the game has a single best answer across all six scenarios, by bot measurement.
+
+#### R4: New rules
+
+1. **Target marking.** Jets can't find infantry unaided: an F-100D needs a smoke mark from the O-1E, or a point from the player with a larger error. The A-1E still finds its own targets. This is the forward air controller candidate, promoted. **Exit:** O-1E with F-100 clearly beats F-100 alone.
+2. **Enemy mortars.** Fire from an unseen position onto the garrison, which reports incoming from an unknown direction and gives air a search task. One weapon and one drill, at the outpost first. This is not the artillery and check fire candidate, which stays listed.
+3. **Graded damage.** A hit is light (today's repair) or heavy (out for the scenario), and each model gets its own turnaround time instead of the shared 600 seconds. Still no shoot-downs, so invariant 10 holds.
+4. **Fuel that binds.** Jets slow to a loiter speed in orbit, which also fixes an F-100 orbit of about 5 g. The base moves further away, or a second distant base is added, on at least two scenarios. Today only the F-100 feels fuel, with the base 25 km away.
+5. **Period weapons.** `MANPADS` is a few years late for these aircraft. Remove it from the scenarios, or retune it as a heavy machine gun.
+
+**Exit:** each rule's own, as above. Marking comes first and is measured before the others start.
+
+#### R5: Code health
+
+1. **Split `src/ui/app.ts`** (about 1,550 lines) into a module per panel, with a typed action union in place of the `data-action` string switch.
+2. **One ground AI.** Set a date to decide on `experimentalTactics`, then delete the losing path.
+3. **Faction checks.** `src/sim/air.ts`, `marks.ts` and `flares.ts` test `side === 'friendly'`, which invariant 1 says no rule does. Replace with the side opposing the aircraft's owner.
+4. **Work per tick.** `src/sim/step.ts` computes self views and the radio's units twice a tick, and `applyEffects` searches the unit list for each effect. Profile first: R0 may make this unnecessary.
+5. **This file.** Dated history moves to its own file, so status and open items fit on one screen.
+
+**Exit:** none of its own. Each item is done when `npm run check` passes and the golden hash is unchanged.
+
+#### R6: Early two-site test
+
+A throwaway scenario: the forces of two existing maps on one larger map, with four aircraft and no new rules. Played by hand three times, before S6 and the harder S8.
+
+**Exit:** A written answer to M12's question, whether juggling two fights is better than running one. It decides whether M10 and M11 are built as planned.
+
 ### Phase 1: Prove the idea
 
 #### M10: Mission orders
@@ -751,12 +861,12 @@ A day cycle feeding the visibility figure, only some aircraft types working at n
 
 - **Shooting down aircraft:** Aircraft can be lost in any scenario, reversing invariant 10 in `DESIGN.md`, which makes search and rescue an incident type. A major decision: every scenario becomes a possible rescue.
 - **Artillery and check fire:** Friendly guns have to stop while aircraft cross their fire path.
-- **Forward air controllers:** Recon marks targets for more accurate strikes, at the cost of staying exposed. Ground units already throw smoke for crews; an airborne mark is the missing half.
 - **Flak suppression:** A dedicated role against air defense, reusable for rescue escorts.
 - **Weather on the ground:** Effects on troop movement, and valley fog.
-- **Continuous integration:** A GitHub Actions job that runs `npm run check` on every push.
 
-Done since they were listed: danger close (§8.1.1, with friendly fire) and ground units marking targets with smoke (§8.1.3).
+Scheduled since they were listed: forward air controllers (R4, target marking).
+
+Done since they were listed: continuous integration (R0), danger close (§8.1.1, with friendly fire) and ground units marking targets with smoke (§8.1.3).
 
 ## 6. Testing
 

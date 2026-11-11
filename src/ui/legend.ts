@@ -329,8 +329,12 @@ const REPORT_WORDS: readonly (readonly [string, string])[] = [
 const SHORTCUTS: readonly (readonly [string, string])[] = [
   ['1–9', 'Select an aircraft.'],
   ['W C S K', 'Give the selected aircraft a task: watch, cover, suppress, strike. Then click the map, or a friendly unit to cover.'],
-  ['R', 'Send the selected aircraft home.'],
+  ['R R', 'Send the selected aircraft home: press twice within three seconds.'],
   ['Space', 'Pause or resume.'],
+  ['+ −', 'Faster or slower.'],
+  ['E', 'Run on fast until something needs you, then pause: a request, an aircraft arriving or out of ordnance, a first contact, or anything above routine on the radio.'],
+  ['N', 'Select the unit whose request has waited longest without an answer. Press again for the next.'],
+  ['F', 'Forward the selected contact to the units ticked, or to every unit if none is.'],
   ['Esc', 'Cancel picking a place, close menus and the key.'],
   ['Right-click', 'What can be done right there: on a unit, a contact or open ground. Illuminate with flares is here.'],
   ['T', 'Open the timeline: the battle as you knew it at any earlier moment. The battle pauses while it is open.'],

@@ -64,7 +64,12 @@ export type WeatherLayer = Readonly<{
   confidence: number;
 }>;
 
-export type MapLayers = Readonly<{ weather: WeatherLayer | null; fireFreshSeconds: number }>;
+export type MapLayers = Readonly<{
+  weather: WeatherLayer | null;
+  fireFreshSeconds: number;
+  /** Print the highest ground in each grid square for the selected aircraft. */
+  heights: boolean;
+}>;
 
 const HIT_RADIUS_PIXELS = 12;
 const MIN_ZOOM = 0.5;
@@ -134,6 +139,8 @@ export class MapView {
     private readonly sensorRadius: (aircraft: AircraftTelemetryEntry) => number,
     private readonly threatRadius: (weapons: readonly WeaponType[], altitudeMeters: number) => number,
     private readonly friendlyStrength: Readonly<Record<string, number>>,
+    /** What units are called on the radio, so that the map says the same. */
+    private readonly names: Readonly<Record<string, string>> = {},
   ) {
     const context = canvas.getContext('2d');
     if (context === null) throw new Error('Canvas 2D is unavailable');
@@ -248,7 +255,7 @@ export class MapView {
     this.drawGrid(origin, size);
     this.drawSpotHeights();
     const flying = selection?.kind === 'aircraft' ? view.aircraft.find((a) => a.aircraftId === selection.id) : undefined;
-    if (flying !== undefined) this.drawElevationFigures(flying.targetAltitudeMeters);
+    if (flying !== undefined) this.drawElevationFigures(flying.targetAltitudeMeters, layers.heights);
     if (layers.weather !== null) this.drawWeather(layers.weather);
     this.drawNight(view);
 
@@ -765,9 +772,10 @@ export class MapView {
 
   /**
    * For the selected aircraft, the highest ground in each grid square, as aviation charts
-   * print it. Squares its altitude doesn't clear are outlined in red.
+   * print it. Squares its altitude doesn't clear are outlined in red, and keep their figure
+   * even with the layer off: that is a warning, not a reference.
    */
-  private drawElevationFigures(altitudeMeters: number): void {
+  private drawElevationFigures(altitudeMeters: number, all: boolean): void {
     const { ctx } = this;
     for (const figure of this.figures) {
       const at = this.toScreen(figure.origin);
@@ -778,6 +786,7 @@ export class MapView {
         ctx.lineWidth = 2;
         ctx.strokeRect(at.x + 2, at.y + 2, side - 4, side - 4);
       }
+      if (clear && !all) continue;
       const color = clear ? '#1d3f8f' : '#c41e1e';
       haloText(ctx, `${figure.meters}`, at.x + side / 2, at.y + side / 2 + 7, color, 'bold 18px sans-serif', 'center');
     }
@@ -846,7 +855,7 @@ export class MapView {
       selected,
       headingRad: null,
       right: [
-        { text: friendly.unitId, color: '#0b3a6a' },
+        { text: this.names[friendly.unitId] ?? friendly.unitId, color: '#0b3a6a' },
         // Cleared for danger close: crews may fire near this unit until then.
         ...(friendly.dangerCloseUntil === null ? [] : [{ text: `DC until ${clock(friendly.dangerCloseUntil)}`, color: '#c41e1e' }]),
         // Under fire, by its own word or a crew's sight (§7.3).

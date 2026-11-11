@@ -5,13 +5,13 @@ import type { CasualtyOutcome, Debrief, TruthFrame } from '../domain/public/debr
 /** How often the true positions are kept for the after-action timeline. */
 const HISTORY_INTERVAL_TICKS = 30;
 import { sourceScorecard } from '../sim/scorecard';
-import { hashState } from '../domain/public/hash';
 import type { Outcome, Platoon, WorldTruth } from '../domain/truth/world';
 import { project, type PlayerView } from '../knowledge/player-view';
 import type { Scenario } from '../scenario/load';
 import { aircraftTelemetry } from '../sim/air';
 import { platoonPersonnel, sortedPlatoons } from '../sim/platoon';
 import { createInitialState, type SimState } from '../sim/state';
+import { gameplayHash } from '../sim/state-hash';
 import { step } from '../sim/step';
 import { woundedCount } from '../sim/wounded';
 
@@ -54,6 +54,25 @@ export class GameSession {
     private readonly seed: number,
   ) {
     this.state = createInitialState(scenario, seed);
+  }
+
+  /**
+   * A session brought back from its command log. It stops early if the battle ends, and the
+   * caller compares `stateHash()` with the one saved to know the replay took the same course.
+   */
+  static resume(scenario: Scenario, log: CommandLog): GameSession {
+    const session = new GameSession(scenario, log.seed);
+    let next = 0;
+    for (let tick = 0; tick < log.ticks && session.outcome === 'running'; tick += 1) {
+      for (; log.commands[next]?.tick === tick; next += 1) session.issue(log.commands[next] as PlayerCommand);
+      session.advance();
+    }
+    return session;
+  }
+
+  /** How many commands have been applied, so a caller can tell when there is something new to save. */
+  get commandCount(): number {
+    return this.log.length;
   }
 
   /** Works while paused too: the action waits for the next tick that runs. */
@@ -148,6 +167,6 @@ export class GameSession {
   }
 
   stateHash(): string {
-    return hashState(this.state);
+    return gameplayHash(this.state);
   }
 }

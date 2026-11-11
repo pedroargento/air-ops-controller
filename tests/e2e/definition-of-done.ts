@@ -70,7 +70,8 @@ async function main(): Promise<void> {
     await page.waitForSelector('.scenario-card');
     const cards = await page.locator('.scenario-card').count();
     check(cards === loadScenarioNames().length, `the menu lists every scenario (${cards})`);
-    check((await page.locator('.scenario-card').first().getAttribute('data-id')) === 'outpost-under-pressure', 'the default scenario comes first');
+    check((await page.locator('.scenario-card').first().getAttribute('data-id')) === 'downed-pilot', 'the introduction comes first');
+    check((await page.locator('.scenario-card').first().locator('.scenario-facts').innerText()).startsWith('Introduction · up to 16 h'), 'a card says how hard it is, and that a rescue can end early');
     await shot(page, '0-menu');
     await page.locator('#menu-seed').fill('7');
     await page.locator('.scenario-card[data-id="find-them"]').click();
@@ -85,8 +86,18 @@ async function main(): Promise<void> {
     await page.evaluate(() => (window as unknown as { airops: { setSpeed: (s: number) => void } }).airops.setSpeed(40));
     await page.waitForSelector('#clock');
     check((await page.locator('.aircraft-row').count()) === 5, 'five aircraft are listed, the Dustoff among them');
+    const rows = await page.locator('.aircraft-row').evaluateAll((all) => all.map((row) => {
+      const list = (row.parentElement as HTMLElement).getBoundingClientRect();
+      const box = row.getBoundingClientRect();
+      const cells = [...row.children] as HTMLElement[];
+      return { inside: box.bottom <= list.bottom + 1, status: cells[1]?.textContent ?? '', cut: cells.filter((cell, index) => index !== 2 && cell.scrollWidth > cell.clientWidth).length };
+    }));
+    check(rows.every((row) => row.inside), 'all five aircraft rows fit in the list without scrolling');
+    check(rows.every((row) => row.cut === 0), 'no figure in an aircraft row is cut off');
+    check(rows.every((row) => row.status === 'Ready'), `aircraft status reads as words (${rows[0]?.status})`);
     await page.waitForSelector('.log-row.command_update');
     check(true, 'CECON message is in the log');
+    check((await page.locator('.log-row.command_update .kind').first().innerText()) === 'Command', 'a message kind reads as words');
     await shot(page, '1-start');
 
     await page.waitForFunction(() => (window as unknown as { airops: { view: () => PlayerView } }).airops.view().tick > 0);
@@ -510,6 +521,64 @@ async function main(): Promise<void> {
     await page.waitForFunction(() => (document.querySelector('#pickup') as HTMLElement).hidden, undefined, { timeout: 30000 });
     const jolly = (await page.evaluate(viewOf)).aircraft.find((aircraft) => aircraft.aircraftId === 'JOLLY-1');
     check(jolly?.landed === false && jolly.order?.kind === 'Watch', 'Lift off now takes it off the ground');
+
+    console.log('Leave a battle and come back to it');
+    type Session = { airops: Hook & { setSpeed: (s: number) => void } };
+    const state = (): Promise<{ hash: string; ticks: number; said: number }> =>
+      page.evaluate(() => {
+        const { session } = (window as unknown as Session).airops;
+        const log = session.commandLog();
+        return { hash: session.stateHash(), ticks: log.ticks, said: log.commands.filter((command) => command.said !== undefined).length };
+      });
+    const paused = (): Promise<unknown> => page.waitForFunction(() => document.querySelector('#status')?.textContent === 'PAUSED');
+    await page.goto(`http://localhost:${PORT}/?scenario=find-them`);
+    await page.waitForFunction(() => 'airops' in window);
+    const address = new URL(page.url()).searchParams;
+    check(/^\d+$/.test(address.get('seed') ?? ''), `a random seed is written to the address (${address.get('seed')})`);
+    await page.waitForSelector('.aircraft-row');
+    await page.keyboard.press('1');
+    await page.waitForSelector('.aircraft-row.active');
+    await page.keyboard.press('r');
+    await page.waitForSelector('.toast:has-text("Press R again")');
+    check((await state()).said === 0, 'R alone sends nothing, and says how to confirm');
+    await page.keyboard.press('r');
+    await page.evaluate(() => (window as unknown as Session).airops.setSpeed(40));
+    await page.waitForFunction(() => (window as unknown as Session).airops.session.commandLog().ticks > 200);
+    await page.keyboard.press(' ');
+    await paused();
+    const left = await state();
+    check(left.said === 1, 'a second R sends it, and the words go in the command log');
+    await page.reload();
+    await page.waitForFunction(() => 'airops' in window);
+    await paused();
+    const back = await state();
+    check(back.hash === left.hash && back.ticks === left.ticks, `a reload resumes the battle at the same state (${back.hash} at ${back.ticks} s)`);
+    check((await page.locator('.log-row.outgoing').count()) === 1, 'what the controller said is back in the radio log');
+    check((await page.locator('.toast').count()) === 0, 'a resumed battle raises no pop-overs for old messages');
+
+    // Something to stop for: the second spotter is sent out, and arrives.
+    await page.keyboard.press('2');
+    await page.keyboard.press('w');
+    await page.locator('#map').click({ position: { x: 420, y: 420 } });
+    await page.keyboard.press('e');
+    await page.waitForFunction((from) => (window as unknown as Session).airops.session.commandLog().ticks > from, back.ticks);
+    await paused();
+    const ranOn = await state();
+    check(ranOn.ticks > back.ticks, `Run on runs fast and pauses when something needs the controller (${ranOn.ticks - back.ticks} s on)`);
+
+    page.once('dialog', (dialog) => void dialog.accept());
+    await page.locator('[data-action="scenarios"]').click();
+    await page.waitForSelector('a.scenario-card.resume');
+    check((await page.locator('a.scenario-card.resume').innerText()).includes('Resume Find Them'), 'the menu offers the unfinished battle');
+    await page.locator('a.scenario-card.resume').click();
+    await page.waitForFunction(() => 'airops' in window);
+    const again = await state();
+    check(again.hash === ranOn.hash && !page.url().includes('resume'), 'Resume takes it up where it was left');
+
+    page.once('dialog', (dialog) => void dialog.accept());
+    await page.locator('[data-action="restart"]').click();
+    await page.waitForFunction(() => 'airops' in window && (window as unknown as Session).airops.session.commandLog().ticks < 30);
+    check(new URL(page.url()).searchParams.get('seed') === address.get('seed'), 'Restart begins the same battle again, with the same seed');
 
     check(errors.length === 0, `no browser errors${errors.length > 0 ? `: ${errors.join(' | ')}` : ''}`);
     console.log(`\nPASSED ${checks} checks. ${hook} exposes only the command log and hash.`);

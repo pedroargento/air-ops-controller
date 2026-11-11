@@ -4,6 +4,34 @@ Notable changes to Air Operations. Section numbers such as §8.8 refer to `air-o
 
 ## Unreleased
 
+### Sessions (R2, 2026-11-10)
+
+- A random seed is written to the address, and **Restart** plays the same battle again.
+- The battle in progress is saved in the browser as its command log. A reload resumes it, and the menu offers **Resume**; the replay must reach the saved state hash or the save is dropped.
+- **Run on** (`E`) runs fast until something needs the controller, then pauses. New keys: `+`/`-` speed, `N` next unanswered request, `F` forward the selected contact.
+- What the controller says is kept with each command (`said`, read by no rule), so exported logs and the timeline have it.
+- While paused the interface is drawn only after input, and a few times a second besides.
+- Validation: 714 tests and 86 e2e checks pass. No rule changed and the golden hash is unchanged.
+
+### Interface fixes (R1, 2026-11-10)
+
+- The map labels friendly units by name ("Viper 2-1"), as the radio and panels do.
+- Aircraft status and radio message kinds read as words ("On station", "Strike result"), from `src/ui/labels.ts`.
+- A strike seen to land with nobody counted down reads "no casualties seen", not "about 0 casualties".
+- All five aircraft rows fit in the list, and the ordnance figures are no longer cut off.
+- The menu lists scenarios easiest first with a difficulty word, and Downed Pilot reads "up to 16 h".
+- Elevation figures are a "Heights" layer, off by default; squares the selected aircraft doesn't clear still show.
+- The `R` key needs a second press within 3 seconds to send an aircraft home.
+- Validation: 708 tests and 76 e2e checks pass.
+
+### Measurement tooling (R0, 2026-11-10)
+
+- `src/cli/batch.ts` runs battles on worker threads (`--jobs`, default half the logical processors). Results are identical to a single thread: checked byte for byte on 12 outpost seeds over all 23 policies, and by a test on Find Them. 300 outpost seeds of `informed` take 28 s on 16 threads.
+- Each policy is compared with a baseline (`--baseline`, default `none`) seed by seed, with 95% intervals for wins, men left and end minute. `--json` now writes `{ summaries, comparisons }`.
+- The replay hash leaves out report accounting and diagnostics (`src/sim/state-hash.ts`), so adding a counter no longer moves it. Golden hash `a66514cf` to `2ba33c45`; no rule changed.
+- Added a GitHub Actions workflow for `npm run check`, and `npm run e2e` on interface changes. Not yet run on GitHub.
+- Validation: 680 tests pass.
+
 ### Experimental tactics disabled by default (2026-11-10)
 
 - Added `ground.experimentalTactics`, false in shared rules and when absent from older scenario files. Standard play restores static drill roles, individual flank completion and earlier attack commitment. Coordinated phases, dynamic support assignments, tactical reassessment, revised contact response and support-wait budgets require opt-in.

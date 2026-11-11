@@ -1,0 +1,41 @@
+name: check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+
+  # The browser run takes longer, so it only follows changes the interface can see.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: changed
+        run: |
+          if git diff --name-only HEAD^ HEAD | grep -qE '^(src/(ui|game|knowledge|debug)/|src/(play|main)\.ts|index\.html|scenarios/|tests/e2e/)'; then
+            echo "interface=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.changed.outputs.interface == 'true'
+        with:
+          node-version: 26
+          cache: npm
+      - if: steps.changed.outputs.interface == 'true'
+        run: npm ci
+      - if: steps.changed.outputs.interface == 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.changed.outputs.interface == 'true'
+        run: npm run e2e

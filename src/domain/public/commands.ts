@@ -6,7 +6,7 @@ export type ReportRequest = 'position' | 'sitrep' | 'contact';
 
 // Player commands are stamped with the tick they apply to, which makes a
 // command log replayable. No command can order a ground unit to move or attack.
-export type PlayerCommand =
+type Command =
   | Readonly<{ kind: 'noop'; tick: number }>
   | Readonly<{ kind: 'aircraftOrder'; tick: number; aircraftId: AircraftId; order: AircraftOrder }>
   | Readonly<{ kind: 'setAltitude'; tick: number; aircraftId: AircraftId; meters: number }>
@@ -29,6 +29,12 @@ export type PlayerCommand =
   | Readonly<{ kind: 'acknowledge'; tick: number; unitId: string; casAircraftId: AircraftId | null }>
   /** Answers a medevac request: a helicopter with seats to its pickup point, or none (§8.9). */
   | Readonly<{ kind: 'answerMedevac'; tick: number; unitId: string; helicopterId: AircraftId | null }>;
+
+/**
+ * `said` is what the controller put on the radio with the command, in words. No rule reads it:
+ * it is carried so that a saved or exported log can show the controller's own transmissions.
+ */
+export type PlayerCommand = Command & Readonly<{ said?: string }>;
 
 type WithoutTick<T> = T extends unknown ? Omit<T, 'tick'> : never;
 

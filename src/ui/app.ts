@@ -32,11 +32,13 @@ import { AltitudeProfile } from './altitude-profile';
 import { PathProfile } from './path-profile';
 import { MapView, type Selection, type WeatherLayer } from './map-view';
 import { ToastQueue } from './toasts';
+import { AIR_OPS } from '../domain/public/radio';
+import { aircraftStatusLabel, MESSAGE_KIND_LABELS } from './labels';
 import { admiraltyRating, BREVITY, contactCondition } from './map-conventions';
 import { isMoonUp, lightState, nextFirstLight } from '../domain/public/light';
 import { sortedTracks, type TrackSort } from './track-list';
 import { contactFireLines, friendlyFireLines, friendsFiredOn } from './fire-text';
-import { neighbourEvent, Snapshots, SNAPSHOT_SECONDS, timelineEvents } from './timeline';
+import { neighbourEvent, Snapshots, SNAPSHOT_SECONDS, timelineEvents, withSent, type SentLine, type TimelineEvent } from './timeline';
 import { etaTo, medevacOptions, medevacStatus, requestStatus, showMedevac, showRequest, supportOptions } from './requests';
 import { legendHtml, paintLegend } from './legend';
 import { POI_KINDS, type PoiKind } from '../domain/public/poi';
@@ -44,6 +46,8 @@ import { morphHtml } from './morph';
 import { stormMovement, type ForecastError } from './weather-chart';
 
 type AreaOrderKind = 'Watch' | 'Cover' | 'Suppress' | 'Strike';
+type Layer = 'weather' | 'heights';
+const RETURN_CONFIRM_MS = 3000;
 
 export type UiConfig = Readonly<{
   terrain: TerrainGrid;
@@ -75,6 +79,12 @@ export type UiConfig = Readonly<{
   onWaitForLight: () => void;
   /** Leaves this run for the scenario menu. */
   onScenarios: () => void;
+  /** Runs the battle fast until something needs the controller, then pauses. */
+  onRunUntilNeeded: () => void;
+  /** Starts the same battle again from the beginning. */
+  onRestart: () => void;
+  /** The seed of this battle, shown so that it can be told apart and shared. */
+  seed: number;
   /** Where everyone really was, through the run: null until the run is over. */
   truthHistory: () => readonly TruthFrame[] | null;
 }>;
@@ -214,7 +224,9 @@ export class App {
   private readonly toasts = new ToastQueue();
   private lastFrameAt: number | null = null;
   private menuPoint: Vec2 | null = null;
-  private readonly layers = new Set<'weather'>();
+  private readonly layers = new Set<Layer>();
+  /** A first press of R, waiting for the second that sends the aircraft home. */
+  private returnArmed: { aircraftId: string; until: number } | null = null;
   /** The map key stays out of the way until asked for. */
   private legendShown = false;
   private forecastLeadSeconds = 0;
@@ -224,12 +236,18 @@ export class App {
   private recipients = new Set<string>();
   private view: PlayerView | null = null;
   private logged = 0;
+  /** Everything the controller has said, for the timeline. */
+  private sent: SentLine[] = [];
+  /** Lines from a resumed battle still to be put in the radio log, oldest first. */
+  private unlogged: SentLine[] = [];
+  /** The next log update catches up on a resumed battle, so it raises no pop-overs. */
+  private catchingUp = false;
   private dragFrom: Vec2 | null = null;
   private dragged = false;
 
   constructor(private readonly config: UiConfig) {
     const canvas = element<HTMLCanvasElement>('map');
-    this.map = new MapView(canvas, config.terrain, config.sensorRadius, config.threatRadius, config.mapContext.friendlyStrength);
+    this.map = new MapView(canvas, config.terrain, config.sensorRadius, config.threatRadius, config.mapContext.friendlyStrength, config.names);
     this.pathProfile = new PathProfile(element<HTMLCanvasElement>('path-profile'), config.terrain);
     this.profile = new AltitudeProfile(element<HTMLCanvasElement>('altitude-profile'), {
       maxAltitudeMeters: config.maxAltitudeMeters,
@@ -258,7 +276,9 @@ export class App {
 
   /**
    * Shortcuts: Esc cancels, Space pauses, 1–9 pick an aircraft, then W watch, C cover, S
-   * suppress, K strike, R return to base. T opens the timeline, ? the key. Ignored while typing.
+   * suppress, K strike, R twice return to base. + and - change speed, E runs on until something
+   * needs you, N picks the next unanswered request, F forwards the selected contact (to everyone
+   * if no unit is ticked). T opens the timeline, ? the key. Ignored while typing.
    */
   private onKey(event: KeyboardEvent): void {
     if (element<HTMLDialogElement>('mission-report').open) return;
@@ -294,13 +314,29 @@ export class App {
         start('Strike');
         break;
       case 'r':
-        if (selected !== undefined) this.order(selected.aircraftId, { kind: 'ReturnToBase' });
+        if (selected !== undefined) this.returnByKey(selected.aircraftId);
         break;
       case '?':
         this.legendShown = !this.legendShown;
         break;
       case 't':
         this.toggleTimeline();
+        break;
+      case '+':
+      case '=':
+        this.stepSpeed(1);
+        break;
+      case '-':
+        this.stepSpeed(-1);
+        break;
+      case 'e':
+        if (!this.ended) this.config.onRunUntilNeeded();
+        break;
+      case 'n':
+        this.selectNextRequest();
+        break;
+      case 'f':
+        this.forwardSelected(true);
         break;
       default: {
         const index = Number(event.key);
@@ -377,6 +413,10 @@ export class App {
     if (point !== null) this.map.centerOn(point);
   }
 
+  private events(view: PlayerView): readonly TimelineEvent[] {
+    return withSent(timelineEvents(view.log, this.config.terrain.cellSize), this.sent, AIR_OPS);
+  }
+
   /** The timeline over the map: the moment shown, a slider with event marks, and what happened near it. */
   private renderTimeline(view: PlayerView, run: RunState): void {
     const panel = element('timeline');
@@ -386,7 +426,7 @@ export class App {
     const slider = element<HTMLInputElement>('timeline-slider');
     slider.max = String(end);
     if (document.activeElement !== slider) slider.value = String(this.reviewTick);
-    const events = timelineEvents(view.log, this.config.terrain.cellSize);
+    const events = this.events(view);
     const truth = run.result === null
       ? '<span class="hint-quiet">Where units really were shows here after the run.</span>'
       : `<label><input type="checkbox" data-action="review-truth"${this.showTruth ? ' checked' : ''} /> Show where everyone really was</label>`;
@@ -624,9 +664,9 @@ export class App {
     this.pendingOrder = null;
   }
 
-  private toggleLayer(layer: 'weather'): void {
+  private toggleLayer(layer: Layer): void {
     if (!this.layers.delete(layer)) this.layers.add(layer);
-    this.setForecastLead(0);
+    if (layer === 'weather') this.setForecastLead(0);
   }
 
   private setForecastLead(seconds: number): void {
@@ -663,10 +703,10 @@ export class App {
   }
 
   private renderLayers(view: PlayerView): void {
-    const button = (id: 'weather', label: string): string =>
-      `<button data-action="layer" data-id="${id}"${this.layers.has(id) ? ' class="active"' : ''}>${label}</button>`;
+    const button = (id: Layer, label: string, title: string): string =>
+      `<button data-action="layer" data-id="${id}" title="${title}"${this.layers.has(id) ? ' class="active"' : ''}>${label}</button>`;
     const key = `<button data-action="legend"${this.legendShown ? ' class="active"' : ''}>Key</button>`;
-    morphHtml(element('map-layers'), button('weather', 'Weather') + key);
+    morphHtml(element('map-layers'), button('weather', 'Weather', 'Cloud and the forecast.') + button('heights', 'Heights', 'Highest ground in each grid square. Squares the selected aircraft does not clear stay outlined in red either way.') + key);
     const legend = element('legend');
     if (this.legendShown && legend.childElementCount === 0) {
       legend.innerHTML = legendHtml();
@@ -724,7 +764,7 @@ export class App {
         this.config.onTogglePause();
         return;
       case 'layer':
-        if (id === 'weather') this.toggleLayer('weather');
+        if (id === 'weather' || id === 'heights') this.toggleLayer(id);
         return;
       case 'legend':
         this.legendShown = !this.legendShown;
@@ -772,7 +812,7 @@ export class App {
         this.toggleTimeline();
         return;
       case 'scenarios':
-        if (this.view === null || this.ended || window.confirm('Leave this battle for the scenario menu? It will be lost.')) this.config.onScenarios();
+        if (this.view === null || this.ended || window.confirm('Leave this battle for the scenario menu? You can resume it from there.')) this.config.onScenarios();
         return;
       case 'wait-light':
         this.config.onWaitForLight();
@@ -797,7 +837,7 @@ export class App {
       case 'review-step': {
         const view = this.view;
         if (view === null) return;
-        const next = neighbourEvent(timelineEvents(view.log, this.config.terrain.cellSize), this.reviewTick, kind === 'back' ? -1 : 1);
+        const next = neighbourEvent(this.events(view), this.reviewTick, kind === 'back' ? -1 : 1);
         if (next !== null) this.reviewAt(next.tick, next.point);
         return;
       }
@@ -933,17 +973,50 @@ export class App {
         }
         return;
       case 'forward':
-        if (this.selection?.kind === 'contact' && this.recipients.size > 0) {
-          const to = [...this.recipients].sort();
-          this.issue(
-            { kind: 'forwardContact', contactKey: this.selection.key, recipients: to },
-            `Intelligence forwarded to ${to.map((unit) => displayName(unit, this.config.names)).join(', ')}.`,
-            true,
-          );
-          this.recipients = new Set();
-        }
+        this.forwardSelected(false);
+        return;
+      case 'run-on':
+        this.config.onRunUntilNeeded();
+        return;
+      case 'restart':
+        if (this.view === null || this.ended || window.confirm('Start this battle again from the beginning?')) this.config.onRestart();
         return;
     }
+  }
+
+  /** Forwards the selected contact to the chosen units, or by key to everyone when none is chosen. */
+  private forwardSelected(everyoneIfNone: boolean): void {
+    if (this.selection?.kind !== 'contact') return;
+    const to = this.recipients.size > 0 ? [...this.recipients].sort() : everyoneIfNone ? [...this.config.recipients] : [];
+    if (to.length === 0) return;
+    this.issue(
+      { kind: 'forwardContact', contactKey: this.selection.key, recipients: to },
+      `Intelligence forwarded to ${to.map((unit) => displayName(unit, this.config.names)).join(', ')}.`,
+      true,
+    );
+    this.recipients = new Set();
+  }
+
+  /** Selects the unit whose request has waited longest without an answer. */
+  private selectNextRequest(): void {
+    const view = this.view;
+    if (view === null) return;
+    const waiting = [
+      ...view.medevacRequests.filter((request) => request.answer === null),
+      ...view.supportRequests.filter((request) => request.answer === null),
+    ].sort((a, b) => b.ageSeconds - a.ageSeconds);
+    const current = this.selection?.kind === 'friendly' ? waiting.findIndex((request) => request.unitId === (this.selection as { id: string }).id) : -1;
+    const next = waiting[(current + 1) % Math.max(1, waiting.length)];
+    if (next === undefined) return;
+    this.select({ kind: 'friendly', id: next.unitId });
+    this.map.centerOn(next.position.center);
+  }
+
+  private stepSpeed(direction: 1 | -1): void {
+    const { speeds } = this.config;
+    const at = speeds.indexOf(this.run?.speed ?? speeds[0] ?? 1);
+    const next = speeds[Math.min(speeds.length - 1, Math.max(0, (at < 0 ? 0 : at) + direction))];
+    if (next !== undefined) this.config.onSpeed(next);
   }
 
   private updateCursorGrid(pixel: Vec2): void {
@@ -1014,6 +1087,7 @@ export class App {
     this.map.render(shown, this.selection, this.threatAltitude(view), {
       weather: this.reviewing ? null : this.weatherLayer(view),
       fireFreshSeconds: this.config.fireFreshSeconds,
+      heights: this.layers.has('heights'),
     });
     if (this.reviewing && this.showTruth) {
       const frames = this.config.truthHistory();
@@ -1069,10 +1143,12 @@ export class App {
         (view.forecast !== null && lightState(view.forecast.sky, view.tick) !== 'day' && run.result === null
           ? '<button data-action="wait-light" title="Run fast to first light, stopping for anything that needs you. Pause stops it.">Wait for first light</button>'
           : '') +
+        (run.result === null ? '<button data-action="run-on" title="Run fast until something needs you: a request, an aircraft arriving or out of ordnance, a first contact, or anything above routine on the radio (E). Pause stops it.">Run on ▸▸</button>' : '') +
         `<span id="status">${escapeHtml(status)}</span>` +
         `<span id="objective">${escapeHtml(this.config.objective)}</span>` +
         `<button data-action="timeline"${this.reviewing ? ' class="active"' : ''} title="Look back through the battle as you knew it (T).">Timeline</button>` +
-        '<button data-action="scenarios" title="Back to the scenario menu.">Scenarios</button>' +
+        `<button data-action="restart" title="Start this battle again from the beginning. Seed ${this.config.seed}: the same seed plays the same battle.">Restart</button>` +
+        '<button data-action="scenarios" title="Back to the scenario menu. The battle is kept and can be resumed.">Scenarios</button>' +
         (run.debrief === null ? '' : '<button data-action="mission-report">Mission report</button>') +
         `<button data-action="export">Export log</button>`,
     );
@@ -1101,9 +1177,9 @@ export class App {
       const eta = a.etaSeconds === null ? '' : ` ${duration(a.etaSeconds)}`;
       return (
         `<button class="aircraft-row${selected ? ' active' : ''}" data-action="select-aircraft" data-id="${a.aircraftId}" title="${escapeHtml(aircraftSummary(a))}">` +
-        `<b>${a.aircraftId}</b><b>${a.damaged ? 'DAMAGED' : a.status}</b>` +
+        `<b>${a.aircraftId}</b><b>${aircraftStatusLabel(a.status, a.damaged)}</b>` +
         `<span class="mission">${aircraftMission(a)}${eta}</span>` +
-        `<span>${a.landed ? 'landed' : `${Math.round(a.altitudeMeters)} m`}${a.aboveCloud ? ' ☁' : ''}</span><span>${Math.round(a.fuelFraction * 100)}%</span><span>ord ${a.ammunition}/${a.gunBursts}</span></button>`
+        `<span>${a.landed ? 'landed' : `${Math.round(a.altitudeMeters)} m`}${a.aboveCloud ? ' ☁' : ''}</span><span>${Math.round(a.fuelFraction * 100)}%</span><span title="Bombs / gun bursts">${a.ammunition}/${a.gunBursts}</span></button>`
       );
     });
     morphHtml(element('aircraft'), rows.join(''));
@@ -1204,21 +1280,54 @@ export class App {
    * as the controller's own transmission, with a brief pop-over, so no click goes unanswered.
    */
   private issue(action: PlayerAction, said: string | null = null, toUnit = false): void {
-    this.config.onAction(action);
+    // The words go with the command, so a saved or exported log keeps them.
+    this.config.onAction(said === null ? action : { ...action, said });
     if (said === null || this.view === null) return;
     const tick = this.view.tick;
     const arrives = toUnit ? ` (reaches them about ${clock(tick + this.config.transmitSeconds)})` : '';
     this.toasts.add({ senderId: 'YOU', level: 'sent', sender: 'Sent', text: said, point: null });
+    this.sent.push({ tick, text: said });
+    this.logSent(tick, said + arrives);
+  }
+
+  private logSent(tick: number, text: string): void {
     const row = document.createElement('div');
     row.className = 'log-row outgoing main';
-    row.innerHTML = `<span class="time">${clock(tick)}</span> <b>Air Ops (you)</b> <span class="kind">SENT</span><br />${escapeHtml(said + arrives)}`;
+    row.innerHTML = `<span class="time">${clock(tick)}</span> <b>Air Ops (you)</b> <span class="kind">Sent</span><br />${escapeHtml(text)}`;
     this.log.prepend(row);
+  }
+
+  /** Takes over a resumed battle: what the controller had said goes back in the log and timeline. */
+  restore(sent: readonly SentLine[]): void {
+    this.sent = [...sent];
+    this.unlogged = [...sent];
+    this.catchingUp = true;
+  }
+
+  /** Puts a resumed battle's own lines in the log up to a moment, so they sit among the replies. */
+  private logSentUntil(tick: number): void {
+    while (this.unlogged[0] !== undefined && this.unlogged[0].tick <= tick) {
+      const line = this.unlogged.shift() as SentLine;
+      this.logSent(line.tick, line.text);
+    }
   }
 
   private coverWith(aircraftId: string, unitId: string): void {
     const center = this.view?.friendlies.find((friendly) => friendly.unitId === unitId)?.position.center;
     const radius = Number((document.getElementById('order-radius') as HTMLInputElement | null)?.value ?? 0) || 500;
     if (center !== undefined) this.order(aircraftId, { kind: 'Cover', unitId, center, radius });
+  }
+
+  /** R acts on a second press within a few seconds, because a slip would send an aircraft home. */
+  private returnByKey(aircraftId: string): void {
+    const now = performance.now();
+    if (this.returnArmed !== null && this.returnArmed.aircraftId === aircraftId && now <= this.returnArmed.until) {
+      this.returnArmed = null;
+      this.order(aircraftId, { kind: 'ReturnToBase' });
+      return;
+    }
+    this.returnArmed = { aircraftId, until: now + RETURN_CONFIRM_MS };
+    this.toasts.add({ senderId: 'YOU', level: 'sent', sender: 'Confirm', text: `Press R again to send ${aircraftId} home.`, point: null });
   }
 
   /** Gives an aircraft a task, and says so in the log. */
@@ -1493,13 +1602,16 @@ export class App {
 
   private renderLog(view: PlayerView): void {
     const { names, terrain } = this.config;
+    const quiet = this.catchingUp;
+    this.catchingUp = false;
     for (const message of view.log.slice(this.logged)) {
+      this.logSentUntil(message.receivedAt - 1);
       const line = radioLine(message, terrain.cellSize);
       const row = document.createElement('div');
       const { level, heard } = triage(message, this.heardContacts, this.config.triage);
       this.heardContacts = heard;
       row.className = `log-row ${message.kind.toLowerCase()} ${level}`;
-      if (level !== 'routine') {
+      if (level !== 'routine' && !quiet) {
         this.toasts.add({
           senderId: message.senderId,
           level,
@@ -1516,9 +1628,10 @@ export class App {
         .join('');
       row.innerHTML =
         `<span class="time">${clock(message.receivedAt)}</span> <b>${escapeHtml(displayName(message.senderId, names))}</b> ` +
-        `<span class="kind">${message.kind}</span><br />${escapeHtml(line.text)} ${links}`;
+        `<span class="kind">${MESSAGE_KIND_LABELS[message.kind]}</span><br />${escapeHtml(line.text)} ${links}`;
       this.log.prepend(row);
     }
+    if (quiet) this.logSentUntil(view.tick);
     this.logged = view.log.length;
   }
 

@@ -1,7 +1,8 @@
 import { lightState } from './domain/public/light';
 import { DEFAULT_SCENARIO_NAME, loadBundledScenario, scenarioNames } from './scenario/catalog';
 import { skyOf } from './sim/weather';
-import { renderScenarioMenu, type ScenarioCard } from './ui/scenario-menu';
+import { readSave } from './game/autosave';
+import { renderScenarioMenu, type ResumeOffer, type ScenarioCard } from './ui/scenario-menu';
 
 /*
  * The entry point. A URL naming a scenario or a seed plays it; a bare one opens the scenario menu.
@@ -31,16 +32,27 @@ function cards(): ScenarioCard[] {
       startTime: file.startTime,
       light: lightState(skyOf(file), 0),
       durationSeconds: file.durationSeconds,
+      endsEarly: file.mission.kind === 'Rescue',
       aircraft: file.air.aircraft.map((entry) => models[entry.model]?.displayName.split(' ')[0] ?? entry.model),
     };
   });
+}
+
+/** The battle left unfinished, if the browser kept one. Whether it still replays is found on resuming. */
+function unfinished(): ResumeOffer | null {
+  try {
+    const save = readSave(localStorage);
+    return save === null ? null : { id: save.scenario, seed: save.seed, elapsedSeconds: save.ticks };
+  } catch {
+    return null;
+  }
 }
 
 const query = new URLSearchParams(location.search);
 // A seed alone plays the default scenario, as older links did.
 const chosen = query.get('scenario') ?? (query.has('seed') ? DEFAULT_SCENARIO_NAME : null);
 if (chosen === null) {
-  renderScenarioMenu(document.getElementById('scenario-menu') as HTMLElement, cards(), remembered());
+  renderScenarioMenu(document.getElementById('scenario-menu') as HTMLElement, cards(), remembered(), unfinished());
 } else {
   try {
     localStorage.setItem(LAST_PLAYED, chosen);

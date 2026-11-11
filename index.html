@@ -115,6 +115,7 @@
       .scenario-card { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; background: #1c252b; border: 1px solid #3a4850; border-radius: 4px; color: inherit; font: inherit; cursor: pointer; }
       .scenario-card:hover, .scenario-card:focus-visible { border-color: #4a8fd8; background: #213039; }
       .scenario-card.last { border-left: 4px solid #4a8fd8; }
+      a.scenario-card.resume { box-sizing: border-box; margin: 10px 0 14px; text-decoration: none; border-color: #4a8fd8; }
       .scenario-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 15px; }
       .scenario-objective { color: #e6d27a; }
       .scenario-summary { color: #c9d3d8; line-height: 1.4; }
@@ -178,9 +179,9 @@
       #sidebar { display: grid; grid-template-rows: auto auto auto auto minmax(0, 1fr); min-height: 0; border-left: 1px solid #333c41; }
       #sidebar > section { padding: 8px 10px; border-bottom: 1px solid #333c41; }
       #altitude-profile { display: block; width: 100%; height: 130px; cursor: ns-resize; }
-      #aircraft { max-height: 112px; overflow-y: auto; margin-top: 4px; }
+      #aircraft { max-height: 142px; overflow-y: auto; margin-top: 4px; }
       .aircraft-row {
-        display: grid; grid-template-columns: 72px 72px minmax(0, 1fr) 54px 34px 40px; gap: 4px;
+        display: grid; grid-template-columns: 72px 78px minmax(0, 1fr) 54px 34px 40px; gap: 4px;
         width: 100%; text-align: left; font-size: 11px; padding: 2px 4px; margin-bottom: 2px;
       }
       #unit-list { display: flex; flex-wrap: wrap; gap: 4px; }

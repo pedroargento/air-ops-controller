@@ -8,7 +8,7 @@ import { createInitialState } from '../../src/sim/state';
 import { GameSession } from '../../src/game/session';
 import { missionReportHtml } from '../../src/ui/mission-report';
 import { step } from '../../src/sim/step';
-import { hashState } from '../../src/domain/public/hash';
+import { gameplayHash } from '../../src/sim/state-hash';
 
 const scenario = loadScenarioFile();
 
@@ -64,8 +64,18 @@ describe('aircraft accounting', () => {
     second.truth.aircraft[0]!.record.enemyCasualties = 999;
     second.truth.aircraft[0]!.record.observedSquads = ['E-N1/1'];
     for (let i = 0; i < 100; i += 1) { step(first, [], scenario); step(second, [], scenario); }
-    const gameplay = (state: typeof first) => ({ ...state, truth: { ...state.truth, aircraft: state.truth.aircraft.map(({ record: _record, ...a }) => a) } });
-    expect(hashState(gameplay(first))).toBe(hashState(gameplay(second)));
+    expect(gameplayHash(first)).toBe(gameplayHash(second));
+  });
+
+  it('keeps accounting and diagnostics out of the replay hash', () => {
+    const state = createInitialState(scenario, 1);
+    const before = gameplayHash(state);
+    // A counter added to the record later is covered too, since the whole record is left out.
+    Object.assign(state.truth.aircraft[0]!.record, { enemyCasualties: 7, counterAddedLater: 3 });
+    Object.values(state.truth.platoons)[0]!.drillWaitReason = 'support';
+    expect(gameplayHash(state)).toBe(before);
+    state.truth.aircraft[0]!.ammunition -= 1;
+    expect(gameplayHash(state)).not.toBe(before);
   });
 });
 

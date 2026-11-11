@@ -1,29 +1,18 @@
-import { applySettings, settingsFromArgs } from './settings';
-import type { DrillKind } from '../domain/public/ground';
+import { settingsFromArgs } from './settings';
 // Usage: npx tsx src/cli/batch.ts [--scenario name] [--seeds 1000] [--policy name|all] [--without-drill a,b]
-//        [--set path=value ...] [--json file]   e.g. --set combat.suppressionDecayPerUpdate=0.04 --set 'doctrines.*.pinnedSuppression=0.7'
+//        [--set path=value ...] [--json file] [--jobs threads] [--baseline policy]   e.g. --set combat.suppressionDecayPerUpdate=0.04 --set 'doctrines.*.pinnedSuppression=0.7'
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { Policy } from '../policies/air-policies';
 import type { Scenario } from '../scenario/load';
 import type { GroundBehavior } from '../domain/public/ground';
 import { runBattle, type BattleResult } from './battle';
-import { DEFAULT_SCENARIO_NAME, loadScenarioFile } from './load-scenario';
+import { DEFAULT_SCENARIO_NAME } from './load-scenario';
+import { pairedStatistics } from './paired-statistics';
 import { policies } from './policy-registry';
+import { defaultJobs, runPolicies } from './pool';
+import { buildScenario, type ScenarioSpec } from './scenario-spec';
 import type { WithdrawalTrigger } from './tempo';
-
-/** The same scenario with some drills forgotten, to measure what each is worth. */
-function withoutDrills(scenario: Scenario, drills: readonly string[]): Scenario {
-  const forget = <T extends Readonly<{ drills: readonly DrillKind[]; experimentalDrills?: readonly DrillKind[] }>>(doctrines: Readonly<Record<string, T>>): Record<string, T> =>
-    Object.fromEntries(
-      Object.entries(doctrines).map(([name, doctrine]) => [
-        name,
-        { ...doctrine, drills: doctrine.drills.filter((drill) => !drills.includes(drill)),
-          ...(doctrine.experimentalDrills === undefined ? {} : { experimentalDrills: doctrine.experimentalDrills.filter((drill) => !drills.includes(drill)) }) },
-      ]),
-    );
-  return { ...scenario, doctrines: forget(scenario.doctrines), file: { ...scenario.file, doctrines: forget(scenario.file.doctrines) } };
-}
 
 function option(name: string, fallback: string): string {
   const index = process.argv.indexOf(`--${name}`);
@@ -220,21 +209,74 @@ export function pairedWinDifference(a: readonly BattleResult[], b: readonly Batt
   };
 }
 
-function main(): void {
+export type Interval = Readonly<{ mean: number; low: number; high: number }>;
+
+/** One policy against the baseline on the same seeds: each figure is this policy's minus the baseline's. */
+export type BaselineComparison = Readonly<{
+  policy: string;
+  baseline: string;
+  seeds: number;
+  /** Win rate, in percentage points. */
+  winPoints: Interval;
+  friendlyLeft: Interval;
+  enemyLeft: Interval;
+  endMinutes: Interval;
+  /** Seeds this policy won and the baseline didn't, and the reverse. */
+  gained: number;
+  lost: number;
+}>;
+
+/**
+ * Paired differences with 95% intervals. Men left and end time move on every seed, so they
+ * resolve effects that a win rate over a few hundred seeds can't.
+ */
+export function compareToBaseline(policy: string, results: readonly BattleResult[], baseline: string, base: readonly BattleResult[]): BaselineComparison {
+  if (results.length !== base.length) throw new Error('A paired comparison needs the same seeds on both sides');
+  const interval = (read: (result: BattleResult) => number, scale = 1): Interval => {
+    const stats = pairedStatistics(results.map((result, index) => read(result) - read(base[index] as BattleResult)));
+    return { mean: rounded(stats.mean * scale), low: rounded(stats.lower95 * scale), high: rounded(stats.upper95 * scale) };
+  };
+  const won = (result: BattleResult): number => (result.outcome === 'success' ? 1 : 0);
+  const wins = results.map((result, index) => won(result) - won(base[index] as BattleResult));
+  return {
+    policy,
+    baseline,
+    seeds: results.length,
+    winPoints: interval(won, 100),
+    friendlyLeft: interval((result) => result.friendlyPersonnel),
+    enemyLeft: interval((result) => result.enemyPersonnel),
+    endMinutes: interval((result) => result.endedAtTick / 60),
+    gained: wins.filter((difference) => difference > 0).length,
+    lost: wins.filter((difference) => difference < 0).length,
+  };
+}
+
+async function main(): Promise<void> {
   const seeds = Number(option('seeds', '1000'));
   const which = option('policy', 'all');
   const json = option('json', '');
-  const scenario = applySettings(withoutDrills(loadScenarioFile(option('scenario', DEFAULT_SCENARIO_NAME)), process.argv.includes('--without-drill') ? option('without-drill', '').split(',') : []), settingsFromArgs(process.argv));
-  const results: Record<string, readonly BattleResult[]> = {};
-  const available = policies(scenario);
+  const jobs = Number(option('jobs', String(defaultJobs())));
+  const baseline = option('baseline', 'none');
+  const spec: ScenarioSpec = {
+    name: option('scenario', DEFAULT_SCENARIO_NAME),
+    withoutDrills: process.argv.includes('--without-drill') ? option('without-drill', '').split(',') : [],
+    settings: settingsFromArgs(process.argv),
+  };
+  const available = policies(buildScenario(spec));
   if (which !== 'all' && available[which] === undefined) {
-    throw new Error(`No policy "${which}" for ${scenario.file.id}. Available: ${Object.keys(available).join(', ')}`);
+    throw new Error(`No policy "${which}" for ${spec.name}. Available: ${Object.keys(available).join(', ')}`);
   }
-  for (const [name, make] of Object.entries(available)) {
-    if (which === 'all' || which === name) results[name] = runSeeds(scenario, seeds, make);
-  }
+  const names = Object.keys(available).filter((name) => which === 'all' || which === name);
+  const results = await runPolicies(spec, names, seeds, jobs);
   const summaries = Object.entries(results).map(([name, r]) => summarize(name, r));
   console.log(JSON.stringify(summaries, null, 1));
+  const base = results[baseline];
+  const comparisons = base === undefined || seeds < 2 ? []
+    : Object.entries(results).filter(([name]) => name !== baseline).map(([name, r]) => compareToBaseline(name, r, baseline, base));
+  for (const c of comparisons) {
+    const show = ({ mean: m, low, high }: Interval): string => `${m} (${low} to ${high})`;
+    console.log(`${c.policy} over ${c.baseline}: wins ${show(c.winPoints)} points, friendly left ${show(c.friendlyLeft)}, end minute ${show(c.endMinutes)}`);
+  }
   const informed = results['informed'];
   const silent = results['informedNoForward'];
   const reactive = results['reactive'];
@@ -246,8 +288,8 @@ function main(): void {
   }
   if (json !== '') {
     mkdirSync(dirname(json), { recursive: true });
-    writeFileSync(json, JSON.stringify(summaries, null, 2));
+    writeFileSync(json, JSON.stringify({ summaries, comparisons }, null, 2));
   }
 }
 
-if (process.argv[1]?.endsWith('batch.ts')) main();
+if (process.argv[1]?.endsWith('batch.ts')) await main();

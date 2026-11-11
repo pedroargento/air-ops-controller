@@ -57,6 +57,8 @@ describe('formatting', () => {
     expect(radioLine(message, 50).text).toBe('Strike near grid 042-081: effect observed.');
     const hit = { ...message, assessment: { estimatedCasualties: 9, destroyed: false } };
     expect(radioLine(hit, 50).text).toBe('Strike near grid 042-081: effect observed, about 9 casualties.');
+    const none = { ...message, assessment: { estimatedCasualties: 0, destroyed: false } };
+    expect(radioLine(none, 50).text).toBe('Strike near grid 042-081: effect observed, no casualties seen.');
     const kill = { ...message, assessment: { estimatedCasualties: 12, destroyed: true } };
     expect(radioLine(kill, 50).text).toContain('target destroyed');
     const miss = { ...message, effect: 'no-effect-observed' as const };

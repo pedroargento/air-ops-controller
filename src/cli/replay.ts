@@ -1,7 +1,7 @@
 import type { PlayerCommand } from '../domain/public/commands';
-import { hashState } from '../domain/public/hash';
 import type { Scenario } from '../scenario/load';
 import { createInitialState } from '../sim/state';
+import { gameplayHash } from '../sim/state-hash';
 import { step } from '../sim/step';
 
 export type Replay = Readonly<{
@@ -20,7 +20,7 @@ export function runReplay(scenario: Scenario, replay: Replay): readonly string[]
   for (let tick = 0; tick < replay.ticks; tick += 1) {
     const due = replay.commands.filter((command) => command.tick === tick);
     step(state, due, scenario);
-    hashes.push(hashState(state));
+    hashes.push(gameplayHash(state));
   }
   return hashes;
 }

@@ -3,6 +3,13 @@ import { reportLevel, type RadioMessage, type ReportLevel } from '../domain/publ
 import type { PlayerView } from '../knowledge/player-view';
 import { radioLine } from './format';
 
+/** The radio's events with the controller's own transmissions among them, in time order. */
+export function withSent(events: readonly TimelineEvent[], sent: readonly SentLine[], senderId: string): readonly TimelineEvent[] {
+  const own = sent.map(({ tick, text }): TimelineEvent => ({ tick, senderId, kind: 'SENT', level: 'main', text, point: null }));
+  // Stable, so a reply logged in the same second stays after the call that caused it.
+  return [...own, ...events].sort((a, b) => a.tick - b.tick);
+}
+
 /*
  * The timeline: the battle as the controller knew it, moment by moment. Snapshots of the
  * player's own view are kept as the run goes, so going back shows what was on the map then,
@@ -11,7 +18,10 @@ import { radioLine } from './format';
 
 export const SNAPSHOT_SECONDS = 30;
 
-export type TimelineEvent = Readonly<{ tick: number; senderId: string; kind: RadioMessage['kind']; level: ReportLevel; text: string; point: Vec2 | null }>;
+export type TimelineEvent = Readonly<{ tick: number; senderId: string; kind: RadioMessage['kind'] | 'SENT'; level: ReportLevel; text: string; point: Vec2 | null }>;
+
+/** Something the controller put on the radio, and when. */
+export type SentLine = Readonly<{ tick: number; text: string }>;
 
 /** The moments worth marking on the timeline: everything above routine on the radio. */
 export function timelineEvents(log: readonly RadioMessage[], cellSize: number): readonly TimelineEvent[] {

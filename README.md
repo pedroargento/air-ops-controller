@@ -30,6 +30,8 @@ The URL records what you are playing, so you can bookmark or share a battle:
 | `/?scenario=valley-road&seed=42` | Plays the same battle every time |
 | `/?scenario=valley-road&seed=42&speed=8` | Starts at a higher speed |
 
+A random seed is written into the address once the battle starts. The battle in progress is kept in the browser: reloading the page resumes it, and the menu offers **Resume** after you leave. Opening a link with a seed always starts that battle from the beginning.
+
 For a static build, `npm run build` writes the game to `dist/`.
 
 ## Scenarios
@@ -119,6 +121,8 @@ npx tsx src/cli/batch.ts --scenario downed-pilot --policy rescueNow --seeds 200
 npx tsx src/cli/batch.ts --scenario outpost-under-pressure --policy informed --seeds 300 \
   --set doctrines.hunter.speedMps=0.8 --json out.json
 ```
+
+Battles run on several threads, half the logical processors by default; `--jobs 1` keeps everything in one thread, and the results are the same either way. When the `none` policy is among those run, each other policy is also compared with it seed by seed, with 95% intervals for wins, men left and end time (`--baseline name` picks another policy to compare against). `--json` writes `{ summaries, comparisons }`.
 
 `--set` overrides any rule from `scenarios/rules/standard.json` for that run. The bots for each scenario are listed in `src/cli/policy-registry.ts`.
 
