@@ -39,7 +39,26 @@ To opt in, use `--set ground.experimentalTactics=true` in batch runs or the same
 
 Validation: `npm run check` passes 42 files / 675 tests. Coverage includes all shipped defaults, missing-setting compatibility, reversible opt-in and doctrine resolution, both modes assigning roles, coordination only when opted in, inert gate overrides and support budgets in standard mode, and independent threat-memory fixes in both modes. The golden replay hash deliberately changes from `33086b44` to `a66514cf` for the selective rollback and resolved configuration.
 
-### Current balance — standard tactics, 2026-11-10
+### Current balance — after R3.1, R3.2 and the flight rules of §8.10, 2026-11-11
+
+All bots on all six scenarios, 300 battles each (seeds 0–299), with crews holding their bombs by default and information carrying its cost (§8.0, §6.5). Successes out of 300. "Before" is the table in the next section, which used seeds 1–300, so a difference of one or two is the seeds and not the rules.
+
+| Scenario | No air | Main bot | Before → now | Best bot now |
+|---|---:|---|---:|---|
+| outpost-under-pressure | 14 | `informed` | 236 → 201 | `informedLinger` 216 |
+| valley-road | 54 | `routeRecon` | 187 → 186 | `routeRecon` 186 |
+| overwatch | 19 | `routeReconCover` | 56 → 37 | `routeReconCover` 37 |
+| outpost-night | 3 | `informedLit` | 120 → 102 | `informedFireFirst` 145 |
+| downed-pilot | 0 | `rescueNow` | 292 → 294 | `rescueNow` 294 |
+| find-them | 0 | `sweep` | 239 → 249 | `sweep` 249 |
+
+- **Overwatch got harder for the cover bot.** `routeReconCover` falls from 56 to 41 with standing to (the halt is the whole cause: with `standToSeconds` at 0 it wins 55, and at 30 it wins 50), and stands at 37 after the flight rules.
+- **Plain `routeRecon` on Overwatch wins 12, under the same bot silent (20), and the halt is not why:** it wins 12 with the halt at 0 as well. The paired difference is −2.7 points (−6.1 to +0.8), inside noise, and forwarding was already behind silence there before R3 (17.7% against 22.3%). Forwarding has never paid on this map.
+- **The outpost's main bot loses about 20 wins** to the net rules and standing to, after the flight rules gave some back. The figures in the bullets around this one are from before the flight rules; R4 step 4 has the comparison.
+- **Forwarding every change is ruinous on the road maps:** 37 of 300 on Valley Road against 100 silent, and 0 on Overwatch. At the outpost it is no longer worse than sparing forwarding (204 against 205), because the garrison has the attackers in sight and doesn't halt for them.
+- Rescue and search are untouched: neither forwards intelligence nor bombs from a Watch.
+
+### Balance before R3 — standard tactics, 2026-11-10
 
 Completed 3,600 default-mode battles (seeds 1–300, six scenarios, no air and one established informed policy each), paired against the saved experimental baseline. Another 240 opt-in battles (seeds 1–20 in the same twelve cases) exactly reproduce its outcomes, friendly/enemy personnel remaining and end ticks. These are the final-code results; earlier verification runs are excluded. Raw data and paired aggregates are in `reports/tactics-default/`.
 
@@ -148,6 +167,9 @@ Findings, against the figures recorded before S7:
 ### Open items
 
 Most important first. Win-rate tuning waits for M13, so these are recorded rather than fixed.
+
+- **Standing to costs the cover bot on Overwatch** 14 wins of 300 (41 against 55 with no halt). Shortening the halt to 30 seconds gives 50, but then forwarding every change on Valley Road is merely useless (101 against 100 silent) and no longer harmful. Decided 2026-11-11: stay at 45 and keep the in-sight rule.
+- **Forwarding has never paid on Overwatch** for plain `routeRecon` (12 of 300 against 20 silent, the same with the halt off). Not traced.
 
 The review work in section 5 now schedules some of these: guns, waiting for air, forwarding and the hidden win condition are in R3, and medevac's distance to base is touched by R4.
 
@@ -788,7 +810,11 @@ Each stage measured over 300 paired seeds against the same bot forwarding nothin
 - **Bots:** `informed`, `routeRecon` and everything built on them now forward sparingly, since the old habit can no longer stand for a competent controller. The old one is `…EveryChange`. With `radio.netSerial=false` the old bots gave byte-identical results to before, checked at the net-rules stage.
 - **Not done:** the player has no way to clear the queue. The PDF manual was not rebuilt.
 - Golden hash `a9161d09` to `30a34f0e`. 723 tests and 86 e2e checks pass.
-- **"Current balance" above is out of date** for the bots that forward. Re-measured so far with both rules on (wins of 300, seeds 0–299; the table above used seeds 1–300): outpost no air 14, `informed` 211 (was 236), `informedCleared` 247; outpost at night no air 3, `informedLit` 113 (was 120), `informed` 82; Downed Pilot `rescueNow` 292 and Find Them `sweep` 239, both unchanged. Valley Road and Overwatch were still running when this was written, and the table has not been rewritten.
+- **Balance re-measured:** see "Current balance" at the top. Overwatch is the open problem it shows.
+- **No halt for an enemy in sight (2026-11-11):** a platoon doesn't stand to when the forwarded contact is within `groupRadiusMeters` of a hostile it holds from its own sighting. A diagnostic over 30 battles found a quarter of halts were of this kind. 300 paired seeds against the same bot silent, before → after: Overwatch `routeRecon` −2.7 → −2.7 (−6.1 to +0.8), `routeReconCover` 31 → 41 wins; Valley Road `routeRecon` +28.0 → +27.0 (19.6 to 34.4), every change −31.3 → −21.0 (−27.2 to −14.8); outpost `informed` +5.0 → +3.0 (−3.7 to 9.7), every change −5.7 → +2.7 (−4.2 to 9.5). So it gives the cover bot back 10 wins and removes the penalty for forwarding every change at the outpost.
+- **Tried and dropped:** the sparing bot forwarding only within 600 m, down from 1,200 m. Overwatch `routeRecon` 11, `routeReconCover` 32 (worse than 41), Valley Road 182, outpost 211: no gain.
+- **Halt length, measured and not changed** (300 seeds, with the rule above): at 0 seconds Overwatch `routeRecon` 12, cover 55, Valley Road sparing 184, every change 178; at 30 seconds 13, 50, 187 and 101; at 45 seconds 12, 41, 181 and 37.
+- Golden hash unchanged (`30a34f0e`); 724 tests pass.
 
 #### R4: New rules
 
@@ -799,6 +825,41 @@ Each stage measured over 300 paired seeds against the same bot forwarding nothin
 5. **Period weapons.** `MANPADS` is a few years late for these aircraft. Remove it from the scenarios, or retune it as a heavy machine gun.
 
 **Exit:** each rule's own, as above. Marking comes first and is measured before the others start.
+
+**Step 4, first half, and step 3's turnaround: done on 2026-11-11 (§8.10).** Brought forward at the user's direction ("aircraft realism"), ahead of marking.
+
+- **Flight:** each model has a cruise speed and a slower station speed (`stationSpeedMps`), and turns at no more than `maxLoadFactor` g, which replaces the fixed turn rate. Before, the usual orbit needed 5.3 g in the F-100D and 4.4 g in the RF-101C, and helicopters turned at 5.7 g. Now the jets' orbits need about 2.2 g.
+- **Turnaround per model:** F-100D and RF-101C 25 minutes, A-1E 20, HH-3E 15, AH-1G 12, O-1E and UH-1B 10, OH-6A and UH-1H 8. All were 10.
+- **Measured** on all bots and all six scenarios, 300 battles each (seeds 0–299). Wins of 300, before → flight only → with turnaround:
+
+| Scenario and bot | Before | Flight only | With turnaround | With the attack run |
+|---|---:|---:|---:|---:|
+| Outpost `informed` | 205 | 249 | 214 | 201 |
+| Outpost `informedNoForward` | 196 | 223 | 186 | 181 |
+| Outpost `immediate` | 109 | 148 | 93 | 126 |
+| Outpost `informedGunsOnly` | 96 | 141 | 141 | 140 |
+| Outpost `informedCleared` | 236 | 243 | 223 | 210 |
+| Night `informed` | 85 | 105 | 106 | 89 |
+| Night `informedFireFirst` | 128 | 158 | 154 | 145 |
+| Night `informedLit` | 115 | 125 | 117 | 102 |
+| Valley Road `routeRecon` | 181 | 176 | 167 | 186 |
+| Valley Road `routeReconCover` | 186 | 183 | 181 | 177 |
+| Overwatch `routeReconCover` | 41 | 36 | 29 | 37 |
+| Overwatch `routeReconNoForward` | 20 | 17 | 19 | 18 |
+| Downed Pilot `rescueNow` | 292 | 293 | 293 | 294 |
+| Find Them `sweep` | 239 | 249 | 249 | 249 |
+
+- **The flight rules alone made the outposts much easier.** The F-100D, slower and tighter on station, dropped 11.5 bombs a battle where it had dropped 8.1, and flew 3.3 sorties where it had flown 2.6. Its longer turnaround takes that back: the outpost's main bot ends 9 wins up.
+- **Guns gained:** the outpost's guns-only bot goes from 96 to 141, with 27.9 passes a battle against 18.5. Slower runs mean more of them.
+- **Night is 20 to 30 wins easier** for the bombing bots, for the same reason, and turnaround doesn't take it back.
+- **The road maps lose a little:** the A-1E's 20 minutes costs Valley Road `routeRecon` 9 wins and Overwatch's cover bot 7, on a map where it carries two bombs.
+- **Simplification kept:** attack runs are flown at station speed, which is slow for a jet. At cruise speed a 4 g turn is 1,645 m wide and the crew would need to extend away before each run, which isn't modeled.
+- **The attack run (same day, §8.10):** a fixed-wing aircraft now extends to 2.5 turn radii at its attack speed (A-1E 110 m/s and 1,090 m, F-100D 230 m/s and 3,480 m), turns in, releases and pulls off. This replaces the attack at station speed, which was the simplification noted above. The crew chooses where the run starts: the way it already is from the target, or across the line to ground fire it has met lately. Recorded in `DESIGN.md` as the crew's decision, at the user's direction.
+- **It brings the outposts back to where they were:** the main bot wins 201 of 300 (205 before any of this), with 29.4 passes a battle against 33.3. The A-1E drops 10.2 bombs a battle where it dropped 13.2, since each run now takes the flying as well as the timer. Night's lit bot falls to 102 from 115.
+- **Valley Road's unforwarded bot rose to 122 from 99,** and Overwatch's plain `routeRecon` fell to 5 from 10. Neither is explained; both are single unpaired runs.
+- **Hits on aircraft did not rise** (0.56 a battle at the outpost against 0.55), though the runs range further.
+- **Not done:** fuel does not change with speed, the base is no further away, takeoff is still 60 seconds for every model, and damage is not graded.
+- Golden hash unchanged (`30a34f0e`: its replay flies no aircraft). 727 tests pass. One helicopter test moved from seed 1 to seed 2, where the gunship isn't hit on arrival (it attacks on 9 of 12 seeds).
 
 #### R5: Code health
 

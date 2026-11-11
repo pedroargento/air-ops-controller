@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chooseAttack, chooseStrike, chooseSuppression, decideCrew } from '../../src/ai/decide-crew';
+import { chooseAttack, chooseRollIn, chooseStrike, chooseSuppression, decideCrew } from '../../src/ai/decide-crew';
 import type { CrewSelf, FiredOn, WeaponsControl } from '../../src/domain/public/air';
 import type { ContactEstimate } from '../../src/domain/public/estimates';
 import type { ContactId } from '../../src/domain/public/ground';
@@ -87,7 +87,7 @@ describe('crew altitude', () => {
   });
 
   it('flies a gun run at the run\'s height', () => {
-    const attackRun = { aim: { x: 0, y: 0 }, contactId: 'C-1', weapon: 'guns', phase: 'runIn', releaseAltitudeMeters: 200, pullOffSeconds: 5, nextPassSeconds: 120 } as const;
+    const attackRun = { aim: { x: 0, y: 0 }, contactId: 'C-1', weapon: 'guns', phase: 'runIn', rollIn: { x: 1000, y: 0 }, rollInMeters: 1000, releaseAltitudeMeters: 200, pullOffSeconds: 5, nextPassSeconds: 120 } as const;
     expect(decideCrew(crew({ attackRun })).altitudeMeters).toBe(200);
   });
 });
@@ -104,8 +104,30 @@ describe('breaking off', () => {
 
   it('reacts to fresh fire only, and not in the middle of a run', () => {
     expect(decideCrew(crew({ firedOn: [fired({ hit: true, tick: 900 })] })).breakFrom).toBeNull();
-    const attackRun = { aim: { x: 0, y: 0 }, contactId: 'C-1', weapon: 'heavy', phase: 'runIn', releaseAltitudeMeters: 650, pullOffSeconds: 5, nextPassSeconds: 120 } as const;
+    const attackRun = { aim: { x: 0, y: 0 }, contactId: 'C-1', weapon: 'heavy', phase: 'runIn', rollIn: { x: 1000, y: 0 }, rollInMeters: 1000, releaseAltitudeMeters: 650, pullOffSeconds: 5, nextPassSeconds: 120 } as const;
     expect(decideCrew(crew({ firedOn: [fired({ hit: true })], attackRun })).breakFrom).toBeNull();
+  });
+});
+
+describe('choosing where to start a run (§8.10)', () => {
+  const aim = { x: 0, y: 0 };
+
+  it('goes out the way it already is from the target', () => {
+    expect(chooseRollIn(crew({ position: { x: 0, y: 300 } }), aim, 2000)).toEqual({ x: 0, y: 2000 });
+  });
+
+  it('runs in across the line to recent ground fire, on its own side', () => {
+    // Fired on from the east: it runs north to south or south to north, never over the gun.
+    const point = chooseRollIn(crew({ position: { x: 200, y: 300 }, firedOn: [fired()] }), aim, 2000);
+    expect(point.x).toBeCloseTo(0);
+    expect(point.y).toBeCloseTo(2000);
+    const below = chooseRollIn(crew({ position: { x: 200, y: -300 }, firedOn: [fired()] }), aim, 2000);
+    expect(below.y).toBeCloseTo(-2000);
+  });
+
+  it('forgets old fire', () => {
+    const point = chooseRollIn(crew({ position: { x: 300, y: 0 }, firedOn: [fired({ tick: 0 })], threatMemorySeconds: 600 }), aim, 2000);
+    expect(point).toEqual({ x: 2000, y: 0 });
   });
 });
 

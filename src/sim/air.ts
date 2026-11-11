@@ -1,5 +1,5 @@
 import { emptyAircraftRecord } from './mission-report';
-import { chooseAttack, chooseStrike, chooseSuppression, decideCrew } from '../ai/decide-crew';
+import { chooseAttack, chooseRollIn, chooseStrike, chooseSuppression, decideCrew } from '../ai/decide-crew';
 import type {
   AircraftId,
   AircraftOrder,
@@ -87,9 +87,24 @@ function destinationOf(order: AircraftOrder | null): Vec2 | null {
   return order === null || order.kind === 'ReturnToBase' ? null : order.center;
 }
 
+const GRAVITY_MPS2 = 9.81;
+/** Within this many cruise turn radii of where it is going, a crew slows to station speed (§8.10). */
+const SLOW_DOWN_TURN_RADII = 3;
+
+/** A level turn at the type's most g: the sideways pull is g·√(n² − 1), and the rate is that over the speed (§8.10). */
+function turnRate(type: AircraftModelConfig, speed: number): number {
+  return (GRAVITY_MPS2 * Math.sqrt(type.maxLoadFactor * type.maxLoadFactor - 1)) / speed;
+}
+
+/** Cruise in transit, station speed once close: a turn at cruise could circle the point without reaching it. */
+function transitSpeed(aircraft: Aircraft, destination: Vec2, type: AircraftModelConfig): number {
+  const slowWithin = (type.speedMps / turnRate(type, type.speedMps)) * SLOW_DOWN_TURN_RADII;
+  return distance(aircraft.position, destination) <= slowWithin ? Math.min(type.speedMps, type.stationSpeedMps) : type.speedMps;
+}
+
 // Never tighter than the aircraft can actually fly.
 function orbitRadius(order: AircraftOrder | null, type: AircraftModelConfig): number {
-  const tightest = (type.speedMps / type.turnRateRadPerSecond) * 1.2;
+  const tightest = (type.stationSpeedMps / turnRate(type, type.stationSpeedMps)) * 1.2;
   if (order === null || order.kind === 'ReturnToBase') return Math.max(tightest, type.orbitRadiusMeters);
   return Math.max(tightest, Math.min(order.radius, type.orbitRadiusMeters));
 }
@@ -142,13 +157,13 @@ function angleBetween(from: number, to: number): number {
   return atan2(sin(to - from), cos(to - from));
 }
 
-/** Turns toward `desired` at the type's turn rate, then flies one second along the new heading. */
-function steer(aircraft: Aircraft, desired: number, type: AircraftModelConfig): void {
-  const limit = type.turnRateRadPerSecond;
+/** Turns toward `desired` as fast as its g allows at this speed, then flies one second along the new heading. */
+function steer(aircraft: Aircraft, desired: number, type: AircraftModelConfig, speed: number): void {
+  const limit = turnRate(type, speed);
   aircraft.headingRad += Math.max(-limit, Math.min(limit, angleBetween(aircraft.headingRad, desired)));
   aircraft.position = {
-    x: aircraft.position.x + cos(aircraft.headingRad) * type.speedMps,
-    y: aircraft.position.y + sin(aircraft.headingRad) * type.speedMps,
+    x: aircraft.position.x + cos(aircraft.headingRad) * speed,
+    y: aircraft.position.y + sin(aircraft.headingRad) * speed,
   };
 }
 
@@ -275,12 +290,27 @@ function altitudeQuality(aircraft: Aircraft, air: AirConfig, terrain: TerrainGri
   return Math.max(air.sensorQualityMin, Math.min(air.sensorQualityMax, quality));
 }
 
+/** A turn onto a target needs room: closer than this at attack speed, the aircraft would circle it (§8.10). */
+const ROLL_IN_TURN_RADII = 2.5;
+
+/** How far out a run starts. A helicopter fires from where it holds, so it needs no room. */
+function rollInMeters(type: AircraftModelConfig, weapon: StrikeWeapon, air: AirConfig): number {
+  if (type.rotary) return 0;
+  const release = weapon === 'guns' ? air.gunReleaseMeters : air.releaseMeters;
+  return Math.max(release, (type.attackSpeedMps / turnRate(type, type.attackSpeedMps)) * ROLL_IN_TURN_RADII);
+}
+
 function flyAttackRun(aircraft: Aircraft, run: AttackRun, type: AircraftModelConfig): void {
-  if (run.phase === 'runIn') {
-    steer(aircraft, bearing(aircraft.position, run.aim), type);
+  if (run.phase === 'extend') {
+    steer(aircraft, bearing(aircraft.position, run.rollIn), type, type.attackSpeedMps);
+    if (distance(aircraft.position, run.aim) >= run.rollInMeters) aircraft.attackRun = { ...run, phase: 'runIn' };
     return;
   }
-  steer(aircraft, aircraft.headingRad, type);
+  if (run.phase === 'runIn') {
+    steer(aircraft, bearing(aircraft.position, run.aim), type, type.attackSpeedMps);
+    return;
+  }
+  steer(aircraft, aircraft.headingRad, type, type.attackSpeedMps);
   const pullOffSeconds = run.pullOffSeconds - 1;
   aircraft.attackRun = pullOffSeconds <= 0 ? null : { ...run, pullOffSeconds };
 }
@@ -305,7 +335,7 @@ function flyAircraft(aircraft: Aircraft, air: AirConfig): void {
         aircraft.status = 'returning';
         return;
       }
-      steer(aircraft, bearing(aircraft.position, destination), type);
+      steer(aircraft, bearing(aircraft.position, destination), type, transitSpeed(aircraft, destination, type));
       if (distance(aircraft.position, destination) <= orbitRadius(aircraft.order, type)) {
         aircraft.status = 'onStation';
       }
@@ -317,18 +347,18 @@ function flyAircraft(aircraft: Aircraft, air: AirConfig): void {
       if (center === null) return;
       if (aircraft.breakSeconds > 0 && aircraft.breakPoint !== null) {
         aircraft.breakSeconds -= 1;
-        steer(aircraft, bearing(aircraft.position, aircraft.breakPoint), type);
+        steer(aircraft, bearing(aircraft.position, aircraft.breakPoint), type, type.stationSpeedMps);
       } else if (aircraft.attackRun !== null) {
         flyAttackRun(aircraft, aircraft.attackRun, type);
       } else if (!type.rotary) {
         // A helicopter holds its position; anything else has to keep flying.
-        steer(aircraft, orbitHeading(aircraft, center, orbitRadius(aircraft.order, type)), type);
+        steer(aircraft, orbitHeading(aircraft, center, orbitRadius(aircraft.order, type)), type, type.stationSpeedMps);
       }
       burnFuel(aircraft, type, air);
       return;
     }
     case 'returning':
-      steer(aircraft, bearing(aircraft.position, air.airbase), type);
+      steer(aircraft, bearing(aircraft.position, air.airbase), type, transitSpeed(aircraft, air.airbase, type));
       aircraft.fuelSeconds = Math.max(0, aircraft.fuelSeconds - 1);
       if (distance(aircraft.position, air.airbase) <= type.speedMps) {
         aircraft.position = air.airbase;
@@ -796,7 +826,8 @@ export function resolveCas(
     if (candidates.length === 0) continue;
     const near = (contact: ContactEstimate, weapon: StrikeWeapon): boolean =>
       dangerClose(player, contact.position.center, darkMargin(truth, air, contact.position.center, tick) * (weapon === 'guns' ? air.gunDangerCloseMeters : air.dangerCloseMeters), tick);
-    const attack = chooseAttack(crewSelf(aircraft, player, air, combat, tick), candidates, near);
+    const self = crewSelf(aircraft, player, air, combat, tick);
+    const attack = chooseAttack(self, candidates, near);
     if (attack === null) {
       const [nearest] = candidates;
       if (nearest !== undefined && near(nearest, 'guns')) holdForFriendlies(aircraft, nearest.position.center, player, radio, air, tick);
@@ -805,17 +836,21 @@ export function resolveCas(
     const { contact, weapon, nextPassSeconds } = attack;
     // The crew commits on its own estimate: whether it was right shows only in the result.
     if (!airSightClear(terrain, truth.weather, contact.position.center, aircraft.position, aircraft.altitudeMeters, tick)) continue;
-    startRun(aircraft, contact.position.center, contact.contactId, weapon, nextPassSeconds, air);
+    startRun(aircraft, contact.position.center, contact.contactId, weapon, nextPassSeconds, self, air);
   }
 }
 
-function startRun(aircraft: Aircraft, aim: Vec2, contactId: string | null, weapon: StrikeWeapon, nextPassSeconds: number, air: AirConfig): void {
+function startRun(aircraft: Aircraft, aim: Vec2, contactId: string | null, weapon: StrikeWeapon, nextPassSeconds: number, self: CrewSelf, air: AirConfig): void {
   const type = typeOf(aircraft, air);
+  const meters = rollInMeters(type, weapon, air);
   aircraft.attackRun = {
     aim,
     contactId,
     weapon,
-    phase: 'runIn',
+    // Far enough out already, it turns straight in. Otherwise it extends to where the crew chose.
+    phase: distance(aircraft.position, aim) >= meters ? 'runIn' : 'extend',
+    rollIn: chooseRollIn(self, aim, meters),
+    rollInMeters: meters,
     releaseAltitudeMeters: weapon === 'guns' ? air.gunRunHeightMeters : Math.max(type.minAltitudeMeters, aircraft.targetAltitudeMeters),
     pullOffSeconds: air.pullOffSeconds,
     nextPassSeconds,
@@ -855,7 +890,7 @@ function fireOnPlace(
     return;
   }
   if (!airSightClear(terrain, truth.weather, pass.aim, aircraft.position, aircraft.altitudeMeters, tick)) return;
-  startRun(aircraft, pass.aim, null, pass.weapon, pass.nextPassSeconds, air);
+  startRun(aircraft, pass.aim, null, pass.weapon, pass.nextPassSeconds, self, air);
 }
 
 function continueRun(

@@ -4,11 +4,19 @@ Notable changes to Air Operations. Section numbers such as §8.8 refer to `air-o
 
 ## Unreleased
 
+### Aircraft fly within their limits (R4, §8.10, 2026-11-11)
+
+- **Two speeds:** an aircraft cruises to and from the area and slows to `stationSpeedMps` in orbit, on attack runs and close to where it is going.
+- **Turns limited by g:** `maxLoadFactor` replaces `turnRateRadPerSecond`. Turn rate follows from the g limit and the speed, so the jets' orbits need about 2.2 g where they needed over 5.
+- **Turnaround per model:** from 8 minutes for the light helicopters to 25 for the jets. All were 10.
+- **Attack runs:** a fixed-wing aircraft extends away, turns in and pulls off at `attackSpeedMps`, since it can't turn onto a target it is circling. The crew chooses where the run starts, away from ground fire it has met. Helicopters fire from where they hold.
+
 ### Information has a cost (R3.2, §6.5, 2026-11-11)
 
 - **One net:** air operations sends one transmission at a time (`radio.netSerial`). Answers go ahead of forwarded intelligence, a newer forward of a contact replaces one still waiting, and a fire warning is one call to all stations.
 - **Talking blocks listening:** no unit can report while air operations is sending. A unit copying a message does no radio work of its own, copies more slowly in a fight, and at `interruptSuppression` doesn't copy at all: the message is given up after `radio.receiveTimeoutSeconds` and logged as "No answer".
 - **Standing to:** a platoon that copies forwarded intelligence or a mark halts for `radio.standToSeconds` (45).
+- **No halt for an enemy in sight:** a platoon doesn't stand to when the forwarded contact is one it already holds from its own sighting, within `groupRadiusMeters`. A mark still halts it.
 - The radio panel shows what is being sent and how much waits.
 - **Bots:** `informed`, `routeRecon` and the bots built on them now forward sparingly: to units near a contact, once, again when it has moved 300 m, and never onto a backed-up net. The old habit is kept as `informedEveryChange` and `routeReconEveryChange`, and `…ForwardAll` does it to every unit.
 - **Measured over 300 paired seeds, against forwarding nothing.** Before: every change was worth +14.7 points at the outpost and +29.7 on Valley Road, to nearby units or to everyone alike. Now sparing forwarding is worth +5.0 (−1.8 to +11.8) and +28.0 (+20.9 to +35.1), and forwarding every change −5.7 (−12.4 to +1.1) and −31.3 (−37.1 to −25.6).

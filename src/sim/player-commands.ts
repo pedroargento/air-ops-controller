@@ -6,8 +6,8 @@ import {
   type AircraftTelemetryEntry,
 } from '../domain/public/air';
 import type { PlayerCommand, ReportRequest } from '../domain/public/commands';
-import type { Vec2 } from '../domain/public/geometry';
-import { emptyKnowledge, type ContactId } from '../domain/public/ground';
+import { distance, type Vec2 } from '../domain/public/geometry';
+import { emptyKnowledge, type ContactId, type UnitKnowledge } from '../domain/public/ground';
 import {
   AIR_OPS,
   type ExpectedSupport,
@@ -386,6 +386,16 @@ function standsTo(message: RadioMessage): boolean {
   return message.kind === 'INTEL_REPORT' || (message.kind === 'POI_REPORT' && !message.cancelled);
 }
 
+/** A platoon has nothing to plot when the report is of an enemy it already has in sight (§6.5). Its own knowledge only. */
+function inOwnSight(knowledge: UnitKnowledge, message: RadioMessage, radius: number): boolean {
+  if (message.kind !== 'INTEL_REPORT') return false;
+  const at = message.contact.position.center;
+  return Object.keys(knowledge.contacts).some((id) => {
+    const own = knowledge.contacts[id];
+    return own !== undefined && own.identification === 'hostile' && distance(own.position.center, at) <= radius;
+  });
+}
+
 function deliverOutbound(
   transmission: PendingTransmission,
   state: SimState,
@@ -398,10 +408,18 @@ function deliverOutbound(
     if (unitRadio !== undefined) enqueue(unitRadio, needFor(payload.report), tick, REQUEST_PRIORITY);
     return;
   }
-  receiveByUnit((knowledge[payload.recipient] ??= emptyKnowledge()), { ...payload.message, receivedAt: tick });
+  const belief = (knowledge[payload.recipient] ??= emptyKnowledge());
+  receiveByUnit(belief, { ...payload.message, receivedAt: tick });
   const platoon = state.truth.platoons[payload.recipient];
   const { standToSeconds } = scenario.file.radio;
-  if (platoon !== undefined && standToSeconds > 0 && standsTo(payload.message)) platoon.standToUntil = tick + standToSeconds;
+  if (
+    platoon !== undefined &&
+    standToSeconds > 0 &&
+    standsTo(payload.message) &&
+    !inOwnSight(belief, payload.message, platoon.doctrine.groupRadiusMeters)
+  ) {
+    platoon.standToUntil = tick + standToSeconds;
+  }
   const unitRadio = radio.units[payload.recipient];
   if (unitRadio !== undefined && payload.message.kind === 'ACKNOWLEDGEMENT') {
     unitRadio.memory = { ...unitRadio.memory, supportAcknowledgedAt: tick };

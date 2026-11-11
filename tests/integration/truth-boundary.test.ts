@@ -43,6 +43,8 @@ function onStation(state: SimState, contact: ContactEstimate) {
 const strike = (state: SimState): void => {
   for (let call = 0; call < 2; call += 1) {
     resolveCas(state.truth, state.player, state.radio, flat, air, combat, display, perception.engageMemorySeconds, state.rng, 0);
+    // The aircraft is placed overhead, so skip the extension to where the run would start (§8.10).
+    for (const plane of state.truth.aircraft) if (plane.attackRun !== null) plane.attackRun = { ...plane.attackRun, phase: 'runIn' };
   }
   for (const plane of state.truth.aircraft) plane.attackRun = null;
 };

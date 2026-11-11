@@ -244,7 +244,9 @@ rules or the schema.
 | `air.models.O-1E.sensorRadiusMeters` | `1000` | How far it can see. |
 | `air.models.O-1E.observerQuality` | `1.4` | Multiplier on its chance to spot. |
 | `air.models.O-1E.orbitRadiusMeters` | `400` | Radius of its usual orbit. |
-| `air.models.O-1E.turnRateRadPerSecond` | `0.5` | How fast it turns. |
+| `air.models.O-1E.stationSpeedMps` | `40` | Speed it slows to on station: in orbit, on an attack run and close to where it is going. |
+| `air.models.O-1E.attackSpeedMps` | `50` | Speed on an attack run, from rolling in to pulling off. |
+| `air.models.O-1E.maxLoadFactor` | `2` | The most g it turns at. Its turn rate follows from this and its speed. |
 | `air.models.O-1E.climbRateMps` | `5` | How fast it climbs or descends. |
 | `air.models.O-1E.minAltitudeMeters` | `100` | Lowest altitude it can be given. |
 | `air.models.O-1E.maxAltitudeMeters` | `3000` | Highest altitude it can be given. |
@@ -270,13 +272,15 @@ rules or the schema.
 | `air.models.RF-101C.fuelSeconds` | `6000` | Endurance. |
 | `air.models.RF-101C.ammunition` | `0` | Bombing passes it carries. |
 | `air.models.RF-101C.takeoffSeconds` | `60` | Time to get airborne. |
-| `air.models.RF-101C.turnaroundSeconds` | `600` | Time to refuel and rearm. |
+| `air.models.RF-101C.turnaroundSeconds` | `1500` | Time to refuel and rearm. |
 | `air.models.RF-101C.repairSeconds` | `1500` | Time to repair after damage. |
 | `air.models.RF-101C.bingoMarginSeconds` | `120` | Fuel kept in reserve for the trip home. |
 | `air.models.RF-101C.sensorRadiusMeters` | `2000` | How far it can see. |
 | `air.models.RF-101C.observerQuality` | `1` | Multiplier on its chance to spot. |
 | `air.models.RF-101C.orbitRadiusMeters` | `1400` | Radius of its usual orbit. |
-| `air.models.RF-101C.turnRateRadPerSecond` | `0.2` | How fast it turns. |
+| `air.models.RF-101C.stationSpeedMps` | `160` | Speed it slows to on station: in orbit, on an attack run and close to where it is going. |
+| `air.models.RF-101C.attackSpeedMps` | `245` | Speed on an attack run, from rolling in to pulling off. |
+| `air.models.RF-101C.maxLoadFactor` | `4` | The most g it turns at. Its turn rate follows from this and its speed. |
 | `air.models.RF-101C.climbRateMps` | `30` | How fast it climbs or descends. |
 | `air.models.RF-101C.minAltitudeMeters` | `100` | Lowest altitude it can be given. |
 | `air.models.RF-101C.maxAltitudeMeters` | `3000` | Highest altitude it can be given. |
@@ -302,13 +306,15 @@ rules or the schema.
 | `air.models.A-1E.fuelSeconds` | `9600` | Endurance. |
 | `air.models.A-1E.ammunition` | `8` | Bombing passes it carries. |
 | `air.models.A-1E.takeoffSeconds` | `60` | Time to get airborne. |
-| `air.models.A-1E.turnaroundSeconds` | `600` | Time to refuel and rearm. |
+| `air.models.A-1E.turnaroundSeconds` | `1200` | Time to refuel and rearm. |
 | `air.models.A-1E.repairSeconds` | `1500` | Time to repair after damage. |
 | `air.models.A-1E.bingoMarginSeconds` | `60` | Fuel kept in reserve for the trip home. |
 | `air.models.A-1E.sensorRadiusMeters` | `800` | How far it can see. |
 | `air.models.A-1E.observerQuality` | `1` | Multiplier on its chance to spot. |
 | `air.models.A-1E.orbitRadiusMeters` | `400` | Radius of its usual orbit. |
-| `air.models.A-1E.turnRateRadPerSecond` | `0.4` | How fast it turns. |
+| `air.models.A-1E.stationSpeedMps` | `70` | Speed it slows to on station: in orbit, on an attack run and close to where it is going. |
+| `air.models.A-1E.attackSpeedMps` | `110` | Speed on an attack run, from rolling in to pulling off. |
+| `air.models.A-1E.maxLoadFactor` | `3` | The most g it turns at. Its turn rate follows from this and its speed. |
 | `air.models.A-1E.climbRateMps` | `12` | How fast it climbs or descends. |
 | `air.models.A-1E.minAltitudeMeters` | `100` | Lowest altitude it can be given. |
 | `air.models.A-1E.maxAltitudeMeters` | `3000` | Highest altitude it can be given. |
@@ -334,13 +340,15 @@ rules or the schema.
 | `air.models.F-100D.fuelSeconds` | `3000` | Endurance. |
 | `air.models.F-100D.ammunition` | `4` | Bombing passes it carries. |
 | `air.models.F-100D.takeoffSeconds` | `60` | Time to get airborne. |
-| `air.models.F-100D.turnaroundSeconds` | `600` | Time to refuel and rearm. |
+| `air.models.F-100D.turnaroundSeconds` | `1500` | Time to refuel and rearm. |
 | `air.models.F-100D.repairSeconds` | `1500` | Time to repair after damage. |
 | `air.models.F-100D.bingoMarginSeconds` | `60` | Fuel kept in reserve for the trip home. |
 | `air.models.F-100D.sensorRadiusMeters` | `2000` | How far it can see. |
 | `air.models.F-100D.observerQuality` | `0.6` | Multiplier on its chance to spot. |
 | `air.models.F-100D.orbitRadiusMeters` | `1200` | Radius of its usual orbit. |
-| `air.models.F-100D.turnRateRadPerSecond` | `0.25` | How fast it turns. |
+| `air.models.F-100D.stationSpeedMps` | `150` | Speed it slows to on station: in orbit, on an attack run and close to where it is going. |
+| `air.models.F-100D.attackSpeedMps` | `230` | Speed on an attack run, from rolling in to pulling off. |
+| `air.models.F-100D.maxLoadFactor` | `4` | The most g it turns at. Its turn rate follows from this and its speed. |
 | `air.models.F-100D.climbRateMps` | `30` | How fast it climbs or descends. |
 | `air.models.F-100D.minAltitudeMeters` | `100` | Lowest altitude it can be given. |
 | `air.models.F-100D.maxAltitudeMeters` | `3000` | Highest altitude it can be given. |
@@ -372,7 +380,9 @@ rules or the schema.
 | `air.models.UH-1B.sensorRadiusMeters` | `900` | How far it can see. |
 | `air.models.UH-1B.observerQuality` | `1.1` | Multiplier on its chance to spot. |
 | `air.models.UH-1B.orbitRadiusMeters` | `100` | Radius of its usual orbit. |
-| `air.models.UH-1B.turnRateRadPerSecond` | `1` | How fast it turns. |
+| `air.models.UH-1B.stationSpeedMps` | `35` | Speed it slows to on station: in orbit, on an attack run and close to where it is going. |
+| `air.models.UH-1B.attackSpeedMps` | `35` | Speed on an attack run, from rolling in to pulling off. |
+| `air.models.UH-1B.maxLoadFactor` | `2` | The most g it turns at. Its turn rate follows from this and its speed. |
 | `air.models.UH-1B.climbRateMps` | `8` | How fast it climbs or descends. |
 | `air.models.UH-1B.minAltitudeMeters` | `30` | Lowest altitude it can be given. |
 | `air.models.UH-1B.maxAltitudeMeters` | `3000` | Highest altitude it can be given. |
@@ -398,13 +408,15 @@ rules or the schema.
 | `air.models.AH-1G.fuelSeconds` | `7400` | Endurance. |
 | `air.models.AH-1G.ammunition` | `12` | Bombing passes it carries. |
 | `air.models.AH-1G.takeoffSeconds` | `60` | Time to get airborne. |
-| `air.models.AH-1G.turnaroundSeconds` | `600` | Time to refuel and rearm. |
+| `air.models.AH-1G.turnaroundSeconds` | `720` | Time to refuel and rearm. |
 | `air.models.AH-1G.repairSeconds` | `1500` | Time to repair after damage. |
 | `air.models.AH-1G.bingoMarginSeconds` | `120` | Fuel kept in reserve for the trip home. |
 | `air.models.AH-1G.sensorRadiusMeters` | `900` | How far it can see. |
 | `air.models.AH-1G.observerQuality` | `1.1` | Multiplier on its chance to spot. |
 | `air.models.AH-1G.orbitRadiusMeters` | `100` | Radius of its usual orbit. |
-| `air.models.AH-1G.turnRateRadPerSecond` | `1` | How fast it turns. |
+| `air.models.AH-1G.stationSpeedMps` | `45` | Speed it slows to on station: in orbit, on an attack run and close to where it is going. |
+| `air.models.AH-1G.attackSpeedMps` | `45` | Speed on an attack run, from rolling in to pulling off. |
+| `air.models.AH-1G.maxLoadFactor` | `2` | The most g it turns at. Its turn rate follows from this and its speed. |
 | `air.models.AH-1G.climbRateMps` | `9` | How fast it climbs or descends. |
 | `air.models.AH-1G.minAltitudeMeters` | `30` | Lowest altitude it can be given. |
 | `air.models.AH-1G.maxAltitudeMeters` | `3000` | Highest altitude it can be given. |
@@ -430,13 +442,15 @@ rules or the schema.
 | `air.models.OH-6A.fuelSeconds` | `10000` | Endurance. |
 | `air.models.OH-6A.ammunition` | `0` | Bombing passes it carries. |
 | `air.models.OH-6A.takeoffSeconds` | `60` | Time to get airborne. |
-| `air.models.OH-6A.turnaroundSeconds` | `600` | Time to refuel and rearm. |
+| `air.models.OH-6A.turnaroundSeconds` | `480` | Time to refuel and rearm. |
 | `air.models.OH-6A.repairSeconds` | `1500` | Time to repair after damage. |
 | `air.models.OH-6A.bingoMarginSeconds` | `120` | Fuel kept in reserve for the trip home. |
 | `air.models.OH-6A.sensorRadiusMeters` | `700` | How far it can see. |
 | `air.models.OH-6A.observerQuality` | `1.5` | Multiplier on its chance to spot. |
 | `air.models.OH-6A.orbitRadiusMeters` | `100` | Radius of its usual orbit. |
-| `air.models.OH-6A.turnRateRadPerSecond` | `1` | How fast it turns. |
+| `air.models.OH-6A.stationSpeedMps` | `35` | Speed it slows to on station: in orbit, on an attack run and close to where it is going. |
+| `air.models.OH-6A.attackSpeedMps` | `35` | Speed on an attack run, from rolling in to pulling off. |
+| `air.models.OH-6A.maxLoadFactor` | `2` | The most g it turns at. Its turn rate follows from this and its speed. |
 | `air.models.OH-6A.climbRateMps` | `8` | How fast it climbs or descends. |
 | `air.models.OH-6A.minAltitudeMeters` | `30` | Lowest altitude it can be given. |
 | `air.models.OH-6A.maxAltitudeMeters` | `3000` | Highest altitude it can be given. |
@@ -462,13 +476,15 @@ rules or the schema.
 | `air.models.HH-3E.fuelSeconds` | `7200` | Endurance. |
 | `air.models.HH-3E.ammunition` | `0` | Bombing passes it carries. |
 | `air.models.HH-3E.takeoffSeconds` | `60` | Time to get airborne. |
-| `air.models.HH-3E.turnaroundSeconds` | `600` | Time to refuel and rearm. |
+| `air.models.HH-3E.turnaroundSeconds` | `900` | Time to refuel and rearm. |
 | `air.models.HH-3E.repairSeconds` | `1500` | Time to repair after damage. |
 | `air.models.HH-3E.bingoMarginSeconds` | `120` | Fuel kept in reserve for the trip home. |
 | `air.models.HH-3E.sensorRadiusMeters` | `700` | How far it can see. |
 | `air.models.HH-3E.observerQuality` | `1.1` | Multiplier on its chance to spot. |
 | `air.models.HH-3E.orbitRadiusMeters` | `100` | Radius of its usual orbit. |
-| `air.models.HH-3E.turnRateRadPerSecond` | `1` | How fast it turns. |
+| `air.models.HH-3E.stationSpeedMps` | `40` | Speed it slows to on station: in orbit, on an attack run and close to where it is going. |
+| `air.models.HH-3E.attackSpeedMps` | `40` | Speed on an attack run, from rolling in to pulling off. |
+| `air.models.HH-3E.maxLoadFactor` | `2` | The most g it turns at. Its turn rate follows from this and its speed. |
 | `air.models.HH-3E.climbRateMps` | `8` | How fast it climbs or descends. |
 | `air.models.HH-3E.minAltitudeMeters` | `30` | Lowest altitude it can be given. |
 | `air.models.HH-3E.maxAltitudeMeters` | `3000` | Highest altitude it can be given. |
@@ -494,13 +510,15 @@ rules or the schema.
 | `air.models.UH-1H.fuelSeconds` | `7200` | Endurance. |
 | `air.models.UH-1H.ammunition` | `0` | Bombing passes it carries. |
 | `air.models.UH-1H.takeoffSeconds` | `60` | Time to get airborne. |
-| `air.models.UH-1H.turnaroundSeconds` | `600` | Time to refuel and rearm. |
+| `air.models.UH-1H.turnaroundSeconds` | `480` | Time to refuel and rearm. |
 | `air.models.UH-1H.repairSeconds` | `1500` | Time to repair after damage. |
 | `air.models.UH-1H.bingoMarginSeconds` | `120` | Fuel kept in reserve for the trip home. |
 | `air.models.UH-1H.sensorRadiusMeters` | `600` | How far it can see. |
 | `air.models.UH-1H.observerQuality` | `0.8` | Multiplier on its chance to spot. |
 | `air.models.UH-1H.orbitRadiusMeters` | `100` | Radius of its usual orbit. |
-| `air.models.UH-1H.turnRateRadPerSecond` | `1` | How fast it turns. |
+| `air.models.UH-1H.stationSpeedMps` | `35` | Speed it slows to on station: in orbit, on an attack run and close to where it is going. |
+| `air.models.UH-1H.attackSpeedMps` | `35` | Speed on an attack run, from rolling in to pulling off. |
+| `air.models.UH-1H.maxLoadFactor` | `2` | The most g it turns at. Its turn rate follows from this and its speed. |
 | `air.models.UH-1H.climbRateMps` | `8` | How fast it climbs or descends. |
 | `air.models.UH-1H.minAltitudeMeters` | `30` | Lowest altitude it can be given. |
 | `air.models.UH-1H.maxAltitudeMeters` | `3000` | Highest altitude it can be given. |

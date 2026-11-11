@@ -357,9 +357,10 @@ Air operations talks to its units on one net, and a transmission costs both ends
 - **A unit that can't copy:** At `interruptSuppression` a unit copies nothing. Air operations keeps calling for `receiveTimeoutSeconds`, then gives the message up and logs that there was no answer.
 - **All stations:** A warning of suppressing fire (§8.1.2) is one call to every unit at once. Nobody reads it back, so it takes `transmitSeconds` whatever the units are doing, and all of them are copying meanwhile.
 - **Standing to:** A platoon that copies forwarded intelligence or a mark (§6.4) halts for `standToSeconds` while it plots it and passes it to its squads. It goes nowhere and stops closing on a target, and fires as before. An acknowledgement, an answer, a request or a fire warning doesn't halt it, and neither do the reports platoons pass among themselves. Each new forward starts the time again, so a platoon told of every change in a contact's position hardly moves.
+- **Nothing new, no halt:** A platoon does not stand to for an enemy it has in sight. If forwarded intelligence places a contact within `groupRadiusMeters` (§4) of a hostile the platoon holds from its own sighting, it copies the report and carries on. The test uses only what the platoon itself knows. The time on the net is spent all the same, and a mark always halts it.
 - **What the controller sees:** The queue is the controller's own, so the interface shows what is being sent and how much waits.
 
-No rule here judges whether a message was useful. The costs are paid either way, and only a message that changes what a unit does pays them back.
+No rule here judges whether a message was useful, beyond a platoon knowing what is in front of it. The costs are paid either way, and only a message that changes what a unit does pays them back.
 
 ## 7. Player knowledge and map projection
 
@@ -538,7 +539,7 @@ Both fire on a place the controller chose, not on something the crew identified,
 
 ### 8.2 Fuel, turnaround and aircraft presence
 
-Aircraft return to base automatically before fuel runs out. Refueling/rearming uses simple fixed turnaround timers, configurable per aircraft type.
+Aircraft return to base automatically before fuel runs out. Refueling/rearming uses a fixed turnaround timer for each aircraft model (`turnaroundSeconds`).
 
 Enemy ground units react to aircraft through their own AI, and only if they detect the aircraft. There is no automatic suppression aura around an orbiting aircraft: a formation that notices aircraft goes to ground briefly, then carries on, and won't take cover again for a doctrine-configured time unless it is actually attacked.
 
@@ -591,7 +592,7 @@ Speeds, endurance and ordnance come from published figures, which often disagree
 | AH-1G Cobra | CAS, helicopter | About 170 mph cruise, minigun and rockets | Faster and better armed than the Huey. Defined but not in the first scenario |
 | OH-6A Cayuse | Recon, helicopter | About 125 kt cruise | Superb eyes very low down, poor from height. Defined but not in the first scenario |
 
-- **Compressions:** Turnaround and repair times are far shorter than reality, so aircraft can fly more than once in 75 minutes. Altitude is capped at 3,000 m, well below real ceilings, because nothing tactical happens higher.
+- **Compressions:** Turnaround and repair times are shorter than reality, so aircraft can fly more than once in a battle. Turnaround is set per model, from 8 minutes for a light helicopter to 25 for a jet. Altitude is capped at 3,000 m, well below real ceilings, because nothing tactical happens higher.
 - **Speed and armor:** A model's hit chance is scaled for how hard it is to track, and rugged airframes have a chance to survive a hit and keep flying.
 - **Helicopters:** They hold position on station instead of orbiting, keep a much smaller terrain clearance, and start lower. They use the same orders and CAS rules as everything else. Landing is not modeled, so a helicopter only touches down at base.
 - **Going home:** A long-endurance aircraft can outlast its ordnance. It stays on station until ordered back, so a spent aircraft is the player's problem.
@@ -642,6 +643,28 @@ A platoon with wounded asks for a helicopter, and every minute that helicopter s
 - **The hospital:** The airbase counts as the hospital. Wounded aboard are evacuated when the helicopter lands there, and the time from wound to hospital is recorded for each.
 - **Debrief:** For each side, killed, wounded, died of wounds, and wounded still waiting at the end; for friendly units, evacuated, still in the air on their way, and the mean time from wound to hospital.
 - **On screen:** The request is a card like a support request, with the number of wounded, the pickup point and whether it is hot. The pickup panel shows wounded aboard against seats, and the wounded still within reach as the crew sees them.
+
+### 8.10 Speed and turning
+
+An aircraft has two speeds and one limit on how hard it turns.
+
+- **Cruise and station speed:** It flies to and from the area at `speedMps`. On station it slows to `stationSpeedMps`: in orbit, breaking away, and within three cruise turn radii of where it is going. An attack run is flown at `attackSpeedMps`. Estimated arrival times and the fuel kept for the trip home use the cruise speed.
+- **Turning:** No turn pulls more than `maxLoadFactor` g. In a level turn at n g the sideways pull is g·√(n² − 1), so the turn rate is that divided by the speed, and the turn radius is the speed squared divided by it. A fast aircraft therefore turns wide in transit and tighter once it has slowed.
+- **Orbit:** The orbit is never tighter than 1.2 times the turn radius at station speed.
+- **Fuel:** Endurance is time in the air and does not change with speed.
+- **The attack run:** A fixed-wing aircraft can't turn onto a target it is circling, so a run has three parts. It extends away until it is 2.5 turn radii at attack speed from the aim, and at least the release distance. It turns in and flies at the aim until it reaches the release distance (§8.1). It pulls off straight ahead for `pullOffSeconds`, then goes back to its orbit. An aircraft already far enough out turns straight in. The time between passes is still at least `passIntervalSeconds`; the flying adds to it.
+- **The crew picks the run:** The controller says what to hit and the crew chooses how to fly it. It extends the way it already is from the target. If it has been fired on within `threatMemorySeconds`, it runs in across the line from the target to the nearest such fire, on its own side of it, so neither the run nor the pull-off passes over the gun. It uses only what the crew knows.
+- **Helicopters** fire from where they hold and fly no extension.
+
+| Model | Cruise | On station | Attack | Most g | Turn radius on station | Run starts from |
+|---|---:|---:|---:|---:|---:|---:|
+| O-1E | 50 m/s | 40 m/s | none | 2 | 94 m | none |
+| RF-101C | 245 m/s | 160 m/s | none | 4 | 674 m | none |
+| A-1E | 88 m/s | 70 m/s | 110 m/s | 3 | 177 m | 1,090 m |
+| F-100D | 250 m/s | 150 m/s | 230 m/s | 4 | 592 m | 3,480 m |
+| Helicopters | 55–77 m/s | 35–45 m/s | as on station | 2 | 72–119 m | where they hold |
+
+The usual orbits (`orbitRadiusMeters`) are wider than these and need about 1.1 g in the O-1E, 1.6 g in the A-1E and 2.2 g in the jets.
 
 ## 9. Player interface
 

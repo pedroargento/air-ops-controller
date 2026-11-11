@@ -53,7 +53,11 @@ export type AttackRun = Readonly<{
   /** Null when firing on a place rather than on something the crew can see. */
   contactId: string | null;
   weapon: StrikeWeapon;
-  phase: 'runIn' | 'pullOff';
+  /** Extending away to where the run starts, flying it, then leaving (§8.10). */
+  phase: 'extend' | 'runIn' | 'pullOff';
+  /** Where the crew chose to start its run from, and how far from the aim that is. */
+  rollIn: Vec2;
+  rollInMeters: number;
   releaseAltitudeMeters: number;
   pullOffSeconds: number;
   nextPassSeconds: number;

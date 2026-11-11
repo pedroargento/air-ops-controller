@@ -97,13 +97,16 @@ describe('aircraft operations', () => {
     }
     expect(a.status).toBe('turnaround');
     expect(landedWithFuel).toBeGreaterThan(0);
-    run(state, air.models['F-100D']!.turnaroundSeconds + 1);
+    // The battle ends before a jet's turnaround does, so check the time it was given and skip to its end.
+    expect(a.timerSeconds).toBe(air.models['F-100D']!.turnaroundSeconds);
+    a.timerSeconds = 2;
+    run(state, 3);
     expect(a.status).toBe('ready');
     expect(a.ammunition).toBe(air.models['F-100D']!.ammunition);
     expect(a.fuelSeconds).toBe(air.models['F-100D']!.fuelSeconds);
   });
 
-  it('flies continuously: no jumps, and turns no faster than its turn rate', () => {
+  it('flies continuously: no jumps, and no turn beyond its g', () => {
     const state = createInitialState(scenario, 1);
     isolate(state, ['F-A']);
     run(state, 1, [order(state, CAS, support(outpost))]);
@@ -119,7 +122,10 @@ describe('aircraft operations', () => {
       if (a.status === 'enroute' || a.status === 'onStation') {
         if (flying) {
           expect(distance(previous, a.position)).toBeLessThanOrEqual(type.speedMps + 1e-6);
-          expect(Math.abs(a.headingRad - previousHeading)).toBeLessThanOrEqual(type.turnRateRadPerSecond + 1e-6);
+          // No turn pulls more than the type's g (§8.10): sideways pull is speed times turn rate.
+          const flown = distance(previous, a.position);
+          const turned = Math.abs(Math.atan2(Math.sin(a.headingRad - previousHeading), Math.cos(a.headingRad - previousHeading)));
+          expect(Math.hypot(1, (flown * turned) / 9.81)).toBeLessThanOrEqual(type.maxLoadFactor + 1e-6);
         }
         flying = true;
       }
@@ -1007,7 +1013,8 @@ describe('helicopters', () => {
   });
 
   it('attacks through the normal CAS rules', () => {
-    const state = createInitialState(scenario, 1);
+    // Seed 2: on seed 1 the gunship is hit as it slows to arrive and goes home without firing.
+    const state = createInitialState(scenario, 2);
     isolate(state, ['E-W']);
     run(state, 1100, [order(state, GUNSHIP, support(unit(state, 'E-W').position))]);
     const model = air.models['UH-1B']!;
@@ -1431,6 +1438,22 @@ describe('air operations\' net (§6.5)', () => {
     run(state, 10);
     expect(platoon.squads.map((squad) => squad.position)).toEqual(from);
     expect(platoon.squads.every((squad) => squad.intent.kind !== 'move')).toBe(true);
+  });
+
+  it('a platoon does not halt for an enemy it has in sight', () => {
+    const { state, key } = withContacts();
+    const platoon = state.truth.platoons['F-A']!;
+    const told = state.player.contacts[key]!.contact;
+    const own = { ...told, contactId: 'own-sighting' as ContactId, identification: 'hostile' as const, position: { ...told.position, observedAt: state.tick } };
+    (state.unitKnowledge['F-A'] ??= emptyKnowledge()).contacts[own.contactId] = own;
+    run(state, 1, [forward(state, key, ['F-A'])]);
+    // With an enemy in sight it copies more slowly (§6.2), so wait for the report to arrive.
+    for (let i = 0; i < 60 && Object.keys(state.unitKnowledge['F-A']!.reports).length === 0; i += 1) {
+      state.unitKnowledge['F-A']!.contacts[own.contactId] = { ...own, position: { ...own.position, observedAt: state.tick } };
+      run(state, 1);
+    }
+    expect(Object.keys(state.unitKnowledge['F-A']!.reports).length).toBeGreaterThan(0);
+    expect(platoon.standToUntil).toBeUndefined();
   });
 
   it('with the rule off, everything arrives side by side as it used to', () => {

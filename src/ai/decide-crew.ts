@@ -71,6 +71,28 @@ function searchPlan(self: CrewSelf): Readonly<{ point: Vec2 | null; leg: number 
   return { point: legPoint(leg), leg };
 }
 
+/**
+ * Where a crew starts its attack run (§8.10). It goes out the way it already is from the
+ * target, unless it has been fired on lately: then it runs in across the line to that fire,
+ * so neither the run nor the pull-off passes over it. From the crew's own picture only.
+ */
+export function chooseRollIn(self: CrewSelf, aim: Vec2, meters: number): Vec2 {
+  const from = { x: self.position.x - aim.x, y: self.position.y - aim.y };
+  const threat = recentFire(self)
+    .map((entry) => entry.center)
+    .sort((a, b) => distance(a, aim) - distance(b, aim))[0];
+  let way = from;
+  if (threat !== undefined && distance(threat, aim) > 1) {
+    const across = { x: -(threat.y - aim.y), y: threat.x - aim.x };
+    const sameSide = across.x * from.x + across.y * from.y >= 0;
+    way = sameSide ? across : { x: -across.x, y: -across.y };
+  }
+  const length = distance(way, { x: 0, y: 0 });
+  // Directly overhead there is no "way it already is": any direction serves.
+  const unit = length > 1 ? { x: way.x / length, y: way.y / length } : { x: 1, y: 0 };
+  return { x: aim.x + unit.x * meters, y: aim.y + unit.y * meters };
+}
+
 /** How a crew flies its mission, from its own picture and never from truth (§8.0). */
 export function decideCrew(self: CrewSelf): CrewDecision {
   const search = searchPlan(self);

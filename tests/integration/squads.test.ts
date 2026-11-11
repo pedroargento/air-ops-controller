@@ -175,6 +175,8 @@ describe('fire and strikes on squads', () => {
         };
         plane.gunBursts = 0;
         resolveCas(state.truth, state.player, state.radio, scenario.terrain, heavy.file.air, combat, scenario.file.display, 120, state.rng, 0);
+        // Already overhead, so skip the extension to where the run would start (§8.10).
+        if (plane.attackRun !== null) plane.attackRun = { ...plane.attackRun, phase: 'runIn' };
         resolveCas(state.truth, state.player, state.radio, scenario.terrain, heavy.file.air, combat, scenario.file.display, 120, state.rng, 0);
         if (count === 'close') close += start - neighbour.personnel;
         else far += start - neighbour.personnel;
