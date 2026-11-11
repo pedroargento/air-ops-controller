@@ -70,11 +70,11 @@ Most orders come from **right-clicking on the map**. The menu offers what makes 
 - **Pick up here** lands a rescue helicopter at the point and waits while survivors board.
 - **Mark this place** warns chosen units of a suspected kill zone there, so they go around it.
 
-Select an aircraft to set its **weapons control** (bombs, guns or both, or weapons hold), its **risk limit** (cautious, normal or press on, which decides when the crew breaks away from ground fire), and **Return to base**.
+Select an aircraft to set its **weapons control** (bombs, guns or both, or weapons hold; crews start on guns and keep their bombs until you order a Strike or free them), its **risk limit** (cautious, normal or press on, which decides when the crew breaks away from ground fire), and **Return to base**.
 
 **Support requests** arrive as cards. Answer one by sending an aircraft, or say that no air is available. A unit that gets no answer fights on without air. When friends are too close to a target, the crew asks for **danger close**, and only you can clear it.
 
-**Forwarding** is how you help the ground. Select an enemy contact or track and forward it to the units that should know about it. Units act on what they know, so a platoon warned about an ambush can avoid it.
+**Forwarding** is how you help the ground. Select an enemy contact or track and forward it to the units that should know about it. Units act on what they know, so a platoon warned about an ambush can avoid it. It is not free. You send one transmission at a time, and no unit can reach you while you are sending. A unit copying your message isn't sending its own reports, and it halts for most of a minute to plot what you told it. Forward what a unit needs, once, and again only when it has changed enough to matter: the radio panel shows what you are sending and how much is waiting.
 
 ### Mission report
 

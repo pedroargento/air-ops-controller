@@ -345,6 +345,22 @@ Right-clicking the map opens a menu of things the player can report there, and a
 - A wrong mark costs real time. An ambush nobody marked still gets sprung.
 - Right-clicking an existing mark can cancel it, which also goes out by radio.
 
+### 6.5 Air operations' net
+
+Air operations talks to its units on one net, and a transmission costs both ends something. Rules that are data: `radio.netSerial` turns the net rules on, `radio.receiveTimeoutSeconds` is how long a call is kept up, and `radio.standToSeconds` is how long a platoon halts on intelligence.
+
+- **One at a time:** A transmission to a unit goes out alone and takes `transmitSeconds`. Forwarding one contact to four units is four transmissions, one after another.
+- **Order:** An answer a unit is waiting for (an acknowledgement, a danger-close or medevac answer, a pickup point, a request for a report) goes ahead of forwarded intelligence and marks. Nothing displaces the transmission being sent.
+- **A newer word replaces an older one:** Forwarding a contact again to a unit that still has the earlier forward waiting replaces it in the same place in the queue.
+- **Talking blocks listening:** While air operations is sending, no unit can get a report through. A unit with a report ready keeps calling and sends nothing else. One second of silence follows each transmission, and everyone waiting gets through in it.
+- **Receiving takes the unit's radio:** A unit copying a message does no radio work of its own, and copies at its own radio rate (§6.2): slower in a fight, slower still while withdrawing. A transmission to an engaged unit therefore takes longer.
+- **A unit that can't copy:** At `interruptSuppression` a unit copies nothing. Air operations keeps calling for `receiveTimeoutSeconds`, then gives the message up and logs that there was no answer.
+- **All stations:** A warning of suppressing fire (§8.1.2) is one call to every unit at once. Nobody reads it back, so it takes `transmitSeconds` whatever the units are doing, and all of them are copying meanwhile.
+- **Standing to:** A platoon that copies forwarded intelligence or a mark (§6.4) halts for `standToSeconds` while it plots it and passes it to its squads. It goes nowhere and stops closing on a target, and fires as before. An acknowledgement, an answer, a request or a fire warning doesn't halt it, and neither do the reports platoons pass among themselves. Each new forward starts the time again, so a platoon told of every change in a contact's position hardly moves.
+- **What the controller sees:** The queue is the controller's own, so the interface shows what is being sent and how much waits.
+
+No rule here judges whether a message was useful. The costs are paid either way, and only a message that changes what a unit does pays them back.
+
 ## 7. Player knowledge and map projection
 
 Maintain `WorldTruth` and `PlayerKnowledge` as separate states. Only a deliberately filtered `PlayerView` reaches UI code. The projection takes only `PlayerKnowledge`, aircraft telemetry and simulation time as input, never `WorldTruth`. A debug-only omniscient view is permitted but is clearly marked and cannot be activated by ordinary gameplay commands.
@@ -461,6 +477,7 @@ The controller decides what, where and how much risk, and the crew decides how. 
 - **Target choice:** Known air defense comes first. Otherwise a crew stays off places it was recently fired on, unless told to press on.
 - **Attack runs:** A pass is a run: the crew flies at its aiming point, releases at `releaseMeters`, or the closer `gunReleaseMeters` for guns, then pulls off. It can be fired on the whole way in.
 - **Weapons control:** Set per aircraft: **Hold**, **Bombs**, **Guns** or **Both**. It governs only the targets a crew picks itself under Watch or Cover. On Hold the crew picks none. Suppress and Strike are the controller's own call, so they fire whatever it says.
+- **Bombs are the controller's to give:** Every aircraft starts on `air.defaultWeapons`, which is **Guns**. A crew under Watch or Cover strafes what it finds and keeps its bombs. A bomb falls when the controller orders a Strike on a place, or sets the aircraft to Both or Bombs and so hands the choice of targets back to the crew. Bombs are few and decide fights, so where they go is the controller's decision unless the controller gives it away.
 - **Keeping a position down:** On Guns, the crew spaces its bursts out over the time it can stay on station. Its job there is to keep heads down, not to kill.
 - **Weapons:** Heavy ordnance does the most and goes first. Guns are many bursts that hit a small area and need a low run, which exposes the aircraft. They're used where friends are too close for heavy ordnance but outside `gunDangerCloseMeters`, and when heavy ordnance has run out.
 - **Search:** Recon told to Watch flies a pattern over the area until it finds something, then stays to watch it, doubtful contacts first. A helicopter holds its position instead.

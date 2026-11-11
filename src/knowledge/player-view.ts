@@ -143,6 +143,8 @@ export type PlayerView = Readonly<{
   confirmedDestroyed: number;
   forecast: Weather | null;
   forecastIssuedAt: number | null;
+  /** Air operations' own net, in order: what it is sending now, if anything, then what waits (§6.4). */
+  net: readonly Readonly<{ recipient: string; kind: string; sending: boolean }>[];
 }>;
 
 const sortedEntries = <T>(record: Readonly<Record<string, T>>): readonly (readonly [string, T])[] =>
@@ -427,5 +429,6 @@ export function project(
     confirmedDestroyed: player.confirmedDestroyed,
     forecast: player.forecast,
     forecastIssuedAt: player.forecastIssuedAt,
+    net: player.net.map(({ recipient, kind, startedAt }) => ({ recipient, kind, sending: startedAt !== null })),
   };
 }

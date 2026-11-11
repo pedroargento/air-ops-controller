@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { groupedContact, groupLeads, groupStrength } from '../../src/ai/contact-groups';
 import { decideReports, initialRadioMemory } from '../../src/ai/report';
+import { weaponsFree } from '../support/single-squads';
 import { loadScenarioFile } from '../../src/cli/load-scenario';
 import { totalAmmunition } from '../../src/domain/public/equipment';
 import type { ContactEstimate } from '../../src/domain/public/estimates';
@@ -14,7 +15,7 @@ import { createRadioState } from '../../src/sim/radio';
 import { createInitialState } from '../../src/sim/state';
 import { step } from '../../src/sim/step';
 
-const scenario = loadScenarioFile();
+const scenario = weaponsFree(loadScenarioFile());
 const { combat } = scenario.file;
 
 /** A high wall across the middle of a stretch of open ground. */

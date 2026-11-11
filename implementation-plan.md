@@ -12,7 +12,7 @@ Version 0.2.0, released 2026-11-03. Six scenarios are playable from a menu, with
 | M5 | Implemented. Exit **not met**: no air still wins a few percent of outpost runs. |
 | M6–M7.9 | Complete. The M7 and M7.5 playtests were folded into M9. |
 | M8 | Replaced by S1. |
-| M9 | Partly done: Downed Pilot was playtested by hand (finding: an unseen survivor couldn't be called, now fixed). The outpost playtest is still owed. |
+| M9 | Closed. Downed Pilot was playtested by hand (finding: an unseen survivor couldn't be called, now fixed). The outpost and road playtests were played under R1 and reported as going well, with no findings written down. |
 | S0, S1, S4 | Met. S1's no air is 4.4% against S0's 0.3%. |
 | S2 | Met apart from the per-drill benefit. Followed by React to contact (§4.0.3), done on 2026-11-05. |
 | S3 | Left open on purpose: guns don't change outcomes. |
@@ -22,11 +22,12 @@ Version 0.2.0, released 2026-11-03. Six scenarios are playable from a menu, with
 | M21 | Mostly delivered early as §8.7 (night, light and flares). What remains is in its section. |
 | M10–M20 | Not started. M12 is the go/no-go gate for everything after it. |
 | R0 | Done on 2026-11-10: parallel batch, paired comparisons, a replay hash without accounting, and a CI workflow (not yet run on GitHub). |
-| R1 | Interface fixes done on 2026-11-10 (items 2–8). **The three hand playtests are still owed,** and with them M9. |
+| R1 | Done. Interface fixes on 2026-11-10 (items 2–8). The hand playtests were played by Pedro and reported as going well; no findings were written down, so R3 keeps the order it was listed in. |
 | R2 | Done on 2026-11-10: seed in the address, autosave and resume, Run on, more keys, the controller's own transmissions kept with the command log. |
-| R3–R6 | Not started. Review work added on 2026-11-10: dominated choices, four new rules and an early two-site test. See "Review work" in section 5. |
+| R3 | **In progress.** Step 1 (weapons clearance) done on 2026-11-10 and step 2 (information has a cost) on 2026-11-11. Steps 3–6 not started. |
+| R4–R6 | Not started. Review work added on 2026-11-10: four new rules, code health and an early two-site test. See "Review work" in section 5. |
 
-**Order from here:** R1's three hand playtests, which close M9 (R0, R2 and the rest of R1 are done), then R3 and R6, then S5 with medevac in it, then R4 alongside S6 and the harder S8 rescue, then Phase 1 (M10–M12). R5 runs alongside. This replaces the earlier order, which was S5, S6 and S8, the outpost playtest, then Phase 1: the playtest and the measurement tooling moved first because every later step depends on them.
+**Order from here:** the rest of R3 (danger close next), then R6, then S5 with medevac in it, then R4 alongside S6 and the harder S8 rescue, then Phase 1 (M10–M12). R5 runs alongside. This replaces the earlier order, which was S5, S6 and S8, the outpost playtest, then Phase 1: the playtest and the measurement tooling moved first because every later step depends on them.
 
 ### Standard tactics restored; experimental opt-in — 2026-11-10
 
@@ -157,7 +158,6 @@ The review work in section 5 now schedules some of these: guns, waiting for air,
 - **Waiting for air shows no gain.** The weighed rule removed its cost, but no map rewards it yet.
 - **No air wins a few percent at the outpost.** These are real wins, so M5's exit stays unmet.
 - **Downed Pilot is too easy for anything but an introduction,** and landing at night costs nothing extra (S8).
-- **Forwarding may be too strong:** at the outpost it is worth more than the 10-point design target.
 - **Fire is too continuous at the outpost,** and the first decisive assault comes a little early (M5's tempo targets).
 - **Scenario win conditions need a rethink.** "Below strength" is hidden from the player, and it counts a recovering unit as zero defenders. A report card on the outpost's status when a relief force arrives is the alternative. This becomes M13's shift report.
 
@@ -746,6 +746,49 @@ One step at a time, each measured on its own. Figures quoted are from "Current b
 6. **Neutral systems.** Re-measure waiting for air, forecasts and altitude with R0's paired measures. Any that still measure neutral are removed from the interface.
 
 **Exit:** No choice in the game has a single best answer across all six scenarios, by bot measurement.
+
+**Step 1, weapons clearance: done on 2026-11-10 (§8.0).** Crews start on Guns (`air.defaultWeapons`), keep their bombs under Watch and Cover, and drop one when the controller orders a Strike or frees them with Both. No new command was needed: the Strike order already was the clearance.
+
+Measured first with two new bots, over 300 paired seeds against the bot whose crews bomb as they choose (`informed`, `routeRecon`). Figures are wins of 300, then the paired difference in points with its 95% interval:
+
+| Scenario | Crews choose | Never bomb | Controller clears each bomb |
+|---|---|---|---|
+| Outpost | 236 | 130, −35.3 (−41.9 to −28.8) | 260, +8.0 (+2.4 to +13.6) |
+| Valley Road | 188 | 186, −0.7 (−7.1 to +5.7) | 193, +1.7 (−4.8 to +8.2) |
+| Overwatch | 23 | 17, −2.0 (−5.6 to +1.6) | 25, +0.7 (−3.7 to +5.0) |
+
+- **The choice is real at the outpost and neutral on the road maps.** Never bombing costs 35 points there. Placing each bomb beats leaving it to the crew by 8 points and 2.3 friendly men (1.4 to 3.2). On Valley Road and Overwatch bombs hardly matter either way, which is the "reactive air is no air" problem again and not this step's to fix.
+- **Against the exit:** the clearing bot gives more orders, as intended. Its 8 points are over the 5 the exit allowed. Not retuned: it is a gain from better play, and the interval reaches down to 2.4.
+- **A player who does nothing is worse off than before:** one who sends aircraft to Watch and never orders a Strike gets the "never bomb" column. The aircraft panel now says when bombs are held and how to release them.
+- **The bot:** `clearingBombs` strikes air defense first, then whatever fires on friends, then the strongest contact, never within 250 m of a friendly marker. A first version that would not strike the same contact twice left half its bombs unused and lost 14.7 points (−20.6 to −8.7).
+- **Existing bots are unchanged:** every bot but the two new kinds now frees all its crews at the start (`freeingCrews`), which is what the old default did. A first check found six bots that had played differently (the four flare bots at night and `reactiveSuppress` on both road maps: an aircraft finishing a Suppress or Illuminate task goes back to watching on its standing setting). With the fix, every bot on all six scenarios gives identical summaries under the old and the new default (40 seeds each, 132 bot-scenario pairs), so "Current balance" stands as written.
+- Golden hash `2ba33c45` to `a9161d09`. 716 tests and 86 e2e checks pass. The PDF manual was not rebuilt.
+
+**Step 2, information has a cost: done on 2026-11-11 (§6.5).** Built wider than the step as listed, at Pedro's direction: a cost to send, a cost to receive, and a cost to the unit that acts on what it is told. No rule judges whether a message was useful. The costs are paid either way, and only a message that changes what a unit does pays them back.
+
+- **One net:** one transmission at a time, answers ahead of forwarded intelligence, nothing displacing the one being sent.
+- **Talking blocks listening:** no unit gets a report through while air operations is sending. One second of silence after each transmission lets them in.
+- **Receiving takes the unit's radio:** it does no radio work of its own while copying, copies at its own radio rate, and when too suppressed to copy the message is given up after 60 seconds and logged.
+- **Standing to:** a platoon that copies forwarded intelligence or a mark halts for 45 seconds.
+- **Two rules the measurements forced:** a newer forward of a contact replaces the one still waiting (without it the old bot's queue reached 8,281 transmissions in one outpost battle), and a fire warning is one call to all stations.
+
+Each stage measured over 300 paired seeds against the same bot forwarding nothing. Points of win rate with the 95% interval:
+
+| Forwarding habit | Outpost before | Net rules only | Net and standing to | Valley Road before | Net rules only | Net and standing to |
+|---|---|---|---|---|---|---|
+| Every change, to nearby units | +14.7 (8.5 to 20.9) | +3.0 (−3.4 to 9.4) | −5.7 (−12.4 to 1.1) | +29.7 (22.7 to 36.7) | +26.0 (19.1 to 32.9) | −31.3 (−37.1 to −25.6) |
+| Every change, to every unit | +14.3 (8.0 to 20.6) | +2.7 (−4.0 to 9.3) | +3.7 (−2.9 to 10.2) | +29.3 (22.3 to 36.3) | +25.0 (18.3 to 31.7) | −32.0 (−37.5 to −26.5) |
+| Sparing | not measured | +6.7 (0.1 to 13.2) | +5.0 (−1.8 to 11.8) | not measured | +28.0 (21.2 to 34.8) | +28.0 (20.9 to 35.1) |
+
+- **Against the exit:** the sparing bot beats forwarding every change by 10.7 points at the outpost (4.4 to 16.9) and by 59.3 on Valley Road (53.5 to 65.1). Forwarding is kept, not automated.
+- **Forwarding's worth at the outpost is now about the 10-point design target or under it,** where it was 14.7. Sparing forwarding still costs the outpost about one man against silence (−1.1, interval −2.2 to +0.1), which is within noise but worth watching.
+- **Valley Road shows the unit's cost plainly:** a column told of every change stands to so often that it never arrives (6 wins of 300, ending at the time limit with more men alive). The net rules alone hardly touched it, because few contacts mean a short queue.
+- **"Every change, to every unit" at the outpost (+3.7) is not understood.** It should be no better than to nearby units (−5.7), and both intervals are wide. Not chased.
+- **A fire penalty while standing to was tried and dropped.** At 0.75 every forwarding habit cost the outpost about two men against silence, sparing included (−2.2, interval −3.4 to −1.0).
+- **Bots:** `informed`, `routeRecon` and everything built on them now forward sparingly, since the old habit can no longer stand for a competent controller. The old one is `…EveryChange`. With `radio.netSerial=false` the old bots gave byte-identical results to before, checked at the net-rules stage.
+- **Not done:** the player has no way to clear the queue. The PDF manual was not rebuilt.
+- Golden hash `a9161d09` to `30a34f0e`. 723 tests and 86 e2e checks pass.
+- **"Current balance" above is out of date** for the bots that forward. Re-measured so far with both rules on (wins of 300, seeds 0–299; the table above used seeds 1–300): outpost no air 14, `informed` 211 (was 236), `informedCleared` 247; outpost at night no air 3, `informedLit` 113 (was 120), `informed` 82; Downed Pilot `rescueNow` 292 and Find Them `sweep` 239, both unchanged. Valley Road and Overwatch were still running when this was written, and the table has not been rewritten.
 
 #### R4: New rules
 

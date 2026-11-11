@@ -48,6 +48,8 @@ export type Platoon = {
   lastIlluminationAt?: number;
   /** A downed aircrew's state, for the platoon that is one (§8.8). */
   survival?: Survival;
+  /** Standing to on intelligence from air operations until this tick: halted where it is (§6.5). */
+  standToUntil?: number;
   objective: GroundObjective;
   objectiveSchedule: readonly ScheduledObjective[];
   /** Positions in `objectiveSchedule` that have already fired. */

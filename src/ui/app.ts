@@ -1418,6 +1418,9 @@ export class App {
       `<h3>New task</h3><div class="buttons">${taskButtons}<button data-action="rtb" title="Head home now.">Return to base</button></div>${fields}` +
       `<h3>Standing settings</h3>` +
       (strike ? `<div class="setting-row"><span>Weapons</span><div class="buttons">${weapons}</div></div>` : '') +
+      (strike && aircraft.ammunition > 0 && (aircraft.weapons === 'guns' || aircraft.weapons === 'hold')
+        ? '<p class="hint">Bombs are held. Order a Strike on a place or a contact (K, or right-click), or set weapons to Both and the crew will choose its own targets.</p>'
+        : '') +
       `<div class="setting-row"><span>Risk</span><div class="buttons">${risk}</div></div>` +
       `<div class="setting-row"><span>Altitude</span><div class="buttons"><input id="order-altitude" type="number" value="${altitude}" min="100" step="100" /> m ` +
       (aircraft.manualAltitude ? '<button data-action="crew-altitude" title="Let the crew choose again.">Crew altitude</button>' : '<span class="hint-quiet">crew chooses</span>') +
@@ -1556,6 +1559,22 @@ export class App {
         (showing === 'radio' ? `<span class="radio-filter">${filter('main', 'Main')}${filter('all', 'All')}</span>` : ''),
     );
     if (showing === 'tracks') morphHtml(element('tracks'), this.tracksHtml(view));
+    morphHtml(element('net-status'), this.netHtml(view));
+  }
+
+  /**
+   * The controller's own net (§6.5): what is being sent, and how much waits behind it. While it
+   * is sending, no unit can get through, so a long queue is a reason to stop forwarding.
+   */
+  private netHtml(view: PlayerView): string {
+    const [first, ...rest] = view.net;
+    if (first === undefined) return 'Net clear.';
+    const to = (recipient: string): string => (recipient === 'ALL' ? 'all stations' : displayName(recipient, this.config.names));
+    const label = (kind: string): string => (kind === 'REQUEST' ? 'Request' : (MESSAGE_KIND_LABELS[kind as keyof typeof MESSAGE_KIND_LABELS] ?? kind));
+    const waiting = (first.sending ? rest : view.net).length;
+    const sending = first.sending ? `<span class="busy">Sending: ${escapeHtml(label(first.kind))} to ${escapeHtml(to(first.recipient))}.</span> ` : '';
+    const queued = waiting === 0 ? '' : `${waiting} waiting, about ${duration(waiting * this.config.transmitSeconds)}. `;
+    return `${sending}${queued}${first.sending ? 'Units cannot reach you while you send.' : ''}`;
   }
 
   /** Every track in one table, sorted as asked. A row selects the track and centers the map on it. */

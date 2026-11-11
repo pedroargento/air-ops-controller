@@ -150,6 +150,9 @@ rules or the schema.
 | `radio.dangerCloseMeters` | `200` | A unit with the enemy this close asks for danger close. |
 | `radio.prepareSeconds` | `15` | Time to prepare a report. |
 | `radio.transmitSeconds` | `20` | Time to send one. |
+| `radio.netSerial` | `true` | Air operations sends one transmission at a time, and hears no unit while it is sending. |
+| `radio.receiveTimeoutSeconds` | `60` | How long air operations keeps calling a unit that cannot copy before giving the message up. |
+| `radio.standToSeconds` | `45` | How long a platoon halts after copying intelligence or a mark from air operations. Zero turns it off. |
 | `radio.engagedRate` | `0.7` | Radio work rate while fighting. |
 | `radio.withdrawingRate` | `0.5` | Radio work rate while withdrawing. |
 | `radio.interruptSuppression` | `0.8` | At this suppression the radio stops. |
@@ -205,6 +208,7 @@ rules or the schema.
 | Parameter | Standard | What it does |
 |---|---|---|
 | `air.operatingAltitudeMeters` | `650` | Shared default altitude. |
+| `air.defaultWeapons` | `"guns"` | What a crew may fire on targets it picks itself, until the controller says otherwise. |
 | `air.sensorReferenceHeightMeters` | `300` | Height at which sensors work at full quality. |
 | `air.terrainLookaheadSeconds` | `8` | How far ahead pilots look for rising ground. |
 | `air.sensorQualityMin` | `0.2` | Worst sensor quality from height. |

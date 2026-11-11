@@ -7,7 +7,7 @@ import {
 } from '../domain/public/air';
 import type { PlayerCommand, ReportRequest } from '../domain/public/commands';
 import type { Vec2 } from '../domain/public/geometry';
-import { emptyKnowledge, type ContactId, type UnitKnowledge } from '../domain/public/ground';
+import { emptyKnowledge, type ContactId } from '../domain/public/ground';
 import {
   AIR_OPS,
   type ExpectedSupport,
@@ -23,10 +23,13 @@ import { receiveByUnit } from '../knowledge/unit-knowledge';
 import type { RequestAnswer } from '../knowledge/player-knowledge';
 import type { Scenario } from '../scenario/load';
 import { aircraftTelemetry, applyOrder, setTargetAltitude } from './air';
-import { enqueue, linkedNodes, type PendingTransmission, type RadioState } from './radio';
+import { receiveByPlayer } from '../knowledge/player-knowledge';
+import { enqueue, linkedNodes, radioRate, recipientOf, type PendingTransmission, type RadioState, type RadioUnit } from './radio';
 import type { SimState } from './state';
 
 const REQUEST_PRIORITY = -1;
+/** Who a call to every unit on the net is addressed to, as the controller's own queue shows it. */
+export const ALL_STATIONS = 'ALL';
 const MEDEVAC_RADIUS_METERS = 100;
 
 function nextId(radio: RadioState): MessageId {
@@ -70,10 +73,53 @@ function acknowledgement(
   };
 }
 
-function transmit(state: SimState, scenario: Scenario, transmission: PendingTransmission['payload']): void {
-  state.radio.outbound.push({
+/** Intelligence and marks passed on wait behind anything a unit is waiting to hear. */
+function priorityOf(payload: PendingTransmission['payload']): number {
+  return payload.kind === 'message' && (payload.message.kind === 'INTEL_REPORT' || payload.message.kind === 'POI_REPORT') ? 1 : 0;
+}
+
+function transmit(state: SimState, scenario: Scenario, transmission: PendingTransmission['payload'], topic: string | null = null, broadcast: string | null = null): void {
+  const { outbound } = state.radio;
+  if (scenario.file.radio.netSerial && topic !== null) {
+    // Nobody reads out an old position when a newer one is in hand: the newer word takes the
+    // older one's place in the queue, unless that one is already being sent.
+    const recipient = transmission.kind === 'message' ? transmission.recipient : transmission.unitId;
+    const stale = outbound.find((entry) => entry.startedAt === null && entry.topic === topic && recipientOf(entry) === recipient);
+    if (stale !== undefined) {
+      stale.payload = transmission;
+      return;
+    }
+  }
+  outbound.push({
+    topic,
+    broadcast,
     deliverAt: state.tick + scenario.file.radio.transmitSeconds,
     payload: transmission,
+    priority: priorityOf(transmission),
+    queuedAt: state.tick,
+    startedAt: null,
+    progressSeconds: 0,
+  });
+  if (!scenario.file.radio.netSerial) return;
+  // The one being sent is never displaced. The sort is stable, so equals keep the order given.
+  const sending = outbound.filter((entry) => entry.startedAt !== null);
+  const waiting = outbound.filter((entry) => entry.startedAt === null).sort((a, b) => a.priority - b.priority || a.queuedAt - b.queuedAt);
+  state.radio.outbound = [...sending, ...waiting];
+  mirrorNet(state);
+}
+
+/** What the controller knows of its own net: what it is sending, and what waits. */
+function mirrorNet(state: SimState): void {
+  const seen = new Set<string>();
+  state.player.net = state.radio.outbound.flatMap((entry) => {
+    // A call to all stations is one transmission, however many units hear it.
+    if (entry.broadcast !== null && seen.has(entry.broadcast)) return [];
+    if (entry.broadcast !== null) seen.add(entry.broadcast);
+    return [{
+      recipient: entry.broadcast === null ? recipientOf(entry) : ALL_STATIONS,
+      kind: entry.payload.kind === 'message' ? entry.payload.message.kind : 'REQUEST',
+      startedAt: entry.startedAt,
+    }];
   });
 }
 
@@ -124,7 +170,7 @@ function forwardContact(state: SimState, scenario: Scenario, contactKey: string,
       receivedAt: tick + scenario.file.radio.transmitSeconds,
       contact: entry.contact,
     };
-    transmit(state, scenario, { kind: 'message', recipient, message });
+    transmit(state, scenario, { kind: 'message', recipient, message }, `contact:${contactKey}`);
   }
 }
 
@@ -202,7 +248,8 @@ function announceSuppression(state: SimState, scenario: Scenario, aircraft: Airc
       suppression,
       cancelled: !suppressing,
     };
-    transmit(state, scenario, { kind: 'message', recipient, message });
+    // A warning of fire is called to all stations at once: it can't wait its turn unit by unit.
+    transmit(state, scenario, { kind: 'message', recipient, message }, null, `suppression:${aircraft.id}:${state.tick}`);
   }
 }
 
@@ -334,31 +381,76 @@ function needFor(report: ReportRequest): ReportNeed {
   }
 }
 
+/** Intelligence and marks are what a platoon stops to plot and pass on. An answer or a warning is not. */
+function standsTo(message: RadioMessage): boolean {
+  return message.kind === 'INTEL_REPORT' || (message.kind === 'POI_REPORT' && !message.cancelled);
+}
+
 function deliverOutbound(
   transmission: PendingTransmission,
-  knowledge: Record<string, UnitKnowledge>,
-  radio: RadioState,
-  tick: number,
+  state: SimState,
+  scenario: Scenario,
 ): void {
+  const { radio, tick, unitKnowledge: knowledge } = state;
   const { payload } = transmission;
   if (payload.kind === 'request') {
     const unitRadio = radio.units[payload.unitId];
     if (unitRadio !== undefined) enqueue(unitRadio, needFor(payload.report), tick, REQUEST_PRIORITY);
     return;
   }
-  receiveByUnit((knowledge[payload.recipient] ??= emptyKnowledge()), payload.message);
+  receiveByUnit((knowledge[payload.recipient] ??= emptyKnowledge()), { ...payload.message, receivedAt: tick });
+  const platoon = state.truth.platoons[payload.recipient];
+  const { standToSeconds } = scenario.file.radio;
+  if (platoon !== undefined && standToSeconds > 0 && standsTo(payload.message)) platoon.standToUntil = tick + standToSeconds;
   const unitRadio = radio.units[payload.recipient];
   if (unitRadio !== undefined && payload.message.kind === 'ACKNOWLEDGEMENT') {
     unitRadio.memory = { ...unitRadio.memory, supportAcknowledgedAt: tick };
   }
 }
 
-export function advanceOutbound(state: SimState): void {
+export function advanceOutbound(state: SimState, scenario: Scenario, units: readonly RadioUnit[]): void {
   const { radio, tick } = state;
-  const due = radio.outbound.filter((transmission) => transmission.deliverAt <= tick);
-  if (due.length === 0) return;
-  radio.outbound = radio.outbound.filter((transmission) => transmission.deliverAt > tick);
-  for (const transmission of due) deliverOutbound(transmission, state.unitKnowledge, radio, tick);
+  const config = scenario.file.radio;
+  if (!config.netSerial) {
+    const due = radio.outbound.filter((transmission) => transmission.deliverAt <= tick);
+    if (due.length === 0) return;
+    radio.outbound = radio.outbound.filter((transmission) => transmission.deliverAt > tick);
+    for (const transmission of due) deliverOutbound(transmission, state, scenario);
+    return;
+  }
+  // One net (§6.5): a transmission is sent alone, and takes as long as the unit needs to copy it.
+  const head = radio.outbound[0];
+  if (head === undefined) return;
+  if (head.startedAt === null) {
+    if (tick < radio.netFreeAt) return;
+    for (const entry of radio.outbound) {
+      if (entry === head || (head.broadcast !== null && entry.broadcast === head.broadcast)) entry.startedAt = tick;
+    }
+    mirrorNet(state);
+    return;
+  }
+  const recipient = recipientOf(head);
+  const unit = units.find((entry) => entry.id === recipient && entry.personnel > 0);
+  // A call to all stations is read out once and not read back. So is a call to a unit that is
+  // gone: air operations can't tell that from one that copied.
+  head.progressSeconds += head.broadcast !== null || unit === undefined ? 1 : radioRate(unit, config);
+  const copied = head.progressSeconds >= config.transmitSeconds;
+  if (!copied && tick - head.startedAt < config.receiveTimeoutSeconds) return;
+  const sent = head.broadcast === null ? [head] : radio.outbound.filter((entry) => entry.broadcast === head.broadcast);
+  radio.outbound = radio.outbound.filter((entry) => !sent.includes(entry));
+  // A second of silence after each transmission lets units that were waiting get through.
+  radio.netFreeAt = tick + 1;
+  mirrorNet(state);
+  if (copied) {
+    for (const transmission of sent) deliverOutbound(transmission, state, scenario);
+    return;
+  }
+  const name = scenario.file.units.find((entry) => entry.id === recipient)?.name ?? recipient;
+  receiveByPlayer(
+    state.player,
+    { id: nextId(radio), kind: 'COMMAND_UPDATE', senderId: AIR_OPS, observedAt: tick, sentAt: tick, receivedAt: tick, text: `No answer from ${name}: the message did not get through.` },
+    scenario.file.display.freshReportSeconds,
+  );
 }
 
 /** Keeps `CAS inbound` honest: a changed assignment sends a correction, which takes time to arrive. */

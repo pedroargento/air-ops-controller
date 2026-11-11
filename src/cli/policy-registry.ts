@@ -1,5 +1,5 @@
 import type { Vec2 } from '../domain/public/geometry';
-import { answeringDangerClose, answeringMedevac, answeringRequests, atRisk, lingeringOnGuns, illuminatingAtNight, immediateCas, noAir, reactiveCas, markingKillZones, reconInformed, rescuing, scoutingOnly, suppressingKillZones, coveringLead, sweepingRecon, type Policy } from '../policies/air-policies';
+import { answeringDangerClose, answeringMedevac, answeringRequests, atRisk, clearingBombs, freeingCrews, holdingBombs, lingeringOnGuns, illuminatingAtNight, immediateCas, noAir, reactiveCas, markingKillZones, reconInformed, rescuing, scoutingOnly, suppressingKillZones, coveringLead, sweepingRecon, type Policy } from '../policies/air-policies';
 import type { Scenario } from '../scenario/load';
 
 type PolicySet = Readonly<Record<string, () => Policy>>;
@@ -13,7 +13,13 @@ function outpostPolicies(scenario: Scenario): PolicySet {
     immediate: immediateCas,
     informed: () => reconInformed(objective, true),
     informedNoForward: () => reconInformed(objective, false),
+    // Forwarding cost (R3.2): every contact to every unit, however far away.
+    informedForwardAll: () => reconInformed(objective, 'all'),
+    informedEveryChange: () => reconInformed(objective, 'everyChange'),
     informedFireFirst: () => reconInformed(objective, true, undefined, true),
+    // Weapons clearance (R3.1): crews that never bomb unasked, and a controller who clears each bomb.
+    informedGunsOnly: () => holdingBombs(reconInformed(objective, true)),
+    informedCleared: () => clearingBombs(reconInformed(objective, true)),
     informedLinger: () => lingeringOnGuns(reconInformed(objective, true)),
     informedCautious: () => atRisk(reconInformed(objective, true), 'cautious'),
     informedPressOn: () => atRisk(reconInformed(objective, true), 'pressOn'),
@@ -48,7 +54,11 @@ function valleyRoadPolicies(scenario: Scenario): PolicySet {
     ...BASELINE,
     routeRecon: () => reconInformed(route, true),
     routeReconNoForward: () => reconInformed(route, false),
+    routeReconForwardAll: () => reconInformed(route, 'all'),
+    routeReconEveryChange: () => reconInformed(route, 'everyChange'),
     routeReconFireFirst: () => reconInformed(route, true, undefined, true),
+    routeReconGunsOnly: () => holdingBombs(reconInformed(route, true)),
+    routeReconCleared: () => clearingBombs(reconInformed(route, true)),
     routeReconMark: () => markingKillZones(reconInformed(route, true)),
     routeReconSuppress: () => suppressingKillZones(markingKillZones(reconInformed(route, true))),
     routeReconLinger: () => lingeringOnGuns(markingKillZones(reconInformed(route, true))),
@@ -107,7 +117,14 @@ const SCENARIO_POLICIES: Readonly<Record<string, (scenario: Scenario) => PolicyS
   'downed-pilot': rescuePolicies,
 };
 
+/** Bots that keep bombs for the controller to place (R3.1). Every other bot frees its crews at the start. */
+const HOLDS_BOMBS = /(GunsOnly|Cleared)$/;
+
+function withCrewsFreed(set: PolicySet): PolicySet {
+  return Object.fromEntries(Object.entries(set).map(([name, make]) => [name, HOLDS_BOMBS.test(name) ? make : () => freeingCrews(make())]));
+}
+
 // Shared by the batch runner and the debug page, so it must stay free of Node imports.
 export function policies(scenario: Scenario): PolicySet {
-  return withDangerClose(SCENARIO_POLICIES[scenario.file.id]?.(scenario) ?? BASELINE);
+  return withDangerClose(withCrewsFreed(SCENARIO_POLICIES[scenario.file.id]?.(scenario) ?? BASELINE));
 }

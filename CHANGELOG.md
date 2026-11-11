@@ -4,6 +4,23 @@ Notable changes to Air Operations. Section numbers such as §8.8 refer to `air-o
 
 ## Unreleased
 
+### Information has a cost (R3.2, §6.5, 2026-11-11)
+
+- **One net:** air operations sends one transmission at a time (`radio.netSerial`). Answers go ahead of forwarded intelligence, a newer forward of a contact replaces one still waiting, and a fire warning is one call to all stations.
+- **Talking blocks listening:** no unit can report while air operations is sending. A unit copying a message does no radio work of its own, copies more slowly in a fight, and at `interruptSuppression` doesn't copy at all: the message is given up after `radio.receiveTimeoutSeconds` and logged as "No answer".
+- **Standing to:** a platoon that copies forwarded intelligence or a mark halts for `radio.standToSeconds` (45).
+- The radio panel shows what is being sent and how much waits.
+- **Bots:** `informed`, `routeRecon` and the bots built on them now forward sparingly: to units near a contact, once, again when it has moved 300 m, and never onto a backed-up net. The old habit is kept as `informedEveryChange` and `routeReconEveryChange`, and `…ForwardAll` does it to every unit.
+- **Measured over 300 paired seeds, against forwarding nothing.** Before: every change was worth +14.7 points at the outpost and +29.7 on Valley Road, to nearby units or to everyone alike. Now sparing forwarding is worth +5.0 (−1.8 to +11.8) and +28.0 (+20.9 to +35.1), and forwarding every change −5.7 (−12.4 to +1.1) and −31.3 (−37.1 to −25.6).
+- Golden hash `a9161d09` to `30a34f0e`. Validation: 723 tests and 86 e2e checks pass.
+
+### Weapons clearance (R3.1, §8.0, 2026-11-10)
+
+- Crews start on Guns (`air.defaultWeapons`) and keep their bombs under Watch and Cover. A bomb falls on a Strike order, or once the controller sets the aircraft to Both or Bombs. The aircraft panel says when bombs are held.
+- New bots `informedGunsOnly`, `informedCleared`, `routeReconGunsOnly` and `routeReconCleared`. At the outpost over 300 paired seeds, never bombing loses 35.3 points to crews that choose (−41.9 to −28.8) and a controller who places each bomb gains 8.0 (+2.4 to +13.6). On Valley Road and Overwatch both are within noise.
+- `--policy` takes several names separated by commas.
+- Golden hash `2ba33c45` to `a9161d09`. Validation: 716 tests and 86 e2e checks pass.
+
 ### Sessions (R2, 2026-11-10)
 
 - A random seed is written to the address, and **Restart** plays the same battle again.

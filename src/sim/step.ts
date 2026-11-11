@@ -10,6 +10,7 @@ import {
   type Drill,
   type DrillMap,
   type GroundObjective,
+  type GroundIntent,
   type UnitKnowledge,
   type UnitSelf,
 } from '../domain/public/ground';
@@ -254,6 +255,22 @@ function applyPlatoonDecisions(state: SimState, selves: ReadonlyMap<string, Unit
   }
 }
 
+/**
+ * What a squad does while its platoon stands to: it goes nowhere, and fires as before. A fire
+ * penalty was tried and dropped: at 0.75 it made every kind of forwarding cost the outpost
+ * about two men against silence (300 paired seeds).
+ */
+function standTo(intent: GroundIntent): GroundIntent {
+  switch (intent.kind) {
+    case 'move':
+      return { kind: 'hold', posture: 'defending' };
+    case 'engage':
+      return { ...intent, closeTo: null };
+    default:
+      return intent;
+  }
+}
+
 function applyDecisions(state: SimState, selves: ReadonlyMap<string, UnitSelf>, scenario: Scenario): void {
   const map = drillMap(scenario.terrain);
   for (const unit of state.truth.units) {
@@ -262,7 +279,9 @@ function applyDecisions(state: SimState, selves: ReadonlyMap<string, UnitSelf>, 
     if (self === undefined || unit.personnel <= 0 || state.tick < platoon.activeFromTick) continue;
     const knowledge = state.unitKnowledge[unit.platoonId] ?? emptyKnowledge();
     const decision = decideGround(self, knowledge, state.tick, scenario.file.combat.behaviorFireRate, map, scenario.groundExperiment);
-    unit.intent = decision.intent;
+    // A platoon plotting what air operations just told it stays where it is (§6.5).
+    const standingTo = platoon.standToUntil !== undefined && state.tick < platoon.standToUntil;
+    unit.intent = standingTo ? standTo(decision.intent) : decision.intent;
     unit.behavior = decision.behavior;
     unit.behaviorSinceTick = decision.behaviorSinceTick;
     unit.firesAtAircraft = decision.firesAtAircraft;
@@ -439,7 +458,7 @@ export function step(state: SimState, commands: readonly PlayerCommand[], scenar
   advanceRadio(radioUnits(truth), lazySelves(state, scenario), state.unitKnowledge, state.radio, state.player, scenario, state.tick, (unitId, message) =>
     onSurvivorTransmission(truth, state.unitKnowledge, scenario, rng, state.tick, unitId, message),
   );
-  advanceOutbound(state);
+  advanceOutbound(state, scenario, radioUnits(truth));
   // Whatever reached air operations this second goes on a track before anyone looks at the map.
   correlateReports(state.player, file.display, state.tick);
   if (tactical) reviewPromises(state, scenario);

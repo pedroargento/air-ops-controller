@@ -8,6 +8,14 @@ export function singleSquads(scenario: Scenario): Scenario {
   return { ...scenario, file };
 }
 
+/**
+ * Crews free to bomb targets they pick themselves, as before R3.1 made guns the default. For
+ * tests of what a crew's own bombing does, not of who decides it.
+ */
+export function weaponsFree(scenario: Scenario): Scenario {
+  return { ...scenario, file: { ...scenario.file, air: { ...scenario.file.air, defaultWeapons: 'both' } } };
+}
+
 /** A platoon's first squad, which in `singleSquads` is the whole platoon. */
 export function squadOf(truth: WorldTruth, platoonId: string): GroundUnit {
   const unit = truth.units.find((u) => u.platoonId === (platoonId as UnitId));

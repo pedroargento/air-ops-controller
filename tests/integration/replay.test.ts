@@ -28,8 +28,9 @@ describe('replay', () => {
   it('matches the golden hash', () => {
     const hashes = runReplay(scenario, { seed: 1, commands: [], ticks: 3000 });
     // R0: the hash now leaves out report accounting and diagnostics (`src/sim/state-hash.ts`).
-    // No rule changed; with them included this run still gives the previous 'a66514cf'.
-    expect(hashes.at(-1)).toBe('2ba33c45');
+    // No rule changed then. R3.1 then made guns the crews' default weapons setting (2ba33c45 to a9161d09), and R3.2 put
+    // air operations on one net (a9161d09 to 30a34f0e).
+    expect(hashes.at(-1)).toBe('30a34f0e');
   }, 30000);
 
   it('diverges when a command differs', () => {

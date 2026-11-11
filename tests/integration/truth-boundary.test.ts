@@ -1,5 +1,6 @@
 import { emptyKnowledge } from '../../src/domain/public/ground';
 import { describe, expect, it } from 'vitest';
+import { weaponsFree } from '../support/single-squads';
 import { loadScenarioFile } from '../../src/cli/load-scenario';
 import type { AircraftId } from '../../src/domain/public/air';
 import type { ContactEstimate } from '../../src/domain/public/estimates';
@@ -10,7 +11,7 @@ import { resolveCas, updateAircraftNotice } from '../../src/sim/air';
 import { createInitialState, type SimState } from '../../src/sim/state';
 import { step } from '../../src/sim/step';
 
-const valley = loadScenarioFile('valley-road');
+const valley = weaponsFree(loadScenarioFile('valley-road'));
 const { air, combat, display, perception } = valley.file;
 const flat = { ...valley.terrain, elevation: new Float32Array(valley.terrain.elevation.length) };
 

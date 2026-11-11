@@ -19,9 +19,10 @@ import { createInitialState, type SimState } from '../../src/sim/state';
 import { platoonOf } from '../../src/sim/platoon';
 import { step } from '../../src/sim/step';
 import { sightOn } from '../../src/perception/observe';
-import { singleSquads, squadOf } from '../support/single-squads';
+import { singleSquads, squadOf, weaponsFree } from '../support/single-squads';
 
-const scenario = singleSquads(loadScenarioFile());
+const standard = singleSquads(loadScenarioFile());
+const scenario = weaponsFree(standard);
 const { air, mission, radio: radioConfig } = scenario.file;
 const CAS = 'CAS-1' as AircraftId;
 const RECON = 'RECON-1' as AircraftId;
@@ -254,7 +255,8 @@ describe('reconnaissance', () => {
       clearLookSeconds: 0,
     };
     step(state, [{ kind: 'forwardContact', tick: state.tick, contactKey: key, recipients: ['F-A'] }], scenario);
-    run(state, radioConfig.transmitSeconds + 6);
+    // It copies the report, stands to while it plots it (§6.5), and then acts.
+    run(state, radioConfig.transmitSeconds + radioConfig.standToSeconds + 8);
     expect(before.kind).toBe('hold');
     expect(unit(state, 'F-A').intent.kind).toBe('move');
   });
@@ -746,6 +748,28 @@ describe('altitude control', () => {
     };
     expect(state.tick).toBe(0);
     expect(runReplay(scenario, log as never)).toEqual(runReplay(scenario, log as never));
+  });
+});
+
+describe('weapons clearance (R3.1)', () => {
+  const bombsLeft = (file: typeof scenario, commands: (state: SimState, at: Vec2) => PlayerCommand[]): number => {
+    const state = createInitialState(file, 1);
+    isolate(state, ['E-W']);
+    const at = unit(state, 'E-W').position;
+    step(state, commands(state, at), file);
+    for (let i = 1; i < 1000; i += 1) step(state, [], file);
+    return aircraft(state, CAS).bombLoad - aircraft(state, CAS).ammunition;
+  };
+
+  it('a crew keeps its bombs under Watch until the controller says otherwise', () => {
+    expect(createInitialState(standard, 1).truth.aircraft.every((a) => a.weapons === 'guns')).toBe(true);
+    expect(bombsLeft(standard, (state, at) => [order(state, CAS, support(at))])).toBe(0);
+  });
+
+  it('drops one on a Strike, and chooses for itself once set to Both', () => {
+    expect(bombsLeft(standard, (state, at) => [order(state, CAS, { kind: 'Strike', center: at, radius: 300 })])).toBe(1);
+    const free = (state: SimState): PlayerCommand => ({ kind: 'setWeapons', tick: state.tick, aircraftId: CAS, weapons: 'both' });
+    expect(bombsLeft(standard, (state, at) => [free(state), order(state, CAS, support(at))])).toBeGreaterThan(1);
   });
 });
 
@@ -1315,5 +1339,105 @@ describe('night and flares', () => {
     expect(sightOn(dark.truth, enemy(dark), 0)).toBeLessThan(0.5);
     enemy(dark).lastFiredAtTick = 0;
     expect(sightOn(dark.truth, enemy(dark), 0)).toBeGreaterThanOrEqual(0.6);
+  });
+});
+
+describe('air operations\' net (§6.5)', () => {
+  const T = radioConfig.transmitSeconds;
+  const forward = (state: SimState, key: string, recipients: string[]): PlayerCommand => ({ kind: 'forwardContact', tick: state.tick, contactKey: key, recipients });
+  const ask = (state: SimState, unitId: string): PlayerCommand => ({ kind: 'requestReport', tick: state.tick, unitId, report: 'position' });
+  const reports = (state: SimState, unitId: string): number => Object.keys(state.unitKnowledge[unitId]?.reports ?? {}).length;
+  function withContacts() {
+    const state = createInitialState(scenario, 2);
+    isolate(state, ['F-A', 'F-B', 'E-N1']);
+    const enemy = unit(state, 'E-N1');
+    platoonOf(state.truth, enemy).activeFromTick = 100000;
+    enemy.position = { x: 2525, y: 1850 };
+    run(state, 1, [order(state, RECON, { kind: 'Watch', center: enemy.position, radius: 500 })]);
+    run(state, 700);
+    const keys = Object.keys(state.player.contacts).filter((k) => k.startsWith(RECON));
+    // Quiet the net and the units, so only what the test sends is on it.
+    state.radio.outbound = [];
+    for (const u of state.truth.units) u.suppression = 0;
+    return { state, key: keys[0] as string, keys };
+  }
+
+  it('sends one transmission at a time, so two units hear the same thing a transmission apart', () => {
+    const { state, key } = withContacts();
+    step(state, [forward(state, key, ['F-A', 'F-B'])], scenario);
+    expect(state.player.net.map((entry) => entry.recipient)).toEqual(['F-A', 'F-B']);
+    run(state, T + 1);
+    expect([reports(state, 'F-A'), reports(state, 'F-B')]).toEqual([1, 0]);
+    run(state, T + 2);
+    expect(reports(state, 'F-B')).toBe(1);
+    expect(state.radio.outbound).toHaveLength(0);
+  });
+
+  it('puts an answer ahead of waiting intelligence, but never ahead of what is being sent', () => {
+    const { state, key } = withContacts();
+    step(state, [forward(state, key, ['F-A', 'F-B'])], scenario);
+    run(state, 3, [ask(state, 'F-B')]);
+    expect(state.radio.outbound.map((entry) => entry.payload.kind)).toEqual(['message', 'request', 'message']);
+  });
+
+  it('lets a newer word on a contact take the place of one still waiting', () => {
+    const { state, key } = withContacts();
+    step(state, [forward(state, key, ['F-A', 'F-B'])], scenario);
+    run(state, 3, [forward(state, key, ['F-A', 'F-B'])]);
+    // F-A's is on the air and stays as sent, so its newer one waits. F-B's is replaced where it stood.
+    expect(state.player.net.map((entry) => entry.recipient)).toEqual(['F-A', 'F-B', 'F-A']);
+  });
+
+  it('gives up on a unit pinned too hard to copy, and says so', () => {
+    const { state, key } = withContacts();
+    step(state, [forward(state, key, ['F-A'])], scenario);
+    for (let i = 0; i < radioConfig.receiveTimeoutSeconds + 2; i += 1) {
+      for (const u of state.truth.units.filter((entry) => entry.platoonId === 'F-A')) u.suppression = 1;
+      step(state, [], scenario);
+    }
+    expect(reports(state, 'F-A')).toBe(0);
+    expect(state.radio.outbound).toHaveLength(0);
+    expect(state.player.log.some((m) => m.kind === 'COMMAND_UPDATE' && m.text.includes('No answer from'))).toBe(true);
+  });
+
+  it('hears no unit while it is sending', () => {
+    const quiet = withContacts();
+    const busy = withContacts();
+    const heard = (state: SimState): number => state.player.log.filter((m) => m.senderId !== RECON && m.senderId !== 'AIR_OPS' && m.senderId !== 'CECON').length;
+    const before = heard(quiet.state);
+    // The same battle twice: once silent, once with air operations reading out contact after contact.
+    for (let i = 0; i < 40; i += 1) {
+      step(quiet.state, [], scenario);
+      step(busy.state, i % 10 === 0 ? busy.keys.slice(0, 3).map((k) => forward(busy.state, k, ['F-A', 'F-B'])) : [], scenario);
+    }
+    expect(busy.state.radio.outbound.length).toBeGreaterThan(0);
+    expect(heard(busy.state) - before).toBeLessThanOrEqual(heard(quiet.state) - before);
+  });
+
+  it('a platoon halts to plot intelligence it is sent, and not for an answer', () => {
+    const { state, key } = withContacts();
+    const platoon = state.truth.platoons['F-A']!;
+    run(state, 1, [ask(state, 'F-A')]);
+    run(state, T + 2);
+    expect(platoon.standToUntil).toBeUndefined();
+    run(state, 1, [forward(state, key, ['F-A'])]);
+    run(state, T + 2);
+    expect(platoon.standToUntil).toBeGreaterThan(state.tick);
+    expect((platoon.standToUntil as number) - state.tick).toBeLessThanOrEqual(radioConfig.standToSeconds);
+    // Whatever it decides to do, it goes nowhere until then. Decisions are taken every few
+    // seconds, so the halt holds from the next one.
+    run(state, 6);
+    const from = platoon.squads.map((squad) => ({ ...squad.position }));
+    run(state, 10);
+    expect(platoon.squads.map((squad) => squad.position)).toEqual(from);
+    expect(platoon.squads.every((squad) => squad.intent.kind !== 'move')).toBe(true);
+  });
+
+  it('with the rule off, everything arrives side by side as it used to', () => {
+    const parallel = { ...scenario, file: { ...scenario.file, radio: { ...radioConfig, netSerial: false } } };
+    const { state, key } = withContacts();
+    step(state, [forward(state, key, ['F-A', 'F-B'])], parallel);
+    for (let i = 0; i < T + 1; i += 1) step(state, [], parallel);
+    expect([reports(state, 'F-A'), reports(state, 'F-B')]).toEqual([1, 1]);
   });
 });

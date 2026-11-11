@@ -195,6 +195,9 @@ const radio = z.object({
   dangerCloseMeters: z.number().positive().describe('A unit with the enemy this close asks for danger close.'),
   prepareSeconds: z.number().positive().describe('Time to prepare a report.'),
   transmitSeconds: z.number().positive().describe('Time to send one.'),
+  netSerial: z.boolean().describe('Air operations sends one transmission at a time, and hears no unit while it is sending.'),
+  receiveTimeoutSeconds: z.number().positive().describe('How long air operations keeps calling a unit that cannot copy before giving the message up.'),
+  standToSeconds: z.number().nonnegative().describe('How long a platoon halts after copying intelligence or a mark from air operations. Zero turns it off.'),
   engagedRate: unit.describe('Radio work rate while fighting.'),
   withdrawingRate: unit.describe('Radio work rate while withdrawing.'),
   interruptSuppression: unit.describe('At this suppression the radio stops.'),
@@ -283,6 +286,7 @@ const aircraftModel = z.object({
 const air = z.object({
   airbase: vec2.describe('Where aircraft take off and land.'),
   operatingAltitudeMeters: z.number().positive().describe('Shared default altitude.'),
+  defaultWeapons: z.enum(['hold', 'heavy', 'guns', 'both']).describe('What a crew may fire on targets it picks itself, until the controller says otherwise.'),
   sensorReferenceHeightMeters: z.number().positive().describe('Height at which sensors work at full quality.'),
   terrainLookaheadSeconds: z.number().positive().describe('How far ahead pilots look for rising ground.'),
   sensorQualityMin: unit.describe('Worst sensor quality from height.'),

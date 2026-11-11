@@ -26,16 +26,45 @@ export type UnitRadio = {
 };
 
 export type PendingTransmission = {
+  /** When it arrives, where transmissions go out side by side (`netSerial` off). */
   deliverAt: number;
   payload:
     | Readonly<{ kind: 'message'; recipient: string; message: RadioMessage }>
     | Readonly<{ kind: 'request'; unitId: string; report: ReportRequest }>;
+  /**
+   * Set on a call to all stations: every transmission with the same value goes out as one, and
+   * nobody reads it back. Null for a call to one unit.
+   */
+  broadcast: string | null;
+  /** What it is about, when a later word on the same thing makes this one out of date. */
+  topic: string | null;
+  /** Lower goes first: an answer a unit is waiting for goes ahead of intelligence passed on. */
+  priority: number;
+  queuedAt: number;
+  /** When air operations began sending it, or null while it waits its turn (§6.5). */
+  startedAt: number | null;
+  /** Seconds of it the unit has copied so far, at the unit's own radio rate. */
+  progressSeconds: number;
 };
+
+/** Who an outbound transmission is for. */
+export function recipientOf(transmission: PendingTransmission): string {
+  return transmission.payload.kind === 'message' ? transmission.payload.recipient : transmission.payload.unitId;
+}
+
+/** What air operations is sending right now, on a net that sends one thing at a time: one call, or one call to all stations. */
+export function onAir(radio: RadioState, config: RadioConfig): readonly PendingTransmission[] {
+  const head = radio.outbound[0];
+  if (!config.netSerial || head === undefined || head.startedAt === null) return [];
+  return head.broadcast === null ? [head] : radio.outbound.filter((entry) => entry.broadcast === head.broadcast);
+}
 
 export type RadioState = {
   units: Record<string, UnitRadio>;
   nextMessageNumber: number;
   outbound: PendingTransmission[];
+  /** The net is left clear until this tick after a transmission, so that waiting units get through. */
+  netFreeAt: number;
   // Support promised to each unit, so a changed assignment can be corrected.
   promises: Record<string, ExpectedSupport>;
 };
@@ -50,7 +79,7 @@ export type RadioUnit = Readonly<{
 }>;
 
 export function createRadioState(units: readonly Pick<Platoon, 'id' | 'initialPersonnel'>[]): RadioState {
-  const state: RadioState = { units: {}, nextMessageNumber: 0, outbound: [], promises: {} };
+  const state: RadioState = { units: {}, nextMessageNumber: 0, outbound: [], netFreeAt: 0, promises: {} };
   for (const unit of units) {
     state.units[unit.id] = { memory: initialRadioMemory(unit.initialPersonnel), queue: [] };
   }
@@ -134,6 +163,8 @@ function advanceUnit(
   radio: RadioState,
   scenario: Scenario,
   tick: number,
+  /** Air operations is sending, so it hears nobody until it stops. */
+  netBusy: boolean,
 ): Delivery | null {
   const task = unitRadio.queue[0];
   if (task === undefined) return null;
@@ -175,10 +206,13 @@ function advanceUnit(
 
   task.progressSeconds += rate;
   if (task.progressSeconds < config.transmitSeconds || task.message === null) return null;
+  const recipients = linkedNodes(scenario, unit.id);
+  // The unit keeps calling until air operations stops talking, and sends nothing else meanwhile.
+  if (netBusy && recipients.includes(AIR_OPS)) return null;
   unitRadio.queue.shift();
   return {
     message: { ...task.message, receivedAt: tick },
-    recipients: linkedNodes(scenario, unit.id),
+    recipients,
   };
 }
 
@@ -209,6 +243,8 @@ export function advanceRadio(
   onTransmitted: (unitId: string, message: RadioMessage) => RadioMessage | null = (_, message) => message,
 ): void {
   const deliveries: Delivery[] = [];
+  const sending = onAir(radio, scenario.file.radio);
+  const copying = new Set(sending.map(recipientOf));
   for (const unit of units) {
     const unitRadio = radio.units[unit.id];
     if (unitRadio === undefined) continue;
@@ -216,6 +252,8 @@ export function advanceRadio(
       unitRadio.queue = [];
       continue;
     }
+    // A unit copying a message from air operations does no radio work of its own (§6.5).
+    if (copying.has(unit.id)) continue;
     const delivery = advanceUnit(
       unit,
       () => selves.get(unit.id),
@@ -224,6 +262,7 @@ export function advanceRadio(
       radio,
       scenario,
       tick,
+      sending.length > 0,
     );
     if (delivery !== null) {
       const message = onTransmitted(unit.id, delivery.message);

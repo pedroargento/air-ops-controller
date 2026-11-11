@@ -1,5 +1,5 @@
 import { settingsFromArgs } from './settings';
-// Usage: npx tsx src/cli/batch.ts [--scenario name] [--seeds 1000] [--policy name|all] [--without-drill a,b]
+// Usage: npx tsx src/cli/batch.ts [--scenario name] [--seeds 1000] [--policy name[,name]|all] [--without-drill a,b]
 //        [--set path=value ...] [--json file] [--jobs threads] [--baseline policy]   e.g. --set combat.suppressionDecayPerUpdate=0.04 --set 'doctrines.*.pinnedSuppression=0.7'
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -263,10 +263,13 @@ async function main(): Promise<void> {
     settings: settingsFromArgs(process.argv),
   };
   const available = policies(buildScenario(spec));
-  if (which !== 'all' && available[which] === undefined) {
-    throw new Error(`No policy "${which}" for ${spec.name}. Available: ${Object.keys(available).join(', ')}`);
+  // One policy, several separated by commas, or all of them.
+  const chosen = which.split(',');
+  const unknown = which === 'all' ? [] : chosen.filter((name) => available[name] === undefined);
+  if (unknown.length > 0) {
+    throw new Error(`No policy "${unknown.join(', ')}" for ${spec.name}. Available: ${Object.keys(available).join(', ')}`);
   }
-  const names = Object.keys(available).filter((name) => which === 'all' || which === name);
+  const names = Object.keys(available).filter((name) => which === 'all' || chosen.includes(name));
   const results = await runPolicies(spec, names, seeds, jobs);
   const summaries = Object.entries(results).map(([name, r]) => summarize(name, r));
   console.log(JSON.stringify(summaries, null, 1));

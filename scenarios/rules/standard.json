@@ -844,6 +844,9 @@
   "radio": {
     "prepareSeconds": 15,
     "transmitSeconds": 20,
+    "netSerial": true,
+    "receiveTimeoutSeconds": 60,
+    "standToSeconds": 45,
     "engagedRate": 0.7,
     "withdrawingRate": 0.5,
     "interruptSuppression": 0.8,
@@ -911,6 +914,7 @@
     "supportEtaSlipSeconds": 60,
     "sightingDedupeMeters": 400,
     "operatingAltitudeMeters": 650,
+    "defaultWeapons": "guns",
     "groundFireSigmaMeters": 150,
     "groundFireWeaponSeenChance": 0.5,
     "groundFireReportSeconds": 60,

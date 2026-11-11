@@ -196,6 +196,8 @@
       .recipient { display: block; }
       .history { margin: 6px 0 0; padding-left: 16px; font-size: 12px; }
       #radio { display: flex; flex-direction: column; min-height: 0; }
+      #net-status { font-size: 11px; color: #9aa7ad; padding: 2px 0 4px; min-height: 14px; }
+      #net-status .busy { color: #ffd24a; }
       /* The bottom tabs always keep room: the panels above scroll instead of crowding them out. */
       #selection { max-height: 38vh; overflow-y: auto; }
       #requests { max-height: 26vh; overflow-y: auto; }
@@ -256,6 +258,7 @@
       <section id="selection"></section>
       <section id="radio">
         <div id="side-tabs" class="buttons"></div>
+        <div id="net-status"></div>
         <div id="tracks" hidden></div>
         <div id="radio-log"></div>
       </section>

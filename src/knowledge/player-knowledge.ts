@@ -159,6 +159,8 @@ export type PlayerKnowledge = {
   confirmedDestroyed: number;
   forecast: Weather | null;
   forecastIssuedAt: number | null;
+  /** Air operations' own net, in order: the transmission being sent, if any, then those waiting. */
+  net: Readonly<{ recipient: string; kind: string; startedAt: number | null }>[];
 };
 
 export function emptyPlayerKnowledge(): PlayerKnowledge {
@@ -183,6 +185,7 @@ export function emptyPlayerKnowledge(): PlayerKnowledge {
     unitFire: {},
     seenFire: {},
     statusReports: {},
+    net: [],
     estimatedLosses: 0,
     confirmedDestroyed: 0,
     forecast: null,

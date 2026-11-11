@@ -62,7 +62,7 @@ export function createAircraft(scenario: Scenario): Aircraft[] {
         gunBursts: type.gunBursts,
         nextPassTick: 0,
         risk: 'normal',
-        weapons: 'both',
+        weapons: air.defaultWeapons,
         calls: [],
         manualAltitude: false,
         firedOn: [],

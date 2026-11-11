@@ -150,13 +150,42 @@ function recentlyStruck(view: PlayerView, marker: ContactMarker): boolean {
   );
 }
 
-function forwardNew(view: PlayerView, contacts: readonly ContactMarker[], forwarded: Set<string>): readonly PlayerCommand[] {
+/** A contact is worth telling a unit about again once it has moved this far (R3.2). */
+const REFORWARD_METERS = 300;
+/** With this many transmissions already waiting, more intelligence would only arrive stale. */
+const NET_FULL = 3;
+
+/**
+ * Forwarding that spares the net: each unit near a contact hears of it once, and again only
+ * when it has moved far enough to matter. Nothing is added while the net is backed up, so the
+ * contacts first in the list, which the caller put in order of importance, are the ones passed.
+ */
+function forwardSparingly(view: PlayerView, contacts: readonly ContactMarker[], told: Map<string, Vec2>): readonly PlayerCommand[] {
+  const commands: PlayerCommand[] = [];
+  for (const marker of contacts) {
+    const at = marker.contact.position.center;
+    const recipients = view.friendlies
+      .filter((friendly) => distance(friendly.position.center, at) <= NEARBY_FORWARD_METERS)
+      .map((friendly) => friendly.unitId)
+      .filter((unitId) => {
+        const before = told.get(`${marker.key}>${unitId}`);
+        return before === undefined || distance(before, at) >= REFORWARD_METERS;
+      });
+    if (recipients.length === 0) continue;
+    if (view.net.length + commands.reduce((sum, command) => sum + (command.kind === 'forwardContact' ? command.recipients.length : 0), 0) >= NET_FULL) break;
+    for (const unitId of recipients) told.set(`${marker.key}>${unitId}`, at);
+    commands.push({ kind: 'forwardContact', tick: view.tick, contactKey: marker.key, recipients });
+  }
+  return commands;
+}
+
+function forwardNew(view: PlayerView, contacts: readonly ContactMarker[], forwarded: Set<string>, everyone = false): readonly PlayerCommand[] {
   const commands: PlayerCommand[] = [];
   for (const marker of contacts) {
     const token = `${marker.key}@${marker.contact.position.center.x}`;
     if (forwarded.has(token)) continue;
     const recipients = view.friendlies
-      .filter((friendly) => distance(friendly.position.center, marker.contact.position.center) <= NEARBY_FORWARD_METERS)
+      .filter((friendly) => everyone || distance(friendly.position.center, marker.contact.position.center) <= NEARBY_FORWARD_METERS)
       .map((friendly) => friendly.unitId);
     if (recipients.length === 0) continue;
     forwarded.add(token);
@@ -177,12 +206,18 @@ function friendsFiredOn(view: PlayerView, key: string): number {
 /** Scouts first, sends CAS to confirmed air contacts, and optionally shares them with ground units. */
 export function reconInformed(
   objective: Vec2,
-  forward: boolean,
+  /**
+   * True shares contacts sparingly with the units near them: once, again when a contact has
+   * moved, and never onto a backed-up net. `everyChange` shares every change of position, which
+   * was free until R3.2, and `all` does that with every unit whatever the distance.
+   */
+  forward: boolean | 'all' | 'everyChange',
   launchRangeMeters: number = DEFAULT_LAUNCH_RANGE_METERS,
   /** Strike whatever is firing on friendly units first, as far as reports and crews say (§7.3). */
   fireFirst = false,
 ): Policy {
   const forwarded = new Set<string>();
+  const told = new Map<string, Vec2>();
   return (view) => {
     const commands: PlayerCommand[] = [...recallEmpty(view)];
     for (const recon of view.aircraft) {
@@ -245,7 +280,8 @@ export function reconInformed(
       });
     }
 
-    if (forward) commands.push(...forwardNew(view, contacts, forwarded));
+    if (forward === true) commands.push(...forwardSparingly(view, contacts, told));
+    else if (forward !== false) commands.push(...forwardNew(view, contacts, forwarded, forward === 'all'));
     return commands;
   };
 }
@@ -614,6 +650,66 @@ export function answeringMedevac(policy: Policy, escort: boolean): Policy {
       }
       taken.add(helicopter.aircraftId);
       commands.push({ kind: 'answerMedevac', tick: view.tick, unitId: request.unitId, helicopterId: helicopter.aircraftId });
+    }
+    return commands;
+  };
+}
+
+/**
+ * The same policy played by a controller who frees every crew to bomb at the start, which was
+ * the standing default until R3.1. It keeps the older bots meaning what they always did.
+ */
+export function freeingCrews(policy: Policy): Policy {
+  let freed = false;
+  return (view) => {
+    const commands = policy(view);
+    if (freed) return commands;
+    freed = true;
+    const free = cas(view).map((aircraft): PlayerCommand => ({ kind: 'setWeapons', tick: view.tick, aircraftId: aircraft.aircraftId, weapons: 'both' }));
+    return [...free, ...commands];
+  };
+}
+
+/** The same policy with its crews never free to bomb on their own: guns only under Watch. */
+export function holdingBombs(policy: Policy): Policy {
+  return (view) => policy(view).map((command) => (command.kind === 'setWeapons' && command.weapons === 'both' ? { ...command, weapons: 'guns' as const } : command));
+}
+
+const CLEARED_STRIKE_RADIUS_METERS = 300;
+/** Friends this close to a contact rule it out: the bot never asks for a bomb inside danger close. */
+const CLEARED_STRIKE_FRIENDLY_METERS = 250;
+
+/**
+ * Bombs on the controller's word only (R3.1): crews keep to guns, and each bomb is a Strike the
+ * bot orders on a contact it chose. Air defense first, then whatever is firing on friends, then
+ * the strongest. It strikes the same contact again while it stands: a version that waited after
+ * each strike left half its bombs unused and lost 15 points at the outpost (300 paired seeds).
+ */
+export function clearingBombs(policy: Policy): Policy {
+  const held = holdingBombs(policy);
+  return (view) => {
+    const commands = [...held(view)];
+    const retasked = new Set(commands.flatMap((command) => (command.kind === 'aircraftOrder' ? [command.aircraftId as string] : [])));
+    const taken = new Set<string>();
+    for (const aircraft of cas(view)) {
+      const order = aircraft.order;
+      if (aircraft.status !== 'onStation' || aircraft.ammunition <= 0 || order?.kind !== 'Watch' || retasked.has(aircraft.aircraftId)) continue;
+      const [target] = view.contacts
+        .filter(
+          (marker) =>
+            marker.status !== 'destroyed' && !marker.stale && marker.contact.identification === 'hostile' && !taken.has(marker.key) &&
+            distance(marker.contact.position.center, order.center) <= order.radius &&
+            !view.friendlies.some((friendly) => distance(friendly.position.center, marker.contact.position.center) <= CLEARED_STRIKE_FRIENDLY_METERS),
+        )
+        .sort(
+          (a, b) =>
+            Number(isAntiAirContact(b)) - Number(isAntiAirContact(a)) ||
+            friendsFiredOn(view, b.key) - friendsFiredOn(view, a.key) ||
+            strengthMidpoint(b.contact.strength) - strengthMidpoint(a.contact.strength),
+        );
+      if (target === undefined) continue;
+      taken.add(target.key);
+      commands.push({ kind: 'aircraftOrder', tick: view.tick, aircraftId: aircraft.aircraftId as AircraftId, order: { kind: 'Strike', center: target.contact.position.center, radius: CLEARED_STRIKE_RADIUS_METERS } });
     }
     return commands;
   };
