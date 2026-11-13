@@ -219,7 +219,7 @@ Weapon definitions state what a weapon can do; each unit's inventory states what
 | Small arms | Baseline fire | Only at low altitude | Aggregated with personnel |
 | Machine gun | Stronger suppression, faster ammunition use | Limited, at low altitude | Individual systems |
 | AAA | Usable against ground targets where in range | Dedicated | Individual systems |
-| MANPADS | None | Dedicated, few missiles | Individual systems and missiles |
+| Heavy machine gun | None: it is mounted for air defense | Dedicated, to 1,000 m above it | Individual systems |
 
 - A weapon definition holds its target domains, range, damage and suppression effects, crew required, ammunition use and, for air targets, its maximum altitude, hit chance and time between shots.
 - Effective fire depends on the personnel available to crew each weapon, suppression, terrain, visibility and current behavior.
@@ -563,7 +563,8 @@ Terrain affects aircraft: this section's rules are extended by §8.4.
 - **Later:** The altitude order is a single target for now. With more pilot autonomy it can become a band, with pilots choosing where to fly inside it.
 - **Noticing and deciding:** Ground units use the existing aircraft-notice rule. Firing is a choice made through the shared behavior framework: a unit weighs how well its weapons can reach the aircraft against giving away its position. A unit with no useful weapon stays concealed.
 - **Risk:** A weapon can engage only within its range, measured in three dimensions, and at or below its maximum altitude. The chance of a hit per engagement falls with altitude and distance, and is further reduced by crew, suppression and concealment rules. Risk also grows with time spent in reach. At the default altitude small arms can't reach aircraft, and machine guns only barely. Flying lower changes that.
-- **Damage:** One hit damages the aircraft. Its mission ends at once and it returns to base automatically. Damaged aircraft are never destroyed in v0.1, but take a longer, configurable repair turnaround before flying again. Their sensors and ordnance remain available on the way home, but they don't attack.
+- **Damage:** One hit damages the aircraft. Its mission ends at once and it returns to base automatically. Their sensors and ordnance remain available on the way home, but they don't attack. Damaged aircraft are never destroyed.
+- **Light and heavy damage:** A hit that gets through is heavy with the weapon's `heavyDamageChance`, and light otherwise. Light damage is repaired in the model's `repairSeconds`. Heavy damage puts the aircraft out of action for the rest of the scenario once it lands. The crew says which it is when it reports the hit, and telemetry shows it.
 - **What the player learns:** Telemetry shows the damage immediately, and the aircraft reports being fired on, with an estimated source position and the weapon if observed. Any `CAS inbound` promise that depended on the aircraft is corrected automatically (§6.3).
 - **Exposure:** Firing makes a unit easier to detect from the air and may reveal its equipment, so a CAS aircraft can attack it under the normal §8.1 rules. Anti-aircraft fire is resolved through the shared combat state and uses no faction rule.
 
@@ -651,10 +652,19 @@ An aircraft has two speeds and one limit on how hard it turns.
 - **Cruise and station speed:** It flies to and from the area at `speedMps`. On station it slows to `stationSpeedMps`: in orbit, breaking away, and within three cruise turn radii of where it is going. An attack run is flown at `attackSpeedMps`. Estimated arrival times and the fuel kept for the trip home use the cruise speed.
 - **Turning:** No turn pulls more than `maxLoadFactor` g. In a level turn at n g the sideways pull is g·√(n² − 1), so the turn rate is that divided by the speed, and the turn radius is the speed squared divided by it. A fast aircraft therefore turns wide in transit and tighter once it has slowed.
 - **Orbit:** The orbit is never tighter than 1.2 times the turn radius at station speed.
-- **Fuel:** Endurance is time in the air and does not change with speed.
+- **Fuel:** `fuelSeconds` is endurance at cruise. Each second in the air burns one second of it at cruise, `stationFuelRate` of a second at station speed, and `attackFuelRate` on an attack run. A helicopter holding or landed burns at its station rate. A propeller aircraft in orbit lasts longer than its cruise endurance says. A jet does not: it flies out high and works low, where its engine burns far more, so the F-100D has about 20 minutes over a target 40 km from its base, enough for its four passes and not for a long search. The fuel kept for the trip home is still counted at cruise, and "on station left" in the interface and the JOKER call count the fuel to spare at the station rate.
+
+| Model | In orbit | On an attack run |
+|---|---:|---:|
+| O-1E | 0.8 | none |
+| RF-101C | 1.3 | none |
+| A-1E | 0.8 | 1.4 |
+| F-100D | 1.5 | 2.0 |
+| Helicopters | 1.0 | 1.1 |
 - **The attack run:** A fixed-wing aircraft can't turn onto a target it is circling, so a run has three parts. It extends away until it is 2.5 turn radii at attack speed from the aim, and at least the release distance. It turns in and flies at the aim until it reaches the release distance (§8.1). It pulls off straight ahead for `pullOffSeconds`, then goes back to its orbit. An aircraft already far enough out turns straight in. The time between passes is still at least `passIntervalSeconds`; the flying adds to it.
 - **The crew picks the run:** The controller says what to hit and the crew chooses how to fly it. It extends the way it already is from the target. If it has been fired on within `threatMemorySeconds`, it runs in across the line from the target to the nearest such fire, on its own side of it, so neither the run nor the pull-off passes over the gun. It uses only what the crew knows.
 - **Helicopters** fire from where they hold and fly no extension.
+- **What a fast crew sees:** A jet crew sees little of men on the ground. The F-100D spots at `observerQuality` 0.3 out to 1,500 m, against the O-1E's 1.4 out to 1,000 m and the A-1E's 1.0 out to 800 m, so from its orbit it finds a target about a quarter as readily as it would with a cue. It depends on being sent to a fresh contact (§8.1: a cue within `cueMaxAgeSeconds`), on the platoon's smoke (§8.1.3), or on being ordered to strike a place. There is no separate marking step: the freshness of the observation, from an aircraft or a ground report, is what makes a target findable. The RF-101C sees at 0.6 over 2,000 m: it covers ground quickly and reports less of what is there.
 
 | Model | Cruise | On station | Attack | Most g | Turn radius on station | Run starts from |
 |---|---:|---:|---:|---:|---:|---:|
@@ -790,7 +800,7 @@ type ContactEstimate = Readonly<{
   confidence: 'low' | 'medium' | 'high';
   observedWeapons: readonly WeaponType[];
 }>;
-type WeaponType = 'SMALL_ARMS' | 'MACHINE_GUN' | 'AAA' | 'MANPADS';
+type WeaponType = 'SMALL_ARMS' | 'MACHINE_GUN' | 'AAA' | 'HEAVY_MACHINE_GUN';
 type TargetDomain = 'GROUND' | 'AIR';
 type WeaponDefinition = Readonly<{
   type: WeaponType;

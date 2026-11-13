@@ -102,7 +102,7 @@ describe('ambushes and aircraft', () => {
     const area = { center: { x: 0, y: 0 }, radius: 40 };
     const knowledge = { ...emptyKnowledge(), noticedAircraft: { position: { x: 0, y: 0 }, altitudeMeters: 100, seenAt: 100 } };
     const armed = {
-      airWeapons: [{ weapon: 'MANPADS', count: 1, definition: valley.file.combat.weapons.MANPADS }],
+      airWeapons: [{ weapon: 'HEAVY_MACHINE_GUN', count: 1, definition: valley.file.combat.weapons.HEAVY_MACHINE_GUN }],
       objective: { kind: 'AmbushArea', area, openFireMeters: 100 },
       doctrine: { ...column, airFireThreshold: 0.01 },
     } as Partial<UnitSelf>;

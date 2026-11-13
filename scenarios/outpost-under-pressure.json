@@ -586,9 +586,9 @@
           "ammunition": 800
         },
         {
-          "weapon": "MANPADS",
+          "weapon": "HEAVY_MACHINE_GUN",
           "quantity": 1,
-          "ammunition": 4
+          "ammunition": 40
         }
       ]
     }
@@ -659,7 +659,7 @@
   "air": {
     "airbase": {
       "x": 2500,
-      "y": -25000
+      "y": -40000
     },
     "aircraft": [
       {

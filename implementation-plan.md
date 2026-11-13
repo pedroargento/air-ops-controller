@@ -39,23 +39,24 @@ To opt in, use `--set ground.experimentalTactics=true` in batch runs or the same
 
 Validation: `npm run check` passes 42 files / 675 tests. Coverage includes all shipped defaults, missing-setting compatibility, reversible opt-in and doctrine resolution, both modes assigning roles, coordination only when opted in, inert gate overrides and support budgets in standard mode, and independent threat-memory fixes in both modes. The golden replay hash deliberately changes from `33086b44` to `a66514cf` for the selective rollback and resolved configuration.
 
-### Current balance — after R3.1, R3.2 and the flight rules of §8.10, 2026-11-11
+### Current balance — after R3.1, R3.2 and R4's aircraft rules, 2026-11-12
 
 All bots on all six scenarios, 300 battles each (seeds 0–299), with crews holding their bombs by default and information carrying its cost (§8.0, §6.5). Successes out of 300. "Before" is the table in the next section, which used seeds 1–300, so a difference of one or two is the seeds and not the rules.
 
 | Scenario | No air | Main bot | Before → now | Best bot now |
 |---|---:|---|---:|---|
-| outpost-under-pressure | 14 | `informed` | 236 → 201 | `informedLinger` 216 |
-| valley-road | 54 | `routeRecon` | 187 → 186 | `routeRecon` 186 |
-| overwatch | 19 | `routeReconCover` | 56 → 37 | `routeReconCover` 37 |
-| outpost-night | 3 | `informedLit` | 120 → 102 | `informedFireFirst` 145 |
-| downed-pilot | 0 | `rescueNow` | 292 → 294 | `rescueNow` 294 |
+| outpost-under-pressure | 15 | `informed` | 236 → 168 | `informedPressOn` 183 |
+| valley-road | 54 | `routeRecon` | 187 → 190 | `routeRecon` 190 |
+| overwatch | 19 | `routeReconCover` | 56 → 33 | `routeReconCover` 33 |
+| outpost-night | 4 | `informedLit` | 120 → 68 | `informedPressOn` 104 |
+| downed-pilot | 0 | `rescueNow` | 292 → 297 | `rescueNow` 297 |
 | find-them | 0 | `sweep` | 239 → 249 | `sweep` 249 |
 
 - **Overwatch got harder for the cover bot.** `routeReconCover` falls from 56 to 41 with standing to (the halt is the whole cause: with `standToSeconds` at 0 it wins 55, and at 30 it wins 50), and stands at 37 after the flight rules.
 - **Plain `routeRecon` on Overwatch wins 12, under the same bot silent (20), and the halt is not why:** it wins 12 with the halt at 0 as well. The paired difference is −2.7 points (−6.1 to +0.8), inside noise, and forwarding was already behind silence there before R3 (17.7% against 22.3%). Forwarding has never paid on this map.
 - **The outpost's main bot loses about 20 wins** to the net rules and standing to, after the flight rules gave some back. The figures in the bullets around this one are from before the flight rules; R4 step 4 has the comparison.
 - **Forwarding every change is ruinous on the road maps:** 37 of 300 on Valley Road against 100 silent, and 0 on Overwatch. At the outpost it is no longer worse than sparing forwarding (204 against 205), because the garrison has the attackers in sight and doesn't halt for them.
+- **The outposts' figures include the jet's real eyes and loiter** (R4 step 5, below), which cost the main bots 16 and 9 wins. No other scenario flies a jet.
 - Rescue and search are untouched: neither forwards intelligence nor bombs from a Watch.
 
 ### Balance before R3 — standard tactics, 2026-11-10
@@ -860,6 +861,82 @@ Each stage measured over 300 paired seeds against the same bot forwarding nothin
 - **Hits on aircraft did not rise** (0.56 a battle at the outpost against 0.55), though the runs range further.
 - **Not done:** fuel does not change with speed, the base is no further away, takeoff is still 60 seconds for every model, and damage is not graded.
 - Golden hash unchanged (`30a34f0e`: its replay flies no aircraft). 727 tests pass. One helicopter test moved from seed 1 to seed 2, where the gunship isn't hit on arrival (it attacks on 9 of 12 seeds).
+
+**Step 5, period weapons: done on 2026-11-11.** The shoulder-fired missile (in service about 1972) is replaced by a heavy machine gun mounted against aircraft, `HEAVY_MACHINE_GUN`: 1,500 m reach, 1,000 m ceiling, a burst every 15 seconds at 0.06, 40 bursts. The missile reached 2,500 m in range and height, fired every 90 seconds at 0.3, and had 3 or 4 rounds. It still doesn't fire on ground units.
+
+Measured on the four scenarios that have one, all bots, 300 battles each (seeds 0–299), wins of 300 before → after, with hits on aircraft per battle:
+
+| Scenario and bot | Wins | Hits per battle |
+|---|---:|---:|
+| Outpost `informed` | 201 → 193 | 0.56 → 0.38 |
+| Outpost `informedCleared` | 210 → 164 | 0.68 → 0.52 |
+| Outpost `informedCautious` | 169 → 168 | 0.43 → 0.11 |
+| Outpost `informedPressOn` | 197 → 214 | 0.68 → 0.64 |
+| Night `informedLit` | 102 → 109 | 0.97 → 0.88 |
+| Night `informedFireFirst` | 145 → 94 | 0.88 → 0.75 |
+| Night `informedCautious` | 34 → 72 | 0.69 → 0.27 |
+| Night `informedPressOn` | 93 → 137 | 0.99 → 1.08 |
+| Overwatch `routeReconCover` | 37 → 37 | 0.48 → 0.15 |
+| Overwatch `routeRecon` | 5 → 19 | 0.53 → 0.16 |
+| Downed Pilot `rescueNow` | 294 → 291 | 0.34 → 0.17 |
+| Downed Pilot `rescueByDay` | 269 → 234 | 0.34 → 0.17 |
+| Downed Pilot `rescueUnescorted` | 247 → 283 | 0.48 → 0.18 |
+
+- **Fewer aircraft are hit, and more attacks are broken off.** The gun fires six times as often as the missile did, so crews at the normal risk limit break away more: the outpost's main bot makes 26.7 passes a battle against 29.4.
+- **The risk limit now matters, and Press on is the best setting on both outposts** (214 against 193 at the outpost, 137 against 96 at night). A hit only costs a repair, so pressing on is cheap. Graded damage (step 3) is what should give Cautious its case.
+- **Height now gets an aircraft out of reach:** above 1,000 m the gun can't fire, where the missile reached 2,500 m of the 3,000 m cap. Cautious crews are hit a quarter as often as before.
+- **An unescorted rescue is now nearly as good as an escorted one** (283 against 291), since the helicopter is hit less than half as often.
+- Golden hash `30a34f0e` to `a8cb8176` (the team's ammunition is in the state). 727 tests pass.
+
+**Takeoff per model: done on 2026-11-11.** Jets take 5 minutes from the order to wheels up, the A-1E 4, the HH-3E 3, the O-1E and the Hueys and Cobra 2, the OH-6A 1.5. All were 1. All bots, all six scenarios, 300 battles each (seeds 0–299), wins of 300 before → after:
+
+| Scenario | Reacts to requests | Sends at once | Main bot | Press on |
+|---|---:|---:|---:|---:|
+| Outpost | `reactive` 91 → 74 | `immediate` 130 → 98 | `informed` 193 → 190 | 214 → 193 |
+| Night | `reactive` 14 → 7 | `immediate` 8 → 3 | `informedLit` 109 → 94 | 137 → 118 |
+| Valley Road | `reactive` 46 → 53 | | `routeRecon` 186 → 190 | |
+| Overwatch | `reactive` 14 → 15 | | `routeReconCover` 37 → 34 | |
+| Downed Pilot | | `rescueNow` 291 → 297 | | |
+| Find Them | | `sweep` 249 → 249 | | |
+
+- **Waiting to be asked costs more.** At the outpost the bot that only answers requests loses 17 wins and the one that sends everything at once loses 32, while the informed bot loses 3. Sending air before it is needed is now worth more against sending it when called.
+- **Night is 15 to 20 wins harder** for every bombing bot. The road maps, rescue and search hardly move.
+- 728 tests pass. Tests that count ticks from an order use a one-minute takeoff (`quickTakeoff`), and one new test checks the models' own times.
+
+**Step 4, second half, fuel: done on 2026-11-11 (§8.10), and it does not bind.**
+
+- **Burn by speed:** `fuelSeconds` is endurance at cruise. In orbit an aircraft burns `stationFuelRate` of that (F-100D 0.65, RF-101C 0.7, A-1E and O-1E 0.8, helicopters 1.0), and on an attack run `attackFuelRate` (F-100D 2.0, A-1E 1.4, helicopters 1.1). Measured on all bots and all six scenarios, 300 battles each: no main bot moves by more than one win. Only the bots that linger on guns move (outpost `informedLinger` 205 → 197, with 45.5 passes against 42.9).
+- **The base at 40 km** on both outposts, from 25 km. All bots, 300 battles each, wins of 300 before → after:
+
+| Bot | Outpost | Night |
+|---|---:|---:|
+| `reactive` | 68 → 52 | 7 → 10 |
+| `informed` | 190 → 184 | 79 → 80 |
+| `informedLit` | | 94 → 77 |
+| `informedFireFirst` | 174 → 158 | 96 → 72 |
+| `informedPressOn` | 193 → 199 | 118 → 121 |
+| `informedMedevac` | 187 → 200 | 75 → 77 |
+
+- **What the distance does:** fewer sorties (the A-1E flies 1.0 a battle where it flew 1.5, the gunship 1.0 against 1.4) and a slower medevac (26.7 minutes from wound to hospital against 20.9, with 0.63 dying of wounds a battle against 0.46). Wins move by less than the noise for most bots.
+- **Why fuel still doesn't bind:** in a 75-minute battle a strike aircraft runs out of bombs before fuel, and the long-endurance types outlast the battle, as they did in life. Fuel is a constraint for the theater game (M11 on), where an aircraft serves more than one fight. Nothing more is planned here.
+- Golden hash `a8cb8176` to `ebd8876b`. 728 tests pass. Tick-timed tests keep a base 25 km out (`nearBase`).
+
+**Step 3, graded damage: done on 2026-11-12 (§8.3), and it changes nothing measurable.** A hit that gets through is heavy with the weapon's `heavyDamageChance` (small arms 0.1, machine gun 0.2, heavy machine gun 0.4, AAA 0.6). Heavy damage puts the aircraft out of action for the scenario once it lands; light damage is today's repair. The crew reports which, and the interface shows "out of action".
+
+- **Measured** on all bots and the five scenarios where aircraft are hit, 300 battles each (seeds 0–299): no bot moves by more than 3 wins. Outpost `informed` 184 → 184, `informedPressOn` 199 → 198, `informedCautious` 167 → 167; night `informedPressOn` 121 → 121; `rescueNow` 297 → 297.
+- **Why:** a lightly damaged aircraft already missed the rest of the battle. From 40 km it needs the flight home, 25 minutes of repair, a takeoff and the flight back, in a battle of 75 minutes. So "out for the scenario" takes away almost nothing.
+- **Press on is still the best risk setting** on both outposts (198 against 184 normal and 167 cautious; 121 against 80 and 66 at night). Graded damage was meant to answer that and doesn't. What would: a hit that costs something the battle can't shrug off, such as the loss of the aircraft for later battles (the theater game), or a shoot-down, which invariant 10 rules out today.
+- Golden hash `ebd8876b` to `fa6ab12f` (aircraft state gained a field). 729 tests and 86 e2e checks pass.
+
+**Step 5, jets see and loiter as they did: done on 2026-11-12 (§8.10). Marking is dropped as a mechanic** (`DESIGN.md`, 2026-11-12): the freshness of an observation is what makes a target findable, so there is no separate mark step. For that judgment to matter, the F-100D lost the eyes and the hour over the target it never had.
+
+- **Changed:** F-100D `observerQuality` 0.6 → 0.3 and `sensorRadiusMeters` 2,000 → 1,500, so from its 1,200 m orbit it spots a target at the center a quarter as readily (a fresh cue's 3× or smoke's 4× brings it back to about what it was). `fuelSeconds` 3,000 → 2,400 and `stationFuelRate` 0.65 → 1.5, which gives about 20 minutes over a target 40 km out, where it had about an hour. The RF-101C, which no scenario flies, gets `observerQuality` 1.0 → 0.6 and `stationFuelRate` 0.7 → 1.3, unmeasured.
+- **Measured** on all bots on both outposts, the only scenarios with a jet, 300 battles each (seeds 0–299), unpaired. Outpost `informed` 184 → 168, `informedPressOn` 198 → 183, `informedMedevac` 200 → 169, `informedCleared` 142 → 137. Night `informed` 80 → 57, `informedLit` 77 → 68, `informedPressOn` 121 → 104, `informedCleared` 59 → 64.
+- **The jet's own bombs do much less when it picks its targets:** under `informed` its casualties per battle fall from 10.1 to 5.8 (bombs dropped 5.3 → 4.3), and at night from 9.2 to 3.3 (2.6 → 1.3).
+- **Told where to bomb, it holds up:** under `informedCleared`, which strikes the controller's contacts, it causes 12.1 → 10.5 by day and 11.2 → 9.3 at night, now nearly twice what it does on its own, and at night that bot passes `informed` (64 against 57). This is the point of the change: the jet is worth what the controller's information is worth.
+- **Fuel still doesn't bind.** The jet averages about 9 minutes over the target per sortie and goes home out of bombs, as before. The 20 minutes only stops it from searching for an hour.
+- **Not measured:** how often a jet sent to a contact finds it, by the age of the contact. The batch has no such measure yet.
+- Golden hash `fa6ab12f` to `e922e264` (the F-100D starts with less fuel). 729 tests pass.
 
 #### R5: Code health
 

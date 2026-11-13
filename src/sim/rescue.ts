@@ -197,7 +197,7 @@ export function resolvePickups(truth: WorldTruth, player: PlayerKnowledge, radio
       crewCall(player, radio, aircraft, 'WHEELS_DOWN', tick);
     }
     const shotAt = aircraft.firedOn.filter((entry) => tick - entry.tick <= FIRE_RECENT_SECONDS);
-    const leave = aircraft.risk === 'cautious' ? shotAt.length > 0 : aircraft.risk === 'normal' ? shotAt.some((entry) => entry.hit || entry.weapon === 'AAA' || entry.weapon === 'MANPADS') : false;
+    const leave = aircraft.risk === 'cautious' ? shotAt.length > 0 : aircraft.risk === 'normal' ? shotAt.some((entry) => entry.hit || entry.weapon === 'AAA' || entry.weapon === 'HEAVY_MACHINE_GUN') : false;
     if (leave) {
       // With wounded aboard it heads for the hospital; with nobody it waits overhead.
       if (woundedCount(aircraft.casualtiesAboard) > 0) {

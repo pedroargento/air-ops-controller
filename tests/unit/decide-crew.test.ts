@@ -28,7 +28,7 @@ const crew = (overrides: Partial<CrewSelf> = {}): CrewSelf => ({
   firedOn: [],
   contacts: [],
   forecast: null,
-  weaponCeilings: { SMALL_ARMS: 150, MACHINE_GUN: 350, AAA: 2000, MANPADS: 2500 },
+  weaponCeilings: { SMALL_ARMS: 150, MACHINE_GUN: 350, AAA: 2000, HEAVY_MACHINE_GUN: 2500 },
   threatMemorySeconds: 900,
   breakReactionSeconds: 10,
   searchLeg: 0,
@@ -160,7 +160,7 @@ describe('choosing an attack', () => {
   });
 
   it('puts known air defense first, wherever the fire came from', () => {
-    const team = contact('C-9', 300, { observedWeapons: ['MANPADS'] });
+    const team = contact('C-9', 300, { observedWeapons: ['HEAVY_MACHINE_GUN'] });
     expect(chooseAttack(crew({ firedOn: [fired({ hit: true })] }), [lone, team])?.contact).toBe(team);
   });
 });

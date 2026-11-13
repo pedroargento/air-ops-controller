@@ -29,7 +29,7 @@ describe('usable weapons', () => {
   });
 
   it('counts only crew-served ground weapons as support', () => {
-    const team: Equipment = { weapon: 'MANPADS', quantity: 1, ammunition: 3 };
+    const team: Equipment = { weapon: 'HEAVY_MACHINE_GUN', quantity: 1, ammunition: 3 };
     expect(supportWeaponCount([rifles, guns, team], 10, weapons)).toBe(2);
     expect(supportWeaponCount([rifles, team], 10, weapons)).toBe(0);
   });
@@ -40,7 +40,7 @@ describe('usable weapons', () => {
 });
 
 describe('air hit chance', () => {
-  const missile = airWeapons([{ weapon: 'MANPADS', quantity: 1, ammunition: 3 }], 3, weapons)[0];
+  const missile = airWeapons([{ weapon: 'HEAVY_MACHINE_GUN', quantity: 1, ammunition: 3 }], 3, weapons)[0];
   if (missile === undefined) throw new Error('no anti-aircraft weapon');
   const { maxAltitudeMeters, rangeMeters } = missile.definition;
 
@@ -55,7 +55,7 @@ describe('air hit chance', () => {
   });
 
   it('needs a crew', () => {
-    expect(airWeapons([{ weapon: 'MANPADS', quantity: 1, ammunition: 3 }], 1, weapons)).toEqual([]);
+    expect(airWeapons([{ weapon: 'HEAVY_MACHINE_GUN', quantity: 1, ammunition: 3 }], 1, weapons)).toEqual([]);
   });
 
   it('small arms cannot reach the operating altitude; machine guns barely can', () => {
@@ -77,8 +77,8 @@ describe('scenario equipment', () => {
   });
 
   it('gives only ground-capable weapons a ground effect', () => {
-    expect(weapons.MANPADS.targetDomains).toEqual(['AIR']);
-    expect(weapons.MANPADS.damageEffect).toBe(0);
+    expect(weapons.HEAVY_MACHINE_GUN.targetDomains).toEqual(['AIR']);
+    expect(weapons.HEAVY_MACHINE_GUN.damageEffect).toBe(0);
   });
 });
 
@@ -86,9 +86,9 @@ describe('threat radius', () => {
   const altitude = 300;
 
   it('is well inside the weapon\'s full range', () => {
-    const radius = threatRadiusMeters(weapons.MANPADS, altitude, 0.1);
+    const radius = threatRadiusMeters(weapons.HEAVY_MACHINE_GUN, altitude, 0.1);
     expect(radius).toBeGreaterThan(500);
-    expect(radius).toBeLessThan(weapons.MANPADS.rangeMeters * 0.6);
+    expect(radius).toBeLessThan(weapons.HEAVY_MACHINE_GUN.rangeMeters * 0.6);
   });
 
   it('treats slow and fast firers fairly, by risk per minute', () => {
@@ -96,8 +96,8 @@ describe('threat radius', () => {
   });
 
   it('shrinks as the accepted risk rises, and vanishes above the weapon\'s ceiling', () => {
-    expect(threatRadiusMeters(weapons.MANPADS, altitude, 0.15)).toBeLessThan(threatRadiusMeters(weapons.MANPADS, altitude, 0.1));
-    expect(threatRadiusMeters(weapons.MANPADS, weapons.MANPADS.maxAltitudeMeters + 1, 0.1)).toBe(0);
+    expect(threatRadiusMeters(weapons.HEAVY_MACHINE_GUN, altitude, 0.15)).toBeLessThan(threatRadiusMeters(weapons.HEAVY_MACHINE_GUN, altitude, 0.1));
+    expect(threatRadiusMeters(weapons.HEAVY_MACHINE_GUN, weapons.HEAVY_MACHINE_GUN.maxAltitudeMeters + 1, 0.1)).toBe(0);
     expect(threatRadiusMeters(weapons.SMALL_ARMS, altitude, 0.1)).toBe(0);
   });
 });
@@ -109,13 +109,13 @@ describe('weapon tags', () => {
   });
 
   it('puts anti-air first', () => {
-    expect(weaponTag(['MACHINE_GUN', 'MANPADS', 'SMALL_ARMS'])).toBe('MP MG');
+    expect(weaponTag(['MACHINE_GUN', 'HEAVY_MACHINE_GUN', 'SMALL_ARMS'])).toBe('HMG MG');
     expect(weaponTag(['AAA'])).toBe('AAA');
     expect(weaponTag(['MACHINE_GUN'])).toBe('MG');
   });
 
   it('knows which weapons threaten aircraft', () => {
-    expect(['AAA', 'MANPADS', 'MACHINE_GUN', 'SMALL_ARMS'].map((w) => isAntiAir(w as never))).toEqual([true, true, false, false]);
+    expect(['AAA', 'HEAVY_MACHINE_GUN', 'MACHINE_GUN', 'SMALL_ARMS'].map((w) => isAntiAir(w as never))).toEqual([true, true, false, false]);
   });
 });
 
@@ -127,7 +127,7 @@ describe('ground fire tooltip', () => {
     expect(text).toContain('aircraft hit');
     expect(text).toContain('Weapon not seen');
     expect(text).toContain('Estimated source, grid 050-052');
-    expect(groundFireText({ ...fire, weapon: 'MANPADS' }, 50)).toContain('Weapon: MANPADS');
+    expect(groundFireText({ ...fire, weapon: 'HEAVY_MACHINE_GUN' }, 50)).toContain('Weapon: heavy machine gun');
   });
 });
 
@@ -151,7 +151,7 @@ describe('altitude profile scale', () => {
 
   it('labels every weapon, including small arms', () => {
     expect(ceilingLabel('SMALL_ARMS')).toBe('SA');
-    expect(ceilingLabel('MANPADS')).toBe('MP');
+    expect(ceilingLabel('HEAVY_MACHINE_GUN')).toBe('HMG');
   });
 });
 

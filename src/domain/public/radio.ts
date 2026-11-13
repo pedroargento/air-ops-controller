@@ -83,7 +83,7 @@ export type RadioMessage =
         assessment: StrikeAssessment | null;
       }>)
   | (MessageMeta &
-      Readonly<{ kind: 'GROUND_FIRE'; source: PositionEstimate; weapon: WeaponType | null; hit: boolean; damaged: boolean }>);
+      Readonly<{ kind: 'GROUND_FIRE'; source: PositionEstimate; weapon: WeaponType | null; hit: boolean; damaged: boolean; heavy?: boolean }>);
 
 /**
  * A crew's fuel and ordnance calls, in brevity words: JOKER means fuel to stay only a little

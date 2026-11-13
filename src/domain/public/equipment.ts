@@ -1,4 +1,4 @@
-export type WeaponType = 'SMALL_ARMS' | 'MACHINE_GUN' | 'AAA' | 'MANPADS';
+export type WeaponType = 'SMALL_ARMS' | 'MACHINE_GUN' | 'AAA' | 'HEAVY_MACHINE_GUN';
 export type TargetDomain = 'GROUND' | 'AIR';
 
 /** What a weapon can do. What a unit actually has is its `Equipment`. */
@@ -12,6 +12,8 @@ export type WeaponDefinition = Readonly<{
   maxAltitudeMeters: number;
   airHitChance: number;
   airCycleSeconds: number;
+  /** Share of damaging hits that put the aircraft out of action for the scenario (§8.3). */
+  heavyDamageChance: number;
 }>;
 
 export type WeaponTable = Readonly<Record<WeaponType, WeaponDefinition>>;
@@ -72,7 +74,7 @@ export function airHitChance(
 }
 
 export function isAntiAir(weapon: WeaponType): boolean {
-  return weapon === 'AAA' || weapon === 'MANPADS';
+  return weapon === 'AAA' || weapon === 'HEAVY_MACHINE_GUN';
 }
 
 /**

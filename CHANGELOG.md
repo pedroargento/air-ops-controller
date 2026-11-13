@@ -4,11 +4,25 @@ Notable changes to Air Operations. Section numbers such as §8.8 refer to `air-o
 
 ## Unreleased
 
+### Jets see and loiter as they did (R4, §8.10, 2026-11-12)
+
+- The F-100D spots targets a quarter as readily from its orbit and has about 20 minutes over a target 40 km out, where it had an hour. It does its best work on a fresh contact, on smoke, or on a place the controller orders struck.
+- The RF-101C sees less detail and burns more in orbit.
+- There is no marking step: the freshness of an observation is what makes a target findable (`DESIGN.md`).
+
+### Period air defense (R4, 2026-11-11)
+
+- The shoulder-fired missile, a few years late for these aircraft, is replaced by a heavy machine gun mounted against aircraft (`HEAVY_MACHINE_GUN`, shown as HMG). It fires often to 1,500 m and 1,000 m up, where the missile fired rarely to 2,500 m.
+
 ### Aircraft fly within their limits (R4, §8.10, 2026-11-11)
 
 - **Two speeds:** an aircraft cruises to and from the area and slows to `stationSpeedMps` in orbit, on attack runs and close to where it is going.
 - **Turns limited by g:** `maxLoadFactor` replaces `turnRateRadPerSecond`. Turn rate follows from the g limit and the speed, so the jets' orbits need about 2.2 g where they needed over 5.
 - **Turnaround per model:** from 8 minutes for the light helicopters to 25 for the jets. All were 10.
+- **Light and heavy damage (§8.3):** a hit can put an aircraft out of action for the rest of the scenario, by the weapon's `heavyDamageChance`.
+- **Fuel by speed:** an aircraft burns less in orbit and more on attack runs (`stationFuelRate`, `attackFuelRate`).
+- **The outposts' base is 40 km away,** from 25 km.
+- **Takeoff per model:** from 1.5 minutes for the OH-6A to 5 for the jets. All were 1.
 - **Attack runs:** a fixed-wing aircraft extends away, turns in and pulls off at `attackSpeedMps`, since it can't turn onto a target it is circling. The crew chooses where the run starts, away from ground fire it has met. Helicopters fire from where they hold.
 
 ### Information has a cost (R3.2, §6.5, 2026-11-11)

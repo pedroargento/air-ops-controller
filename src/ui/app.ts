@@ -1177,7 +1177,7 @@ export class App {
       const eta = a.etaSeconds === null ? '' : ` ${duration(a.etaSeconds)}`;
       return (
         `<button class="aircraft-row${selected ? ' active' : ''}" data-action="select-aircraft" data-id="${a.aircraftId}" title="${escapeHtml(aircraftSummary(a))}">` +
-        `<b>${a.aircraftId}</b><b>${aircraftStatusLabel(a.status, a.damaged)}</b>` +
+        `<b>${a.aircraftId}</b><b>${aircraftStatusLabel(a.status, a.damaged, a.outOfAction)}</b>` +
         `<span class="mission">${aircraftMission(a)}${eta}</span>` +
         `<span>${a.landed ? 'landed' : `${Math.round(a.altitudeMeters)} m`}${a.aboveCloud ? ' ☁' : ''}</span><span>${Math.round(a.fuelFraction * 100)}%</span><span title="Bombs / gun bursts">${a.ammunition}/${a.gunBursts}</span></button>`
       );
@@ -1414,7 +1414,7 @@ export class App {
       `<p class="task-now">${escapeHtml(this.taskLine(aircraft, tick))}</p>` +
       `<p>${strike ? `Bombs ${aircraft.ammunition} · gun bursts ${aircraft.gunBursts} · ` : ''}${aircraft.flares > 0 ? `flares ${aircraft.flares} · ` : ''}fuel ${Math.round(aircraft.fuelFraction * 100)}%${station} · ` +
       `${aircraft.landed ? 'on the ground' : `altitude ${Math.round(aircraft.altitudeMeters)} m`} · visibility ${visibilityText(aircraft.visibilityMeters)}` +
-      `${aircraft.damaged ? ' · damaged, returning for repair' : ''}${aircraft.aboveCloud ? ' · above cloud, cannot see the ground' : ''}</p>` +
+      `${aircraft.outOfAction ? ' · badly damaged, out of action for this battle' : aircraft.damaged ? ' · damaged, returning for repair' : ''}${aircraft.aboveCloud ? ' · above cloud, cannot see the ground' : ''}</p>` +
       `<h3>New task</h3><div class="buttons">${taskButtons}<button data-action="rtb" title="Head home now.">Return to base</button></div>${fields}` +
       `<h3>Standing settings</h3>` +
       (strike ? `<div class="setting-row"><span>Weapons</span><div class="buttons">${weapons}</div></div>` : '') +
@@ -1435,8 +1435,10 @@ export class App {
       case 'ready':
         return 'Ready at base.';
       case 'turnaround':
+        if (aircraft.outOfAction) return 'Badly damaged. Out of action for this battle.';
         return `${aircraft.damaged ? 'Under repair' : 'Rearming'} until ${clock(tick + aircraft.availableInSeconds)}.`;
       case 'returning':
+        if (aircraft.outOfAction) return 'Badly damaged, returning to base. Out of action for this battle.';
         return `Returning to base, ready about ${clock(tick + aircraft.availableInSeconds)}.`;
       default: {
         const order = aircraft.order;

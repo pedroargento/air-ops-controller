@@ -24,7 +24,7 @@ describe('track list', () => {
         marker('plain'),
         marker('gone', {}, { status: 'destroyed' }),
         marker('fighting', {}, { engaging: true }),
-        marker('manpads', { observedWeapons: ['MANPADS'] }),
+        marker('manpads', { observedWeapons: ['HEAVY_MACHINE_GUN'] }),
         marker('ours', { identification: 'friendly' }),
       ],
       'threat',

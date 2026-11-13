@@ -28,6 +28,7 @@ rules or the schema.
 | `combat.weapons.SMALL_ARMS.maxAltitudeMeters` | `150` | Highest aircraft it can reach. |
 | `combat.weapons.SMALL_ARMS.airHitChance` | `0.01` | Chance per shot of hitting an aircraft, at best. |
 | `combat.weapons.SMALL_ARMS.airCycleSeconds` | `30` | Seconds between shots at aircraft. |
+| `combat.weapons.SMALL_ARMS.heavyDamageChance` | `0.1` | Chance that a hit which damages an aircraft puts it out of action for the rest of the scenario. |
 | `combat.weapons.MACHINE_GUN.targetDomains` | `["GROUND","AIR"]` | What it can fire at: GROUND, AIR or both. |
 | `combat.weapons.MACHINE_GUN.rangeMeters` | `350` | Maximum range. |
 | `combat.weapons.MACHINE_GUN.suppressionEffect` | `0.572` | Suppression each weapon adds per update at full effect. |
@@ -37,6 +38,7 @@ rules or the schema.
 | `combat.weapons.MACHINE_GUN.maxAltitudeMeters` | `350` | Highest aircraft it can reach. |
 | `combat.weapons.MACHINE_GUN.airHitChance` | `0.02` | Chance per shot of hitting an aircraft, at best. |
 | `combat.weapons.MACHINE_GUN.airCycleSeconds` | `15` | Seconds between shots at aircraft. |
+| `combat.weapons.MACHINE_GUN.heavyDamageChance` | `0.2` | Chance that a hit which damages an aircraft puts it out of action for the rest of the scenario. |
 | `combat.weapons.AAA.targetDomains` | `["GROUND","AIR"]` | What it can fire at: GROUND, AIR or both. |
 | `combat.weapons.AAA.rangeMeters` | `1500` | Maximum range. |
 | `combat.weapons.AAA.suppressionEffect` | `0.4` | Suppression each weapon adds per update at full effect. |
@@ -46,15 +48,17 @@ rules or the schema.
 | `combat.weapons.AAA.maxAltitudeMeters` | `2000` | Highest aircraft it can reach. |
 | `combat.weapons.AAA.airHitChance` | `0.08` | Chance per shot of hitting an aircraft, at best. |
 | `combat.weapons.AAA.airCycleSeconds` | `15` | Seconds between shots at aircraft. |
-| `combat.weapons.MANPADS.targetDomains` | `["AIR"]` | What it can fire at: GROUND, AIR or both. |
-| `combat.weapons.MANPADS.rangeMeters` | `2500` | Maximum range. |
-| `combat.weapons.MANPADS.suppressionEffect` | `0` | Suppression each weapon adds per update at full effect. |
-| `combat.weapons.MANPADS.damageEffect` | `0` | Casualties each weapon causes per update at full effect. |
-| `combat.weapons.MANPADS.crewRequired` | `2` | Men needed to work one. |
-| `combat.weapons.MANPADS.ammunitionPerUse` | `1` | Rounds used per update of fire. |
-| `combat.weapons.MANPADS.maxAltitudeMeters` | `2500` | Highest aircraft it can reach. |
-| `combat.weapons.MANPADS.airHitChance` | `0.3` | Chance per shot of hitting an aircraft, at best. |
-| `combat.weapons.MANPADS.airCycleSeconds` | `90` | Seconds between shots at aircraft. |
+| `combat.weapons.AAA.heavyDamageChance` | `0.6` | Chance that a hit which damages an aircraft puts it out of action for the rest of the scenario. |
+| `combat.weapons.HEAVY_MACHINE_GUN.targetDomains` | `["AIR"]` | What it can fire at: GROUND, AIR or both. |
+| `combat.weapons.HEAVY_MACHINE_GUN.rangeMeters` | `1500` | Maximum range. |
+| `combat.weapons.HEAVY_MACHINE_GUN.suppressionEffect` | `0` | Suppression each weapon adds per update at full effect. |
+| `combat.weapons.HEAVY_MACHINE_GUN.damageEffect` | `0` | Casualties each weapon causes per update at full effect. |
+| `combat.weapons.HEAVY_MACHINE_GUN.crewRequired` | `2` | Men needed to work one. |
+| `combat.weapons.HEAVY_MACHINE_GUN.ammunitionPerUse` | `1` | Rounds used per update of fire. |
+| `combat.weapons.HEAVY_MACHINE_GUN.maxAltitudeMeters` | `1000` | Highest aircraft it can reach. |
+| `combat.weapons.HEAVY_MACHINE_GUN.airHitChance` | `0.06` | Chance per shot of hitting an aircraft, at best. |
+| `combat.weapons.HEAVY_MACHINE_GUN.airCycleSeconds` | `15` | Seconds between shots at aircraft. |
+| `combat.weapons.HEAVY_MACHINE_GUN.heavyDamageChance` | `0.4` | Chance that a hit which damages an aircraft puts it out of action for the rest of the scenario. |
 | `combat.systemLossPerCasualtyFraction` | `1` | Chance that losses take a crew-served weapon with them. |
 | `combat.assessmentNoise` | `0.5` | Error in a crew's casualty estimate after a strike. |
 | `combat.suppressionFirePenalty` | `0.8` | How much suppression cuts a unit's own fire. |
@@ -235,9 +239,11 @@ rules or the schema.
 | `air.models.O-1E.hitChanceFactor` | `1.2` | Multiplier on ground fire's chance to hit it. |
 | `air.models.O-1E.hitSurvivalChance` | `0` | Chance it survives a hit without damage. |
 | `air.models.O-1E.speedMps` | `50` | Speed in metres per second. |
-| `air.models.O-1E.fuelSeconds` | `16800` | Endurance. |
+| `air.models.O-1E.fuelSeconds` | `16800` | Endurance at cruise. |
+| `air.models.O-1E.stationFuelRate` | `0.8` | Fuel burned at station speed, as a share of the burn at cruise. |
+| `air.models.O-1E.attackFuelRate` | `1` | Fuel burned on an attack run, as a share of the burn at cruise. |
 | `air.models.O-1E.ammunition` | `0` | Bombing passes it carries. |
-| `air.models.O-1E.takeoffSeconds` | `60` | Time to get airborne. |
+| `air.models.O-1E.takeoffSeconds` | `120` | Time to get airborne. |
 | `air.models.O-1E.turnaroundSeconds` | `600` | Time to refuel and rearm. |
 | `air.models.O-1E.repairSeconds` | `1500` | Time to repair after damage. |
 | `air.models.O-1E.bingoMarginSeconds` | `120` | Fuel kept in reserve for the trip home. |
@@ -269,14 +275,16 @@ rules or the schema.
 | `air.models.RF-101C.hitChanceFactor` | `0.4` | Multiplier on ground fire's chance to hit it. |
 | `air.models.RF-101C.hitSurvivalChance` | `0.1` | Chance it survives a hit without damage. |
 | `air.models.RF-101C.speedMps` | `245` | Speed in metres per second. |
-| `air.models.RF-101C.fuelSeconds` | `6000` | Endurance. |
+| `air.models.RF-101C.fuelSeconds` | `6000` | Endurance at cruise. |
+| `air.models.RF-101C.stationFuelRate` | `1.3` | Fuel burned at station speed, as a share of the burn at cruise. |
+| `air.models.RF-101C.attackFuelRate` | `1` | Fuel burned on an attack run, as a share of the burn at cruise. |
 | `air.models.RF-101C.ammunition` | `0` | Bombing passes it carries. |
-| `air.models.RF-101C.takeoffSeconds` | `60` | Time to get airborne. |
+| `air.models.RF-101C.takeoffSeconds` | `300` | Time to get airborne. |
 | `air.models.RF-101C.turnaroundSeconds` | `1500` | Time to refuel and rearm. |
 | `air.models.RF-101C.repairSeconds` | `1500` | Time to repair after damage. |
 | `air.models.RF-101C.bingoMarginSeconds` | `120` | Fuel kept in reserve for the trip home. |
 | `air.models.RF-101C.sensorRadiusMeters` | `2000` | How far it can see. |
-| `air.models.RF-101C.observerQuality` | `1` | Multiplier on its chance to spot. |
+| `air.models.RF-101C.observerQuality` | `0.6` | Multiplier on its chance to spot. |
 | `air.models.RF-101C.orbitRadiusMeters` | `1400` | Radius of its usual orbit. |
 | `air.models.RF-101C.stationSpeedMps` | `160` | Speed it slows to on station: in orbit, on an attack run and close to where it is going. |
 | `air.models.RF-101C.attackSpeedMps` | `245` | Speed on an attack run, from rolling in to pulling off. |
@@ -303,9 +311,11 @@ rules or the schema.
 | `air.models.A-1E.hitChanceFactor` | `1` | Multiplier on ground fire's chance to hit it. |
 | `air.models.A-1E.hitSurvivalChance` | `0.5` | Chance it survives a hit without damage. |
 | `air.models.A-1E.speedMps` | `88` | Speed in metres per second. |
-| `air.models.A-1E.fuelSeconds` | `9600` | Endurance. |
+| `air.models.A-1E.fuelSeconds` | `9600` | Endurance at cruise. |
+| `air.models.A-1E.stationFuelRate` | `0.8` | Fuel burned at station speed, as a share of the burn at cruise. |
+| `air.models.A-1E.attackFuelRate` | `1.4` | Fuel burned on an attack run, as a share of the burn at cruise. |
 | `air.models.A-1E.ammunition` | `8` | Bombing passes it carries. |
-| `air.models.A-1E.takeoffSeconds` | `60` | Time to get airborne. |
+| `air.models.A-1E.takeoffSeconds` | `240` | Time to get airborne. |
 | `air.models.A-1E.turnaroundSeconds` | `1200` | Time to refuel and rearm. |
 | `air.models.A-1E.repairSeconds` | `1500` | Time to repair after damage. |
 | `air.models.A-1E.bingoMarginSeconds` | `60` | Fuel kept in reserve for the trip home. |
@@ -337,14 +347,16 @@ rules or the schema.
 | `air.models.F-100D.hitChanceFactor` | `0.5` | Multiplier on ground fire's chance to hit it. |
 | `air.models.F-100D.hitSurvivalChance` | `0.15` | Chance it survives a hit without damage. |
 | `air.models.F-100D.speedMps` | `250` | Speed in metres per second. |
-| `air.models.F-100D.fuelSeconds` | `3000` | Endurance. |
+| `air.models.F-100D.fuelSeconds` | `2400` | Endurance at cruise. |
+| `air.models.F-100D.stationFuelRate` | `1.5` | Fuel burned at station speed, as a share of the burn at cruise. |
+| `air.models.F-100D.attackFuelRate` | `2` | Fuel burned on an attack run, as a share of the burn at cruise. |
 | `air.models.F-100D.ammunition` | `4` | Bombing passes it carries. |
-| `air.models.F-100D.takeoffSeconds` | `60` | Time to get airborne. |
+| `air.models.F-100D.takeoffSeconds` | `300` | Time to get airborne. |
 | `air.models.F-100D.turnaroundSeconds` | `1500` | Time to refuel and rearm. |
 | `air.models.F-100D.repairSeconds` | `1500` | Time to repair after damage. |
 | `air.models.F-100D.bingoMarginSeconds` | `60` | Fuel kept in reserve for the trip home. |
-| `air.models.F-100D.sensorRadiusMeters` | `2000` | How far it can see. |
-| `air.models.F-100D.observerQuality` | `0.6` | Multiplier on its chance to spot. |
+| `air.models.F-100D.sensorRadiusMeters` | `1500` | How far it can see. |
+| `air.models.F-100D.observerQuality` | `0.3` | Multiplier on its chance to spot. |
 | `air.models.F-100D.orbitRadiusMeters` | `1200` | Radius of its usual orbit. |
 | `air.models.F-100D.stationSpeedMps` | `150` | Speed it slows to on station: in orbit, on an attack run and close to where it is going. |
 | `air.models.F-100D.attackSpeedMps` | `230` | Speed on an attack run, from rolling in to pulling off. |
@@ -371,9 +383,11 @@ rules or the schema.
 | `air.models.UH-1B.hitChanceFactor` | `1.4` | Multiplier on ground fire's chance to hit it. |
 | `air.models.UH-1B.hitSurvivalChance` | `0.3` | Chance it survives a hit without damage. |
 | `air.models.UH-1B.speedMps` | `56` | Speed in metres per second. |
-| `air.models.UH-1B.fuelSeconds` | `7200` | Endurance. |
+| `air.models.UH-1B.fuelSeconds` | `7200` | Endurance at cruise. |
+| `air.models.UH-1B.stationFuelRate` | `1` | Fuel burned at station speed, as a share of the burn at cruise. |
+| `air.models.UH-1B.attackFuelRate` | `1.1` | Fuel burned on an attack run, as a share of the burn at cruise. |
 | `air.models.UH-1B.ammunition` | `10` | Bombing passes it carries. |
-| `air.models.UH-1B.takeoffSeconds` | `60` | Time to get airborne. |
+| `air.models.UH-1B.takeoffSeconds` | `120` | Time to get airborne. |
 | `air.models.UH-1B.turnaroundSeconds` | `600` | Time to refuel and rearm. |
 | `air.models.UH-1B.repairSeconds` | `1500` | Time to repair after damage. |
 | `air.models.UH-1B.bingoMarginSeconds` | `120` | Fuel kept in reserve for the trip home. |
@@ -405,9 +419,11 @@ rules or the schema.
 | `air.models.AH-1G.hitChanceFactor` | `1.1` | Multiplier on ground fire's chance to hit it. |
 | `air.models.AH-1G.hitSurvivalChance` | `0.35` | Chance it survives a hit without damage. |
 | `air.models.AH-1G.speedMps` | `77` | Speed in metres per second. |
-| `air.models.AH-1G.fuelSeconds` | `7400` | Endurance. |
+| `air.models.AH-1G.fuelSeconds` | `7400` | Endurance at cruise. |
+| `air.models.AH-1G.stationFuelRate` | `1` | Fuel burned at station speed, as a share of the burn at cruise. |
+| `air.models.AH-1G.attackFuelRate` | `1.1` | Fuel burned on an attack run, as a share of the burn at cruise. |
 | `air.models.AH-1G.ammunition` | `12` | Bombing passes it carries. |
-| `air.models.AH-1G.takeoffSeconds` | `60` | Time to get airborne. |
+| `air.models.AH-1G.takeoffSeconds` | `120` | Time to get airborne. |
 | `air.models.AH-1G.turnaroundSeconds` | `720` | Time to refuel and rearm. |
 | `air.models.AH-1G.repairSeconds` | `1500` | Time to repair after damage. |
 | `air.models.AH-1G.bingoMarginSeconds` | `120` | Fuel kept in reserve for the trip home. |
@@ -439,9 +455,11 @@ rules or the schema.
 | `air.models.OH-6A.hitChanceFactor` | `1.5` | Multiplier on ground fire's chance to hit it. |
 | `air.models.OH-6A.hitSurvivalChance` | `0.4` | Chance it survives a hit without damage. |
 | `air.models.OH-6A.speedMps` | `64` | Speed in metres per second. |
-| `air.models.OH-6A.fuelSeconds` | `10000` | Endurance. |
+| `air.models.OH-6A.fuelSeconds` | `10000` | Endurance at cruise. |
+| `air.models.OH-6A.stationFuelRate` | `1` | Fuel burned at station speed, as a share of the burn at cruise. |
+| `air.models.OH-6A.attackFuelRate` | `1.1` | Fuel burned on an attack run, as a share of the burn at cruise. |
 | `air.models.OH-6A.ammunition` | `0` | Bombing passes it carries. |
-| `air.models.OH-6A.takeoffSeconds` | `60` | Time to get airborne. |
+| `air.models.OH-6A.takeoffSeconds` | `90` | Time to get airborne. |
 | `air.models.OH-6A.turnaroundSeconds` | `480` | Time to refuel and rearm. |
 | `air.models.OH-6A.repairSeconds` | `1500` | Time to repair after damage. |
 | `air.models.OH-6A.bingoMarginSeconds` | `120` | Fuel kept in reserve for the trip home. |
@@ -473,9 +491,11 @@ rules or the schema.
 | `air.models.HH-3E.hitChanceFactor` | `1.4` | Multiplier on ground fire's chance to hit it. |
 | `air.models.HH-3E.hitSurvivalChance` | `0.3` | Chance it survives a hit without damage. |
 | `air.models.HH-3E.speedMps` | `70` | Speed in metres per second. |
-| `air.models.HH-3E.fuelSeconds` | `7200` | Endurance. |
+| `air.models.HH-3E.fuelSeconds` | `7200` | Endurance at cruise. |
+| `air.models.HH-3E.stationFuelRate` | `1` | Fuel burned at station speed, as a share of the burn at cruise. |
+| `air.models.HH-3E.attackFuelRate` | `1.1` | Fuel burned on an attack run, as a share of the burn at cruise. |
 | `air.models.HH-3E.ammunition` | `0` | Bombing passes it carries. |
-| `air.models.HH-3E.takeoffSeconds` | `60` | Time to get airborne. |
+| `air.models.HH-3E.takeoffSeconds` | `180` | Time to get airborne. |
 | `air.models.HH-3E.turnaroundSeconds` | `900` | Time to refuel and rearm. |
 | `air.models.HH-3E.repairSeconds` | `1500` | Time to repair after damage. |
 | `air.models.HH-3E.bingoMarginSeconds` | `120` | Fuel kept in reserve for the trip home. |
@@ -507,9 +527,11 @@ rules or the schema.
 | `air.models.UH-1H.hitChanceFactor` | `1.4` | Multiplier on ground fire's chance to hit it. |
 | `air.models.UH-1H.hitSurvivalChance` | `0.3` | Chance it survives a hit without damage. |
 | `air.models.UH-1H.speedMps` | `55` | Speed in metres per second. |
-| `air.models.UH-1H.fuelSeconds` | `7200` | Endurance. |
+| `air.models.UH-1H.fuelSeconds` | `7200` | Endurance at cruise. |
+| `air.models.UH-1H.stationFuelRate` | `1` | Fuel burned at station speed, as a share of the burn at cruise. |
+| `air.models.UH-1H.attackFuelRate` | `1.1` | Fuel burned on an attack run, as a share of the burn at cruise. |
 | `air.models.UH-1H.ammunition` | `0` | Bombing passes it carries. |
-| `air.models.UH-1H.takeoffSeconds` | `60` | Time to get airborne. |
+| `air.models.UH-1H.takeoffSeconds` | `120` | Time to get airborne. |
 | `air.models.UH-1H.turnaroundSeconds` | `480` | Time to refuel and rearm. |
 | `air.models.UH-1H.repairSeconds` | `1500` | Time to repair after damage. |
 | `air.models.UH-1H.bingoMarginSeconds` | `120` | Fuel kept in reserve for the trip home. |

@@ -76,7 +76,7 @@ const WEAPON_NAMES: Readonly<Record<WeaponType, string>> = {
   SMALL_ARMS: 'small arms',
   MACHINE_GUN: 'machine guns',
   AAA: 'AAA',
-  MANPADS: 'MANPADS',
+  HEAVY_MACHINE_GUN: 'heavy machine gun',
 };
 
 export function weaponsText(weapons: readonly WeaponType[]): string {
@@ -126,7 +126,7 @@ export function aircraftMission(aircraft: AircraftTelemetryEntry): string {
 }
 
 export function aircraftSummary(aircraft: AircraftTelemetryEntry): string {
-  const status = `${aircraft.damaged ? 'DAMAGED, ' : ''}${AIRCRAFT_STATUS_LABELS[aircraft.status].toLowerCase()}`;
+  const status = `${aircraft.outOfAction ? 'OUT OF ACTION, ' : aircraft.damaged ? 'DAMAGED, ' : ''}${AIRCRAFT_STATUS_LABELS[aircraft.status].toLowerCase()}`;
   return (
     `${aircraft.aircraftId} (${aircraft.model}): ${status}, ${aircraftMission(aircraft)}, ${aircraft.landed ? 'landed' : `${Math.round(aircraft.altitudeMeters)} m`}, ` +
     `fuel ${Math.round(aircraft.fuelFraction * 100)}%, ordnance ${aircraft.ammunition}, guns ${aircraft.gunBursts}`
@@ -141,7 +141,7 @@ const WEAPON_TAGS: Readonly<Record<WeaponType, string | null>> = {
   SMALL_ARMS: null,
   MACHINE_GUN: 'MG',
   AAA: 'AAA',
-  MANPADS: 'MP',
+  HEAVY_MACHINE_GUN: 'HMG',
 };
 
 /** Map tag for the weapons seen, most dangerous to aircraft first. Nearly everyone has small arms. */
@@ -353,7 +353,7 @@ export function radioLine(message: RadioMessage, cellSize: number): RadioLine {
       };
     case 'GROUND_FIRE':
       return {
-        text: `${message.damaged ? 'Hit by ground fire, returning to base' : message.hit ? 'Hit by ground fire, still flying' : 'Taking ground fire'}${message.weapon === null ? '' : ` (${WEAPON_NAMES[message.weapon]})`}, source near ${grid(message.source.center)}.`,
+        text: `${message.heavy === true ? 'Badly hit by ground fire, returning to base and out of action' : message.damaged ? 'Hit by ground fire, returning to base' : message.hit ? 'Hit by ground fire, still flying' : 'Taking ground fire'}${message.weapon === null ? '' : ` (${WEAPON_NAMES[message.weapon]})`}, source near ${grid(message.source.center)}.`,
         coordinates: [message.source.center],
       };
     case 'STRIKE_RESULT':

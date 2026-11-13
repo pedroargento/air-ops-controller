@@ -71,7 +71,7 @@ const SAMPLES: readonly (readonly [string, readonly (readonly [Sample, string])[
       [symbol({ affiliation: 'suspect', right: [{ text: '?', color: '#b0201a' }] }), 'Suspect: probably hostile, reported with low confidence.'],
       [symbol({ affiliation: 'unknown', icon: null }), 'Unidentified: seen, but nobody could tell whose.'],
       [symbol({ icon: 'armour' }), 'Vehicle.'],
-      [symbol({ airDefense: true, right: [{ text: 'MP', color: '#ff3df0' }] }), 'Air defense seen: dome inside, AAA or MP (MANPADS) in magenta. Selecting it shows its threat ring.'],
+      [symbol({ airDefense: true, right: [{ text: 'HMG', color: '#ff3df0' }] }), 'Air defense seen: dome inside, AAA or HMG (heavy machine gun) in magenta. Selecting it shows its threat ring.'],
       [symbol({ right: [{ text: 'MG' }] }), 'Machine gun seen. No tag means weapons not seen, not that there are none.'],
       [symbol({ headingRad: 0 }), 'Seen moving: the arrow points the way it was heading.'],
       [symbol({ dashed: true, right: [{ text: '14:05', color: '#444444' }] }), 'Not seen for two minutes or more: last known position, with when it was seen. Where it went is your estimate.'],

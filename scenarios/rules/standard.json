@@ -733,7 +733,8 @@
         "ammunitionPerUse": 1,
         "maxAltitudeMeters": 150,
         "airHitChance": 0.01,
-        "airCycleSeconds": 30
+        "airCycleSeconds": 30,
+        "heavyDamageChance": 0.1
       },
       "MACHINE_GUN": {
         "targetDomains": [
@@ -747,7 +748,8 @@
         "ammunitionPerUse": 6,
         "maxAltitudeMeters": 350,
         "airHitChance": 0.02,
-        "airCycleSeconds": 15
+        "airCycleSeconds": 15,
+        "heavyDamageChance": 0.2
       },
       "AAA": {
         "targetDomains": [
@@ -761,20 +763,22 @@
         "ammunitionPerUse": 4,
         "maxAltitudeMeters": 2000,
         "airHitChance": 0.08,
-        "airCycleSeconds": 15
+        "airCycleSeconds": 15,
+        "heavyDamageChance": 0.6
       },
-      "MANPADS": {
+      "HEAVY_MACHINE_GUN": {
         "targetDomains": [
           "AIR"
         ],
-        "rangeMeters": 2500,
+        "rangeMeters": 1500,
         "suppressionEffect": 0,
         "damageEffect": 0,
         "crewRequired": 2,
         "ammunitionPerUse": 1,
-        "maxAltitudeMeters": 2500,
-        "airHitChance": 0.3,
-        "airCycleSeconds": 90
+        "maxAltitudeMeters": 1000,
+        "airHitChance": 0.06,
+        "airCycleSeconds": 15,
+        "heavyDamageChance": 0.4
       }
     },
     "systemLossPerCasualtyFraction": 1,
@@ -924,7 +928,7 @@
     "terrainLookaheadSeconds": 8,
     "models": {
       "O-1E": {
-        "takeoffSeconds": 60,
+        "takeoffSeconds": 120,
         "turnaroundSeconds": 600,
         "repairSeconds": 1500,
         "minAltitudeMeters": 100,
@@ -933,6 +937,8 @@
         "displayName": "O-1E Bird Dog",
         "speedMps": 50,
         "fuelSeconds": 16800,
+        "stationFuelRate": 0.8,
+        "attackFuelRate": 1,
         "ammunition": 0,
         "bingoMarginSeconds": 120,
         "sensorRadiusMeters": 1000,
@@ -960,7 +966,7 @@
         "seats": 0
       },
       "RF-101C": {
-        "takeoffSeconds": 60,
+        "takeoffSeconds": 300,
         "turnaroundSeconds": 1500,
         "repairSeconds": 1500,
         "minAltitudeMeters": 100,
@@ -969,10 +975,12 @@
         "displayName": "RF-101C Voodoo",
         "speedMps": 245,
         "fuelSeconds": 6000,
+        "stationFuelRate": 1.3,
+        "attackFuelRate": 1,
         "ammunition": 0,
         "bingoMarginSeconds": 120,
         "sensorRadiusMeters": 2000,
-        "observerQuality": 1.0,
+        "observerQuality": 0.6,
         "orbitRadiusMeters": 1400,
         "stationSpeedMps": 160,
         "attackSpeedMps": 245,
@@ -996,7 +1004,7 @@
         "seats": 0
       },
       "A-1E": {
-        "takeoffSeconds": 60,
+        "takeoffSeconds": 240,
         "turnaroundSeconds": 1200,
         "repairSeconds": 1500,
         "minAltitudeMeters": 100,
@@ -1005,6 +1013,8 @@
         "displayName": "A-1E Skyraider",
         "speedMps": 88,
         "fuelSeconds": 9600,
+        "stationFuelRate": 0.8,
+        "attackFuelRate": 1.4,
         "ammunition": 8,
         "bingoMarginSeconds": 60,
         "sensorRadiusMeters": 800,
@@ -1032,7 +1042,7 @@
         "seats": 0
       },
       "F-100D": {
-        "takeoffSeconds": 60,
+        "takeoffSeconds": 300,
         "turnaroundSeconds": 1500,
         "repairSeconds": 1500,
         "minAltitudeMeters": 100,
@@ -1040,11 +1050,13 @@
         "role": "cas",
         "displayName": "F-100D Super Sabre",
         "speedMps": 250,
-        "fuelSeconds": 3000,
+        "fuelSeconds": 2400,
+        "stationFuelRate": 1.5,
+        "attackFuelRate": 2,
         "ammunition": 4,
         "bingoMarginSeconds": 60,
-        "sensorRadiusMeters": 2000,
-        "observerQuality": 0.6,
+        "sensorRadiusMeters": 1500,
+        "observerQuality": 0.3,
         "orbitRadiusMeters": 1200,
         "stationSpeedMps": 150,
         "attackSpeedMps": 230,
@@ -1068,7 +1080,7 @@
         "seats": 0
       },
       "UH-1B": {
-        "takeoffSeconds": 60,
+        "takeoffSeconds": 120,
         "turnaroundSeconds": 600,
         "repairSeconds": 1500,
         "maxAltitudeMeters": 3000,
@@ -1085,6 +1097,8 @@
         "displayName": "UH-1B Huey gunship",
         "speedMps": 56,
         "fuelSeconds": 7200,
+        "stationFuelRate": 1,
+        "attackFuelRate": 1.1,
         "ammunition": 10,
         "sensorRadiusMeters": 900,
         "observerQuality": 1.1,
@@ -1104,7 +1118,7 @@
         "seats": 0
       },
       "AH-1G": {
-        "takeoffSeconds": 60,
+        "takeoffSeconds": 120,
         "turnaroundSeconds": 720,
         "repairSeconds": 1500,
         "maxAltitudeMeters": 3000,
@@ -1121,6 +1135,8 @@
         "displayName": "AH-1G Cobra",
         "speedMps": 77,
         "fuelSeconds": 7400,
+        "stationFuelRate": 1,
+        "attackFuelRate": 1.1,
         "ammunition": 12,
         "sensorRadiusMeters": 900,
         "observerQuality": 1.1,
@@ -1140,7 +1156,7 @@
         "seats": 0
       },
       "OH-6A": {
-        "takeoffSeconds": 60,
+        "takeoffSeconds": 90,
         "turnaroundSeconds": 480,
         "repairSeconds": 1500,
         "maxAltitudeMeters": 3000,
@@ -1157,6 +1173,8 @@
         "displayName": "OH-6A Cayuse",
         "speedMps": 64,
         "fuelSeconds": 10000,
+        "stationFuelRate": 1,
+        "attackFuelRate": 1.1,
         "ammunition": 0,
         "sensorRadiusMeters": 700,
         "observerQuality": 1.5,
@@ -1176,7 +1194,7 @@
         "seats": 0
       },
       "HH-3E": {
-        "takeoffSeconds": 60,
+        "takeoffSeconds": 180,
         "turnaroundSeconds": 900,
         "repairSeconds": 1500,
         "maxAltitudeMeters": 3000,
@@ -1193,6 +1211,8 @@
         "displayName": "HH-3E Jolly Green",
         "speedMps": 70,
         "fuelSeconds": 7200,
+        "stationFuelRate": 1,
+        "attackFuelRate": 1.1,
         "ammunition": 0,
         "sensorRadiusMeters": 700,
         "observerQuality": 1.1,
@@ -1212,7 +1232,7 @@
         "seats": 4
       },
       "UH-1H": {
-        "takeoffSeconds": 60,
+        "takeoffSeconds": 120,
         "turnaroundSeconds": 480,
         "repairSeconds": 1500,
         "maxAltitudeMeters": 3000,
@@ -1229,6 +1249,8 @@
         "displayName": "UH-1H Dustoff",
         "speedMps": 55,
         "fuelSeconds": 7200,
+        "stationFuelRate": 1,
+        "attackFuelRate": 1.1,
         "ammunition": 0,
         "sensorRadiusMeters": 600,
         "observerQuality": 0.8,

@@ -41,8 +41,9 @@ function nextId(radio: RadioState): MessageId {
 }
 
 /** Battle damage is one of only two automatic RTBs (§8). The aircraft is never destroyed. */
-function damageAircraft(aircraft: Aircraft): void {
+function damageAircraft(aircraft: Aircraft, heavy: boolean): void {
   aircraft.damaged = true;
+  aircraft.outOfAction = aircraft.outOfAction || heavy;
   aircraft.status = 'returning';
   aircraft.order = null;
   aircraft.attackRun = null;
@@ -55,6 +56,7 @@ function reportFire(
   weapon: WeaponType,
   hit: boolean,
   damaged: boolean,
+  heavy: boolean,
   player: PlayerKnowledge,
   radio: RadioState,
   air: AirConfig,
@@ -84,6 +86,7 @@ function reportFire(
     weapon: seen,
     hit,
     damaged,
+    ...(heavy ? { heavy } : {}),
   });
 }
 
@@ -141,7 +144,9 @@ export function resolveGroundFire(
     unit.lastFiredAtTick = tick;
     unit.firedWeapons = [fire.weapon];
     unit.nextAirFireTick = tick + fire.definition.airCycleSeconds;
-    reportFire(aircraft, unit, fire.weapon, hit, damaged, player, radio, air, rng, tick);
-    if (damaged) damageAircraft(aircraft);
+    // Its own stream, so adding this draw moved no other.
+    const heavy = damaged && nextBool(rng, `airdamage/${unit.id}/${aircraft.id}`, fire.definition.heavyDamageChance);
+    reportFire(aircraft, unit, fire.weapon, hit, damaged, heavy, player, radio, air, rng, tick);
+    if (damaged) damageAircraft(aircraft, heavy);
   }
 }

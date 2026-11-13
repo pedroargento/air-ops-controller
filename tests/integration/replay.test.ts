@@ -29,8 +29,11 @@ describe('replay', () => {
     const hashes = runReplay(scenario, { seed: 1, commands: [], ticks: 3000 });
     // R0: the hash now leaves out report accounting and diagnostics (`src/sim/state-hash.ts`).
     // No rule changed then. R3.1 then made guns the crews' default weapons setting (2ba33c45 to a9161d09), and R3.2 put
-    // air operations on one net (a9161d09 to 30a34f0e).
-    expect(hashes.at(-1)).toBe('30a34f0e');
+    // air operations on one net (a9161d09 to 30a34f0e). R4.5 replaced the missile team's 4 missiles with a heavy
+    // machine gun's 40 bursts (30a34f0e to a8cb8176), then moved the outpost's base to 40 km (a8cb8176 to ebd8876b)
+    // and gave aircraft an out-of-action state for heavy damage (ebd8876b to fa6ab12f). The F-100D then starts with
+    // less fuel (fa6ab12f to e922e264).
+    expect(hashes.at(-1)).toBe('e922e264');
   }, 30000);
 
   it('diverges when a command differs', () => {

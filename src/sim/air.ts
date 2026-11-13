@@ -45,6 +45,7 @@ export function createAircraft(scenario: Scenario): Aircraft[] {
         // Not ready yet: it shows as being readied until then.
         status: (entry.readySeconds ?? 0) > 0 ? 'turnaround' : 'ready',
         damaged: false,
+        outOfAction: false,
         lastFiredOnTick: null,
         heldForFriendliesAt: null,
         heldReportAt: null,
@@ -141,8 +142,14 @@ function secondsToBase(aircraft: Aircraft, type: AircraftModelConfig, air: AirCo
   return distance(aircraft.position, air.airbase) / type.speedMps;
 }
 
-function burnFuel(aircraft: Aircraft, type: AircraftModelConfig, air: AirConfig): void {
-  aircraft.fuelSeconds = Math.max(0, aircraft.fuelSeconds - 1);
+/** Fuel to spare beyond the trip home and the reserve, in seconds at cruise. */
+function fuelToSpare(aircraft: Aircraft, type: AircraftModelConfig, air: AirConfig): number {
+  return aircraft.fuelSeconds - secondsToBase(aircraft, type, air) - type.bingoMarginSeconds;
+}
+
+/** `rate` is the burn as a share of the burn at cruise (§8.10). */
+function burnFuel(aircraft: Aircraft, type: AircraftModelConfig, air: AirConfig, rate: number): void {
+  aircraft.fuelSeconds = Math.max(0, aircraft.fuelSeconds - rate);
   if (aircraft.fuelSeconds <= secondsToBase(aircraft, type, air) + type.bingoMarginSeconds) {
     aircraft.status = 'returning';
     aircraft.order = null;
@@ -180,7 +187,7 @@ export function advanceAircraft(aircraft: Aircraft, air: AirConfig, terrain: Ter
   if (aircraft.landed) {
     // On the ground at a pickup: it doesn't move, but it still burns fuel.
     aircraft.altitudeMeters = elevationAt(terrain, aircraft.position);
-    burnFuel(aircraft, typeOf(aircraft, air), air);
+    burnFuel(aircraft, typeOf(aircraft, air), air, typeOf(aircraft, air).stationFuelRate);
     return;
   }
   flyAircraft(aircraft, air);
@@ -232,7 +239,7 @@ function crewSelf(aircraft: Aircraft, player: PlayerKnowledge, air: AirConfig, c
     maxAltitudeMeters: type.maxAltitudeMeters,
     ammunition: aircraft.ammunition,
     gunBursts: aircraft.gunBursts,
-    enduranceSeconds: Math.max(0, aircraft.fuelSeconds - secondsToBase(aircraft, type, air) - type.bingoMarginSeconds),
+    enduranceSeconds: Math.max(0, fuelToSpare(aircraft, type, air)) / type.stationFuelRate,
     passIntervalSeconds: type.passIntervalSeconds,
     gunPassFactor: air.gunPassFactor,
     gunsReachable: !aircraft.manualAltitude || aircraft.targetAltitudeMeters <= air.gunRunHeightMeters * air.gunHeightTolerance,
@@ -335,16 +342,18 @@ function flyAircraft(aircraft: Aircraft, air: AirConfig): void {
         aircraft.status = 'returning';
         return;
       }
-      steer(aircraft, bearing(aircraft.position, destination), type, transitSpeed(aircraft, destination, type));
+      const speed = transitSpeed(aircraft, destination, type);
+      steer(aircraft, bearing(aircraft.position, destination), type, speed);
       if (distance(aircraft.position, destination) <= orbitRadius(aircraft.order, type)) {
         aircraft.status = 'onStation';
       }
-      burnFuel(aircraft, type, air);
+      burnFuel(aircraft, type, air, speed < type.speedMps ? type.stationFuelRate : 1);
       return;
     }
     case 'onStation': {
       const center = aircraft.searchPoint ?? destinationOf(aircraft.order);
       if (center === null) return;
+      const rate = aircraft.attackRun !== null && aircraft.breakSeconds <= 0 ? type.attackFuelRate : type.stationFuelRate;
       if (aircraft.breakSeconds > 0 && aircraft.breakPoint !== null) {
         aircraft.breakSeconds -= 1;
         steer(aircraft, bearing(aircraft.position, aircraft.breakPoint), type, type.stationSpeedMps);
@@ -354,7 +363,7 @@ function flyAircraft(aircraft: Aircraft, air: AirConfig): void {
         // A helicopter holds its position; anything else has to keep flying.
         steer(aircraft, orbitHeading(aircraft, center, orbitRadius(aircraft.order, type)), type, type.stationSpeedMps);
       }
-      burnFuel(aircraft, type, air);
+      burnFuel(aircraft, type, air, rate);
       return;
     }
     case 'returning':
@@ -367,6 +376,8 @@ function flyAircraft(aircraft: Aircraft, air: AirConfig): void {
       }
       return;
     case 'turnaround':
+      // Heavy damage is not repaired within the scenario (§8.3).
+      if (aircraft.outOfAction) return;
       aircraft.timerSeconds -= 1;
       if (aircraft.timerSeconds <= 0) {
         aircraft.status = 'ready';
@@ -389,7 +400,7 @@ export function crewCalls(truth: WorldTruth, player: PlayerKnowledge, radio: Rad
   for (const aircraft of truth.aircraft) {
     if (!isAirborne(aircraft)) continue;
     const type = typeOf(aircraft, air);
-    const endurance = aircraft.fuelSeconds - secondsToBase(aircraft, type, air) - type.bingoMarginSeconds;
+    const endurance = fuelToSpare(aircraft, type, air) / type.stationFuelRate;
     const strike = aircraft.aircraftType === 'cas';
     const due: CrewCallKind[] = [];
     if (endurance <= 0 && !aircraft.damaged) due.push('BINGO');
@@ -1016,6 +1027,7 @@ export function aircraftTelemetry(truth: WorldTruth, air: AirConfig, tick = 0): 
       headingRad: aircraft.headingRad,
       status: aircraft.status,
       damaged: aircraft.damaged,
+      outOfAction: aircraft.outOfAction,
       aboveCloud: isAirborne(aircraft) && aircraft.altitudeMeters > weatherAt(truth.weather, aircraft.position, tick).ceilingMeters,
       visibilityMeters: airVisibilityMeters(truth.weather, aircraft.position, aircraft.position, aircraft.altitudeMeters, tick),
       casPhase: casPhase(aircraft, tick),
@@ -1036,7 +1048,7 @@ export function aircraftTelemetry(truth: WorldTruth, air: AirConfig, tick = 0): 
             : 0,
       stationSeconds:
         aircraft.status === 'onStation' || aircraft.status === 'enroute' || aircraft.status === 'takeoff'
-          ? Math.max(0, aircraft.fuelSeconds - secondsToBase(aircraft, type, air) - type.bingoMarginSeconds - (flying && destination !== null ? distance(aircraft.position, destination) / type.speedMps : 0))
+          ? Math.max(0, fuelToSpare(aircraft, type, air) - (flying && destination !== null ? distance(aircraft.position, destination) / type.speedMps : 0)) / type.stationFuelRate
           : null,
       homeSeconds: isAirborne(aircraft) ? secondsToBase(aircraft, type, air) : 0,
       turnaroundSeconds: aircraft.damaged ? type.repairSeconds : type.turnaroundSeconds,

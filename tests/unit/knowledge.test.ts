@@ -290,10 +290,10 @@ describe('tracks', () => {
 
   it('carries over a weapon any report saw, without changing stored reports', () => {
     const player = emptyPlayerKnowledge();
-    updateContact(player, { ...contact('C-1', 'F-A', 80, 120), observedWeapons: ['MANPADS'] }, 90, false);
+    updateContact(player, { ...contact('C-1', 'F-A', 80, 120), observedWeapons: ['HEAVY_MACHINE_GUN'] }, 90, false);
     updateContact(player, contact('C-3', 'RECON-1', 100), 100, true);
     const [track] = tracked(player, 105);
-    expect(track?.contact.observedWeapons).toEqual(['MANPADS']);
+    expect(track?.contact.observedWeapons).toEqual(['HEAVY_MACHINE_GUN']);
     expect(player.contacts['RECON-1/C-3']?.contact.observedWeapons).toEqual([]);
   });
 
@@ -392,8 +392,8 @@ describe('PlayerView', () => {
 
   it('keeps a ground fire mark for its full time, fading, then drops it', () => {
     const player = emptyPlayerKnowledge();
-    player.groundFire.push({ aircraftId: 'CAS-1', position: { x: 1, y: 2 }, tick: 100, hit: true, weapon: 'MANPADS' });
-    expect(project(player, [], 110, display).groundFire[0]).toMatchObject({ weapon: 'MANPADS', ageSeconds: 10 });
+    player.groundFire.push({ aircraftId: 'CAS-1', position: { x: 1, y: 2 }, tick: 100, hit: true, weapon: 'HEAVY_MACHINE_GUN' });
+    expect(project(player, [], 110, display).groundFire[0]).toMatchObject({ weapon: 'HEAVY_MACHINE_GUN', ageSeconds: 10 });
     const later = project(player, [], 550, display).groundFire[0];
     expect(later?.opacity).toBeCloseTo(0.5);
     expect(project(player, [], 1001, display).groundFire).toEqual([]);
@@ -401,14 +401,14 @@ describe('PlayerView', () => {
 
   it('merges ground fire in one place, keeping the newest time and anything learned', () => {
     const player = emptyPlayerKnowledge();
-    const mark = (x: number, tick: number, hit: boolean, weapon: 'MANPADS' | null) =>
+    const mark = (x: number, tick: number, hit: boolean, weapon: 'HEAVY_MACHINE_GUN' | null) =>
       player.groundFire.push({ aircraftId: 'CAS-1', position: { x, y: 0 }, tick, hit, weapon });
-    mark(0, 100, true, 'MANPADS');
+    mark(0, 100, true, 'HEAVY_MACHINE_GUN');
     mark(2000, 150, false, null);
     mark(100, 200, false, null);
     const marks = project(player, [], 300, display).groundFire;
     expect(marks).toHaveLength(2);
-    expect(marks[0]).toMatchObject({ position: { x: 100, y: 0 }, ageSeconds: 100, hit: true, weapon: 'MANPADS' });
+    expect(marks[0]).toMatchObject({ position: { x: 100, y: 0 }, ageSeconds: 100, hit: true, weapon: 'HEAVY_MACHINE_GUN' });
   });
 
   it('keeps an aged marker selectable at the opacity floor until it is archived', () => {

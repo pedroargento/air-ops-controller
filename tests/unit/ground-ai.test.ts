@@ -295,7 +295,7 @@ describe('decideGround', () => {
 
   describe('firing on aircraft', () => {
     const manpads = {
-      weapon: 'MANPADS' as const,
+      weapon: 'HEAVY_MACHINE_GUN' as const,
       count: 1,
       definition: {
         targetDomains: ['AIR' as const],
@@ -307,6 +307,7 @@ describe('decideGround', () => {
         maxAltitudeMeters: 2500,
         airHitChance: 0.3,
         airCycleSeconds: 90,
+        heavyDamageChance: 0,
       },
     };
     const overhead = (tick: number, altitudeMeters = 300) => ({

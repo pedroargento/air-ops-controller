@@ -17,11 +17,13 @@ import { reconInformed } from '../../src/policies/air-policies';
 import { aircraftTelemetry } from '../../src/sim/air';
 import { createInitialState, type SimState } from '../../src/sim/state';
 import { platoonOf } from '../../src/sim/platoon';
+import type { Scenario } from '../../src/scenario/load';
 import { step } from '../../src/sim/step';
 import { sightOn } from '../../src/perception/observe';
-import { singleSquads, squadOf, weaponsFree } from '../support/single-squads';
+import { nearBase, quickTakeoff, singleSquads, squadOf, weaponsFree } from '../support/single-squads';
 
-const standard = singleSquads(loadScenarioFile());
+// Most tests here count ticks from the order, so every model takes off in a minute from a base 25 km out.
+const standard = nearBase(quickTakeoff(singleSquads(loadScenarioFile())));
 const scenario = weaponsFree(standard);
 const { air, mission, radio: radioConfig } = scenario.file;
 const CAS = 'CAS-1' as AircraftId;
@@ -45,9 +47,9 @@ const order = (state: SimState, aircraftId: AircraftId, value: AircraftOrder): P
   order: value,
 });
 
-function run(state: SimState, ticks: number, commands: readonly PlayerCommand[] = []): void {
-  step(state, commands, scenario);
-  for (let i = 1; i < ticks && state.truth.outcome === 'running'; i += 1) step(state, [], scenario);
+function run(state: SimState, ticks: number, commands: readonly PlayerCommand[] = [], rules: Scenario = scenario): void {
+  step(state, commands, rules);
+  for (let i = 1; i < ticks && state.truth.outcome === 'running'; i += 1) step(state, [], rules);
 }
 
 function isolate(state: SimState, keep: readonly string[]): void {
@@ -63,6 +65,20 @@ const watch = (center: Vec2, radius = 5000): AircraftOrder => ({ kind: 'Watch', 
 const hold = (state: SimState, id: AircraftId): PlayerCommand => ({ kind: 'setWeapons', tick: state.tick, aircraftId: id, weapons: 'hold' });
 
 describe('aircraft operations', () => {
+  it('takes each model its own time to get airborne', () => {
+    const real = singleSquads(loadScenarioFile());
+    const state = createInitialState(real, 1);
+    const jet = 'CAS-2' as AircraftId;
+    run(state, 1, [order(state, jet, support(outpost)), order(state, RECON, support(outpost))], real);
+    const models = real.file.air.models;
+    expect(models['F-100D']!.takeoffSeconds).toBeGreaterThan(models['O-1E']!.takeoffSeconds);
+    run(state, models['O-1E']!.takeoffSeconds, [], real);
+    expect(aircraft(state, RECON).status).toBe('enroute');
+    expect(aircraft(state, jet).status).toBe('takeoff');
+    run(state, models['F-100D']!.takeoffSeconds - models['O-1E']!.takeoffSeconds, [], real);
+    expect(aircraft(state, jet).status).toBe('enroute');
+  });
+
   it('needs takeoff and travel time to reach the area', () => {
     const state = createInitialState(scenario, 1);
     run(state, 60, [hold(state, CAS), order(state, CAS, watch(outpost))]);
@@ -90,6 +106,8 @@ describe('aircraft operations', () => {
     run(state, 1, [order(state, JET, support(outpost))]);
     const a = aircraft(state, JET);
     a.ammunition = 0;
+    // Half a tank: in orbit a full one now lasts nearly to the end of the battle (§8.10).
+    a.fuelSeconds = air.models['F-100D']!.fuelSeconds / 2;
     let landedWithFuel = -1;
     for (let tick = 0; tick < 4000 && a.status !== 'turnaround'; tick += 1) {
       step(state, [], scenario);
@@ -478,14 +496,14 @@ describe('replay with player commands', () => {
 
 describe('altitude and ground fire', () => {
   const team = { x: 2700, y: 2250 };
-  const { MANPADS } = scenario.file.combat.weapons;
+  const { HEAVY_MACHINE_GUN } = scenario.file.combat.weapons;
   const sure = {
     ...scenario,
     file: {
       ...scenario.file,
       combat: {
         ...scenario.file.combat,
-        weapons: { ...scenario.file.combat.weapons, MANPADS: { ...MANPADS, airHitChance: 1000 } },
+        weapons: { ...scenario.file.combat.weapons, HEAVY_MACHINE_GUN: { ...HEAVY_MACHINE_GUN, airHitChance: 1000 } },
       },
       air: {
         ...air,
@@ -505,6 +523,33 @@ describe('altitude and ground fire', () => {
     for (let i = 1; i < ticks && aircraft(state, CAS).damaged === false; i += 1) step(state, [], sure);
     return state;
   }
+
+  it('a heavy hit puts the aircraft out of action, and a light one is repaired (§8.3)', () => {
+    const withHeavy = (chance: number): Scenario => ({
+      ...sure,
+      file: { ...sure.file, combat: { ...sure.file.combat, weapons: { ...sure.file.combat.weapons, HEAVY_MACHINE_GUN: { ...sure.file.combat.weapons.HEAVY_MACHINE_GUN, heavyDamageChance: chance } } } },
+    });
+    const land = (rules: Scenario): Aircraft => {
+      const state = createInitialState(rules, 1);
+      isolate(state, ['E-AD']);
+      step(state, [order(state, CAS, support(team))], rules);
+      const plane = aircraft(state, CAS);
+      for (let i = 0; i < 3000 && plane.status !== 'turnaround'; i += 1) step(state, [], rules);
+      expect(plane.damaged).toBe(true);
+      expect(plane.status).toBe('turnaround');
+      // Skip to the end of the repair.
+      plane.timerSeconds = 2;
+      for (let i = 0; i < 5; i += 1) step(state, [], rules);
+      return plane;
+    };
+    const light = land(withHeavy(0));
+    expect(light.outOfAction).toBe(false);
+    expect(light.status).toBe('ready');
+    const heavy = land(withHeavy(1));
+    expect(heavy.outOfAction).toBe(true);
+    expect(heavy.status).toBe('turnaround');
+    expect(heavy.damaged).toBe(true);
+  });
 
   it('is zero on the ground and the shared operating altitude in flight', () => {
     const state = createInitialState(scenario, 1);
@@ -573,7 +618,7 @@ describe('altitude and ground fire', () => {
     const state = createInitialState(scenario, 1);
     isolate(state, ['E-AD']);
     const shooter = unit(state, 'E-AD');
-    shooter.firedWeapons = ['MANPADS'];
+    shooter.firedWeapons = ['HEAVY_MACHINE_GUN'];
     run(state, 500, [order(state, RECON, { kind: 'Watch', center: team, radius: 400 })]);
     shooter.lastFiredAtTick = state.tick;
     for (let i = 0; i < 300; i += 1) {
@@ -581,7 +626,7 @@ describe('altitude and ground fire', () => {
       step(state, [], scenario);
     }
     const seen = Object.values(state.player.contacts).flatMap((c) => c.contact.observedWeapons);
-    expect(seen).toContain('MANPADS');
+    expect(seen).toContain('HEAVY_MACHINE_GUN');
   });
 
   it('an ordinary formation under an aircraft holds its fire', () => {
@@ -601,7 +646,7 @@ describe('altitude and ground fire', () => {
     isolate(state, ['F-A']);
     const friendly = unit(state, 'F-A');
     friendly.position = team;
-    friendly.equipment = [{ weapon: 'MANPADS', quantity: 1, ammunition: 4 }];
+    friendly.equipment = [{ weapon: 'HEAVY_MACHINE_GUN', quantity: 1, ammunition: 4 }];
     run(state, 800, [order(state, CAS, support(team))]);
     expect(aircraft(state, CAS).damaged).toBe(false);
     expect(friendly.equipment[0]?.ammunition).toBe(4);
@@ -659,7 +704,7 @@ describe('reacting to known air threats', () => {
     const state = createInitialState(scenario, 1);
     const far = { x: objective.x, y: objective.y - 2000 };
     updateContact(state.player, hostile('C-1', near), 100, true);
-    updateContact(state.player, hostile('C-2', far, ['MANPADS']), 100, true);
+    updateContact(state.player, hostile('C-2', far, ['HEAVY_MACHINE_GUN']), 100, true);
     expect(ordersFor(state)[0]).toEqual(far);
   });
 });
@@ -835,7 +880,7 @@ describe('terrain and aircraft', () => {
         ...world.file,
         combat: {
           ...world.file.combat,
-          weapons: { ...world.file.combat.weapons, MANPADS: { ...world.file.combat.weapons.MANPADS, airHitChance: 1 } },
+          weapons: { ...world.file.combat.weapons, HEAVY_MACHINE_GUN: { ...world.file.combat.weapons.HEAVY_MACHINE_GUN, airHitChance: 1 } },
         },
         air: { ...world.file.air, groundNoticePerScan: 1 },
       },
@@ -867,6 +912,8 @@ describe('terrain and aircraft', () => {
 
   it('pilots keep clear of the terrain whatever the order says', () => {
     const state = createInitialState(scenario, 1);
+    // These are about flying low, not about being shot at: take the air defense gun away.
+    for (const u of state.truth.units) u.equipment = u.equipment.filter((item) => item.weapon !== 'HEAVY_MACHINE_GUN');
     step(state, [{ kind: 'setAltitude', tick: 0, aircraftId: CAS, meters: 100 }, hold(state, CAS), order(state, CAS, watch(outpost, 500))], scenario);
     for (let i = 0; i < 500; i += 1) {
       step(state, [], scenario);
@@ -998,6 +1045,8 @@ describe('helicopters', () => {
 
   it('flies closer to the ground than a jet can', () => {
     const state = createInitialState(scenario, 1);
+    // These are about flying low, not about being shot at: take the air defense gun away.
+    for (const u of state.truth.units) u.equipment = u.equipment.filter((item) => item.weapon !== 'HEAVY_MACHINE_GUN');
     const commands: PlayerCommand[] = [
       { kind: 'setAltitude', tick: 0, aircraftId: GUNSHIP, meters: 30 },
       { kind: 'setAltitude', tick: 0, aircraftId: CAS, meters: 30 },
@@ -1312,7 +1361,8 @@ describe('night and flares', () => {
   it('keeps a flare burning over the area for as long as asked, then watches it', () => {
     const state = createInitialState(night, 3);
     const recon = state.truth.aircraft.find((a) => a.id === RECON) as Aircraft;
-    const until = 900;
+    // Long enough for the O-1E to get there from 40 km first.
+    const until = 1500;
     runNight(state, 1, [{ kind: 'aircraftOrder', tick: 0, aircraftId: RECON, order: { kind: 'Illuminate', center: outpost, radius: 500, untilTick: until } }]);
     for (let i = 0; i < 3000 && recon.status !== 'onStation'; i += 1) step(state, [], night);
     runNight(state, 5);

@@ -164,6 +164,8 @@ export type Aircraft = {
   headingRad: number;
   status: AircraftStatus;
   damaged: boolean;
+  /** Heavily damaged: once landed it is not repaired within the scenario (§8.3). */
+  outOfAction: boolean;
   lastFiredOnTick: number | null;
   heldForFriendliesAt: number | null;
   heldReportAt: number | null;

@@ -35,7 +35,8 @@ export const MESSAGE_KIND_LABELS: Readonly<Record<RadioMessage['kind'], string>>
 };
 
 /** A damaged aircraft is under repair when on the ground, and says so in the air. */
-export function aircraftStatusLabel(status: AircraftStatus, damaged: boolean): string {
+export function aircraftStatusLabel(status: AircraftStatus, damaged: boolean, outOfAction = false): string {
   if (!damaged) return AIRCRAFT_STATUS_LABELS[status];
+  if (outOfAction) return status === 'turnaround' ? 'OUT OF ACTION' : 'BADLY DAMAGED';
   return status === 'turnaround' ? 'DAMAGED · repair' : 'DAMAGED';
 }

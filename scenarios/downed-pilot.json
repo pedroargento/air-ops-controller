@@ -204,9 +204,9 @@
           "ammunition": 2000
         },
         {
-          "weapon": "MANPADS",
+          "weapon": "HEAVY_MACHINE_GUN",
           "quantity": 1,
-          "ammunition": 3
+          "ammunition": 40
         }
       ]
     }

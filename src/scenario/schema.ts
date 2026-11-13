@@ -108,6 +108,7 @@ const weapon = z.object({
   maxAltitudeMeters: z.number().min(0).describe('Highest aircraft it can reach.'),
   airHitChance: unit.describe('Chance per shot of hitting an aircraft, at best.'),
   airCycleSeconds: z.number().int().positive().describe('Seconds between shots at aircraft.'),
+  heavyDamageChance: unit.default(0).describe('Chance that a hit which damages an aircraft puts it out of action for the rest of the scenario.'),
 });
 
 const combat = z.object({
@@ -115,7 +116,7 @@ const combat = z.object({
   ambushSurpriseFactor: z.number().min(1).describe('Fire multiplier from a sprung ambush on a platoon nobody warned.'),
   ambushSurpriseSeconds: z.number().positive().describe('How long the surprise lasts.'),
   columnSpacingMeters: z.number().positive().describe('Gap between squads in column.'),
-  weapons: z.object({ SMALL_ARMS: weapon, MACHINE_GUN: weapon, AAA: weapon, MANPADS: weapon }).describe('Weapon definitions.'),
+  weapons: z.object({ SMALL_ARMS: weapon, MACHINE_GUN: weapon, AAA: weapon, HEAVY_MACHINE_GUN: weapon }).describe('Weapon definitions.'),
   systemLossPerCasualtyFraction: z.number().nonnegative().describe('Chance that losses take a crew-served weapon with them.'),
   assessmentNoise: unit.describe('Error in a crew\'s casualty estimate after a strike.'),
   suppressionFirePenalty: unit.describe('How much suppression cuts a unit\'s own fire.'),
@@ -268,7 +269,9 @@ const aircraftModel = z.object({
   hitChanceFactor: z.number().nonnegative().describe('Multiplier on ground fire\'s chance to hit it.'),
   hitSurvivalChance: unit.describe('Chance it survives a hit without damage.'),
   speedMps: z.number().positive().describe('Speed in metres per second.'),
-  fuelSeconds: z.number().positive().describe('Endurance.'),
+  fuelSeconds: z.number().positive().describe('Endurance at cruise.'),
+  stationFuelRate: z.number().positive().describe('Fuel burned at station speed, as a share of the burn at cruise.'),
+  attackFuelRate: z.number().positive().describe('Fuel burned on an attack run, as a share of the burn at cruise.'),
   ammunition: z.number().int().min(0).describe('Bombing passes it carries.'),
   takeoffSeconds: z.number().int().min(0).describe('Time to get airborne.'),
   turnaroundSeconds: z.number().int().min(0).describe('Time to refuel and rearm.'),
@@ -455,7 +458,7 @@ const groundUnit = z.object({
   equipment: z
     .array(
       z.object({
-        weapon: z.enum(['SMALL_ARMS', 'MACHINE_GUN', 'AAA', 'MANPADS']),
+        weapon: z.enum(['SMALL_ARMS', 'MACHINE_GUN', 'AAA', 'HEAVY_MACHINE_GUN']),
         quantity: z.number().int().positive(),
         ammunition: z.number().positive(),
       }),

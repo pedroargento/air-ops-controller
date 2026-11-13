@@ -34,6 +34,7 @@ export function supportOptions(request: SupportRequestView, aircraft: readonly A
     .map((entry): SupportOption => {
       const point = request.position.center;
       const unavailable = (reason: string): SupportOption => ({ aircraftId: entry.aircraftId, available: false, etaSeconds: null, reason });
+      if (entry.outOfAction) return unavailable('badly damaged, out of action');
       if (entry.damaged) return unavailable(`damaged, repaired by ${clock(tick + entry.availableInSeconds)}`);
       if (entry.status === 'turnaround') return unavailable(`rearming until ${clock(tick + entry.availableInSeconds)}`);
       if (entry.status === 'returning') return unavailable(`returning to base, ready about ${clock(tick + entry.availableInSeconds)}`);
@@ -80,6 +81,7 @@ export function medevacOptions(request: MedevacRequestView, aircraft: readonly A
     .filter((entry) => entry.seats > 0)
     .map((entry): SupportOption => {
       const unavailable = (reason: string): SupportOption => ({ aircraftId: entry.aircraftId, available: false, etaSeconds: null, reason });
+      if (entry.outOfAction) return unavailable('badly damaged, out of action');
       if (entry.damaged) return unavailable(`damaged, repaired by ${clock(tick + entry.availableInSeconds)}`);
       if (entry.status === 'turnaround') return unavailable(`refuelling until ${clock(tick + entry.availableInSeconds)}`);
       if (entry.status === 'returning') return unavailable(`returning to base, ready about ${clock(tick + entry.availableInSeconds)}`);

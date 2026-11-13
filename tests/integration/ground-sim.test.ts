@@ -227,7 +227,7 @@ describe('equipment', () => {
 
   it('a weapon with no ground role adds nothing to ground fire', () => {
     const { truth, a, b } = duel();
-    a.equipment = [{ weapon: 'MANPADS', quantity: 1, ammunition: 3 }];
+    a.equipment = [{ weapon: 'HEAVY_MACHINE_GUN', quantity: 1, ammunition: 3 }];
     resolveCombat(truth, scenario.terrain, combat, createRng(1), 10);
     expect(b.suppression).toBe(0);
     expect(a.equipment[0]?.ammunition).toBe(3);
@@ -253,10 +253,10 @@ describe('equipment', () => {
 
   it('spending a unit\'s last weapon ammunition counts as out of ammunition for any inventory', () => {
     const { truth, a } = duel();
-    a.equipment = [{ weapon: 'MANPADS', quantity: 1, ammunition: 2 }];
+    a.equipment = [{ weapon: 'HEAVY_MACHINE_GUN', quantity: 1, ammunition: 2 }];
     a.initialAmmunition = 2;
     expect(effectiveStrength(truth, a)).toBeGreaterThan(0);
-    a.equipment = [{ weapon: 'MANPADS', quantity: 1, ammunition: 0 }];
+    a.equipment = [{ weapon: 'HEAVY_MACHINE_GUN', quantity: 1, ammunition: 0 }];
     expect(effectiveStrength(truth, a)).toBe(0);
   });
 });
